@@ -80,7 +80,7 @@ export function GuidePage(): JSX.Element {
 
   return (
     <PageTransition>
-      <div className="flex flex-col px-8 pt-[92px] pb-8">
+      <div className="flex h-[calc(100vh-40px)] flex-col px-8 pb-6 pt-[92px]">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             {dayOptions.map((offset) => {
@@ -151,7 +151,7 @@ export function GuidePage(): JSX.Element {
           })}
         </div>
 
-        <div className="glass flex h-[calc(100vh-300px)] min-h-[440px] flex-col overflow-hidden rounded-panel">
+        <div className="glass flex min-h-[380px] flex-1 flex-col overflow-hidden rounded-panel">
           <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3">
             <span className="flex items-center gap-2 text-[12px] text-text-secondary">
               <CalendarDays className="h-3.5 w-3.5 text-accent-alt" />

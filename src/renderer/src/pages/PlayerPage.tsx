@@ -619,16 +619,18 @@ export function PlayerPage(): JSX.Element {
         </div>
 
         {/* Live timeline */}
-        <div className="group/timeline relative mb-5 h-[5px] w-full overflow-hidden rounded-pill bg-white/12">
-          <div
-            className="absolute inset-y-0 left-0 rounded-pill bg-accent-gradient transition-[width] duration-700 ease-premium"
-            style={{ width: `${liveProgress}%` }}
-          />
-          <div
-            className="absolute top-1/2 h-[13px] w-[13px] -translate-y-1/2 rounded-full border-2 border-white bg-accent shadow-[0_0_12px_rgba(124,92,255,.9)] transition-[left] duration-700 ease-premium"
-            style={{ left: `calc(${liveProgress}% - 6px)` }}
-          />
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-pill bg-live px-1.5 text-[8px] font-bold uppercase tracking-wider text-white">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="relative h-[5px] flex-1 rounded-pill bg-white/12">
+            <div
+              className="absolute inset-y-0 left-0 rounded-pill bg-accent-gradient transition-[width] duration-700 ease-premium"
+              style={{ width: `${liveProgress}%` }}
+            />
+            <div
+              className="absolute top-1/2 h-[13px] w-[13px] -translate-y-1/2 rounded-full border-2 border-white bg-accent shadow-[0_0_12px_rgba(124,92,255,.9)] transition-[left] duration-700 ease-premium"
+              style={{ left: `calc(${liveProgress}% - 6px)` }}
+            />
+          </div>
+          <span className="shrink-0 rounded-pill bg-live px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.14em] text-white">
             Live
           </span>
         </div>
@@ -678,6 +680,7 @@ export function PlayerPage(): JSX.Element {
               type="button"
               onClick={() => setQualityOpen((value) => !value)}
               aria-haspopup="menu"
+              aria-label="Stream quality"
               aria-expanded={qualityOpen}
               className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-[11.5px] font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-white/[0.12]"
             >

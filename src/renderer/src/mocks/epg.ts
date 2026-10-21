@@ -220,14 +220,20 @@ export function getMockPrograms(channel: Channel, date = new Date()): Program[] 
 
   let cursor = dayStart.getTime()
   let index = 0
+  let previousTitle = ''
   while (cursor < nextDay.getTime()) {
-    const titlePool = titles[(Math.floor(random() * titles.length) + index) % titles.length]
+    // Rotate through the category pool without ever showing the same title twice
+    // back to back, which keeps shelves and the hero feeling editorial.
+    let pick = (Math.floor(random() * titles.length) + index) % titles.length
+    if (titles[pick] === previousTitle) pick = (pick + 1) % titles.length
+    const title = titles[pick]
+    previousTitle = title
     const duration = durations[Math.floor(random() * durations.length)]
     const end = Math.min(cursor + duration * 60_000, nextDay.getTime())
     programs.push({
       id: `${channel.id}-${cursor}`,
       channelId: channel.id,
-      title: titlePool,
+      title,
       description: descriptions[Math.floor(random() * descriptions.length)],
       start: new Date(cursor).toISOString(),
       end: new Date(end).toISOString(),

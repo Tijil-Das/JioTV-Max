@@ -1,6 +1,39 @@
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
+
+/**
+ * Production-only CSP.
+ *
+ * Dev servers (electron-vite and `dev:web`) inject inline module preambles for
+ * React Fast Refresh, so a strict `script-src 'self'` policy would blank the
+ * window during development. The policy is therefore injected into the built
+ * index.html instead, where the bundle is fully external.
+ */
+function contentSecurityPolicy(): Plugin {
+  const policy = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: data: https: http://127.0.0.1:* http://localhost:*",
+    "connect-src 'self' https: http://127.0.0.1:* http://localhost:*",
+    "font-src 'self' data:",
+    "worker-src 'self' blob:"
+  ].join('; ')
+  return {
+    name: 'streamdeck-csp',
+    transformIndexHtml(html, context) {
+      if (context.server) return html
+      return html.replace(
+        '</head>',
+        `    <meta http-equiv="Content-Security-Policy" content="${policy}" />\n  </head>`
+      )
+    }
+  }
+}
+
 
 /**
  * electron-vite builds three targets:
@@ -35,6 +68,6 @@ export default defineConfig({
         '@shared': resolve('src/shared')
       }
     },
-    plugins: [react()]
+    plugins: [react(), contentSecurityPolicy()]
   }
 })

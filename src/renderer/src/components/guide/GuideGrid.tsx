@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
@@ -48,7 +48,6 @@ export function GuideGrid({
 }: GuideGridProps): JSX.Element {
   const rulerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const [scrollLeft, setScrollLeft] = useState(0)
 
   const virtualizer = useVirtualizer({
     count: channels.length,
@@ -60,29 +59,30 @@ export function GuideGrid({
   const totalWidth = DAY_MINUTES * PX_PER_MINUTE
   const nowMinutes = minutesSinceDayStart(now)
 
+  // The ruler owns the horizontal scrollbar. Rows and the now line follow it
+  // through a CSS variable instead of React state, so panning stays perfectly
+  // in sync even at high refresh rates and never re-renders the grid.
   useEffect(() => {
     const element = rulerRef.current
-    if (!element) return
-    let frame = 0
-    const onScroll = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => setScrollLeft(element.scrollLeft))
+    const body = bodyRef.current
+    if (!element || !body) return
+    const sync = () => {
+      body.style.setProperty('--guide-x', `-${element.scrollLeft}px`)
     }
-    onScroll()
-    element.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      cancelAnimationFrame(frame)
-      element.removeEventListener('scroll', onScroll)
-    }
+    sync()
+    element.addEventListener('scroll', sync, { passive: true })
+    return () => element.removeEventListener('scroll', sync)
   }, [])
 
   // Centre the current time when the user asks, or when the highlighted
   // channel arrives from a deep link.
   useEffect(() => {
     const element = rulerRef.current
-    if (!element) return
+    const body = bodyRef.current
+    if (!element || !body) return
     const target = Math.max(0, nowMinutes * PX_PER_MINUTE - element.clientWidth * 0.45)
     element.scrollTo({ left: target, behavior: jumpToken === 0 ? 'auto' : 'smooth' })
+    body.style.setProperty('--guide-x', `-${target}px`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpToken])
 
@@ -190,7 +190,7 @@ export function GuideGrid({
                   <div className="relative min-w-0 flex-1 overflow-hidden">
                     <div
                       className="absolute inset-y-0"
-                      style={{ width: totalWidth, transform: `translateX(-${scrollLeft}px)` }}
+                      style={{ width: totalWidth, transform: 'translateX(var(--guide-x, 0px))' }}
                     >
                       {programs.map((program) => {
                         const rect = programBlockRect(program, dayStart, DAY_MINUTES)
@@ -250,7 +250,7 @@ export function GuideGrid({
           >
             <div
               className="absolute inset-y-0 w-px bg-live/60"
-              style={{ transform: `translateX(${nowMinutes * PX_PER_MINUTE - scrollLeft}px)` }}
+              style={{ transform: `translateX(calc(${nowMinutes * PX_PER_MINUTE}px + var(--guide-x, 0px)))` }}
             />
           </div>
         </div>

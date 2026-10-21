@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell } from 'electron'
+import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { AppInfo, AuthSession, ChannelFetchPayload, Result } from '@shared/types'
@@ -9,6 +10,13 @@ import { SecureStore } from './secure-store'
 import { WindowStateStore } from './window-state'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Dev-only: the renderer receives its content from the Vite dev server, so the
+// production CSP in the built index.html cannot apply. The warning is noise in
+// that mode; packaged builds keep the strict policy.
+if (!app.isPackaged) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
 
 let mainWindow: BrowserWindow | null = null
 let powerBlockerId: number | null = null
@@ -119,9 +127,99 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
+  if (process.env.STREAMDECK_CAPTURE) {
+    console.log('[capture] harness enabled')
+    void runCaptureHarness(mainWindow)
+  }
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+/**
+ * Development-only visual check.
+ *
+ * Set `STREAMDECK_CAPTURE` to a comma-separated list of routes (for example
+ * `/ ,/guide,/settings,/watch/ch-101`). The harness walks each route, writes a
+ * PNG into `STREAMDECK_CAPTURE_DIR` (defaults to the temp folder) and prints
+ * every renderer console message to the terminal before quitting. It never
+ * runs unless the variable is set, so packaged builds are unaffected.
+ */
+async function runCaptureHarness(window: BrowserWindow): Promise<void> {
+  const routes = (process.env.STREAMDECK_CAPTURE ?? '/')
+    .split(',')
+    .map((route) => route.trim())
+    .filter(Boolean)
+  const outDir = process.env.STREAMDECK_CAPTURE_DIR ?? app.getPath('temp')
+  const logFile = path.join(outDir, 'streamdeck-capture.log')
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const log = (message: string) => {
+    console.log(message)
+    void fs.appendFile(logFile, `${new Date().toISOString()} ${message}\n`).catch(() => undefined)
+  }
+
+  process.on('unhandledRejection', (reason) => {
+    log(`[capture:unhandledRejection] ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`)
+  })
+
+  window.webContents.on('console-message', (details) => {
+    log(`[renderer:${details.level}] ${details.message}`)
+  })
+
+  // Keep animations and the compositor alive even if another window covers
+  // the app; otherwise route transitions stall in occluded windows.
+  window.webContents.setBackgroundThrottling(false)
+  window.setAlwaysOnTop(true)
+  window.show()
+  window.focus()
+
+  log(`[capture] starting; loading=${window.webContents.isLoading()}; routes=${routes.join(' ')}`)
+  await wait(4000)
+  log('[capture] warm-up complete')
+
+  for (const [index, entry] of routes.entries()) {
+    // Syntax: "route" or "route@<javascript>" to exercise an overlay.
+    const separator = entry.indexOf('@')
+    const route = separator === -1 ? entry : entry.slice(0, separator)
+    const action = separator === -1 ? null : entry.slice(separator + 1)
+    const base = route === '/' ? 'home' : route.replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '')
+    const name = action ? `${base}-${index}` : base
+    try {
+      log(`[capture] visiting ${route}`)
+      // A full load per route resets stores and overlays, so each screenshot
+      // reflects a cold start exactly like a user opening the app.
+      await window.loadFile(path.join(__dirname, '../renderer/index.html'), {
+        hash: route,
+        // Unique query forces a real document load; otherwise Chromium treats a
+        // hash-only change as same-document navigation and keeps React state.
+        query: { capture: String(Date.now()) }
+      })
+      log(`[capture] navigated to ${route}`)
+      await wait(2600)
+      if (action) {
+        await window.webContents.executeJavaScript(action)
+        await wait(1400)
+      }
+      let image
+      try {
+        image = await window.webContents.capturePage()
+      } catch {
+        await wait(800)
+        image = await window.webContents.capturePage()
+      }
+      const file = path.join(outDir, `streamdeck-${name}.png`)
+      await fs.writeFile(file, image.toPNG())
+      log(`[capture] ${entry} -> ${file}`)
+    } catch (error) {
+      log(`[capture] ${entry} failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  log('[capture] finished')
+  app.quit()
+  // Safety net: never leave a headless capture run alive.
+  setTimeout(() => app.exit(0), 2500)
 }
 
 function registerIpc(): void {

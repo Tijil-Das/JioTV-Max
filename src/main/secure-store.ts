@@ -7,6 +7,9 @@ import path from 'node:path'
  *
  * Credentials and access tokens must never touch localStorage or logs. If the
  * OS keychain is unavailable we refuse to persist instead of writing plaintext.
+ *
+ * Electron 45 promotes the async safeStorage API; the sync calls are kept as a
+ * fallback for older runtimes but are never used when async is available.
  */
 export class SecureStore {
   private readonly file: string
@@ -16,16 +19,28 @@ export class SecureStore {
     this.file = path.join(app.getPath('userData'), fileName)
   }
 
-  private get available(): boolean {
+  private async encryptionAvailable(): Promise<boolean> {
+    if (typeof safeStorage.isAsyncEncryptionAvailable === 'function') {
+      try {
+        return await safeStorage.isAsyncEncryptionAvailable()
+      } catch {
+        return false
+      }
+    }
     return safeStorage.isEncryptionAvailable()
   }
 
   async read(): Promise<string | null> {
     if (this.memory !== null) return this.memory
-    if (!this.available) return null
+    if (!(await this.encryptionAvailable())) return null
     try {
       const encrypted = await fs.readFile(this.file)
-      this.memory = safeStorage.decryptString(encrypted)
+      if (typeof safeStorage.decryptStringAsync === 'function') {
+        const { result } = await safeStorage.decryptStringAsync(encrypted)
+        this.memory = result
+      } else {
+        this.memory = safeStorage.decryptString(encrypted)
+      }
       return this.memory
     } catch {
       return null
@@ -34,9 +49,12 @@ export class SecureStore {
 
   async write(value: string): Promise<boolean> {
     this.memory = value
-    if (!this.available) return false
+    if (!(await this.encryptionAvailable())) return false
     try {
-      const encrypted = safeStorage.encryptString(value)
+      const encrypted =
+        typeof safeStorage.encryptStringAsync === 'function'
+          ? await safeStorage.encryptStringAsync(value)
+          : safeStorage.encryptString(value)
       await fs.mkdir(path.dirname(this.file), { recursive: true })
       await fs.writeFile(this.file, encrypted, { mode: 0o600 })
       return true

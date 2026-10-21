@@ -26,6 +26,7 @@ interface ChannelState {
   hydrateEpg: (mode: AuthMode) => Promise<void>
   loadEpgForChannel: (channel: Channel, mode: AuthMode) => Promise<void>
   toggleFavorite: (channelId: string) => void
+  clearFavorites: () => void
   recordRecent: (channelId: string, progress?: number) => void
   seedRecentsIfEmpty: () => void
   clearRecents: () => void
@@ -117,6 +118,8 @@ export const useChannelStore = create<ChannelState>()(
             ? state.favorites.filter((id) => id !== channelId)
             : [channelId, ...state.favorites]
         })),
+
+      clearFavorites: () => set({ favorites: [] }),
 
       recordRecent: (channelId, progress = 0) =>
         set((state) => ({

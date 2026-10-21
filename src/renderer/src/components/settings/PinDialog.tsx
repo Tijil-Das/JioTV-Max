@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 interface PinDialogProps {
   open: boolean
   onClose: () => void
+  /** Called when the user dismisses the dialog without succeeding. */
+  onCancel?: () => void
   title: string
   description: string
   /** Ask for the PIN twice (setting a new one). */
@@ -20,6 +22,7 @@ const PIN_LENGTH = 4
 export function PinDialog({
   open,
   onClose,
+  onCancel,
   title,
   description,
   requireConfirmation = false,
@@ -89,7 +92,7 @@ export function PinDialog({
   )
 
   return (
-    <Modal open={open} onClose={onClose} labelledBy="pin-title" className="w-[380px] p-6">
+    <Modal open={open} onClose={onCancel ?? onClose} labelledBy="pin-title" className="w-[380px] p-6">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent/25 bg-accent/10 text-accent-glow">
           <LockKeyhole className="h-[18px] w-[18px]" />
@@ -115,7 +118,7 @@ export function PinDialog({
       ) : null}
 
       <div className="mt-6 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" onClick={onCancel ?? onClose}>
           Cancel
         </Button>
         <Button variant="primary" loading={busy} onClick={() => void submit()}>

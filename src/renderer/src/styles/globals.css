@@ -1,0 +1,313 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Base canvas
+   ------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+  --titlebar-height: 40px;
+  --sidebar-width: 76px;
+  --safe-bottom: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background-color: #050507;
+  color: theme('colors.text.primary');
+  font-family: theme('fontFamily.sans');
+  font-feature-settings: 'cv11', 'ss01';
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* On Windows 11 the native acrylic surface shows through these soft washes. */
+#root {
+  background:
+    radial-gradient(1100px 600px at 18% -10%, rgba(124, 92, 255, 0.13), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(34, 211, 238, 0.07), transparent 55%),
+    rgba(5, 5, 7, 0.88);
+}
+
+/* Film grain: 2% opacity, non-interactive, sits above the backdrop. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 9s steps(6) infinite;
+}
+
+::selection {
+  color: #fff;
+  background: rgba(124, 92, 255, 0.5);
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+button,
+a,
+input,
+select,
+[role='button'] {
+  -webkit-app-region: no-drag;
+}
+
+button:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid theme('colors.accent.glow');
+  outline-offset: 4px;
+  box-shadow: 0 0 20px rgba(157, 133, 255, 0.28);
+}
+
+/* -------------------------------------------------------------------------
+   Surfaces
+   ------------------------------------------------------------------------- */
+.glass {
+  background: rgba(20, 20, 28, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: theme('boxShadow.glass');
+}
+
+.glass-strong {
+  background: rgba(18, 18, 26, 0.76);
+  backdrop-filter: blur(40px) saturate(170%);
+  -webkit-backdrop-filter: blur(40px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: theme('boxShadow.glass');
+}
+
+.hairline {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.accent-text {
+  background: linear-gradient(120deg, #b9a8ff, #22d3ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* -------------------------------------------------------------------------
+   Drag regions
+   ------------------------------------------------------------------------- */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* -------------------------------------------------------------------------
+   Scrollbars
+   ------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.row-mask {
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+
+/* -------------------------------------------------------------------------
+   Animation helpers
+   ------------------------------------------------------------------------- */
+.hero-progress {
+  transform-origin: left center;
+  animation: heroProgress 8s linear forwards;
+}
+
+.hero-progress-paused {
+  animation-play-state: paused;
+}
+
+.shimmer-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  animation: shimmer 1.4s linear infinite;
+}
+
+.live-dot {
+  position: relative;
+  display: inline-flex;
+  height: 6px;
+  width: 6px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #fff;
+  animation: livePulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* Hide cursor over an actively-playing video. */
+.player-idle {
+  cursor: none;
+}
+
+/* Native <video> fullscreens via the OS, not F11 only. */
+video::-webkit-media-controls {
+  display: none !important;
+}
+
+/* -------------------------------------------------------------------------
+   Keyframes
+   ------------------------------------------------------------------------- */
+@keyframes heroProgress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes livePulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes grain {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-1%, 1%);
+  }
+  50% {
+    transform: translate(1%, -1%);
+  }
+  75% {
+    transform: translate(1%, 1%);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-shake {
+  animation: shake 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* -------------------------------------------------------------------------
+   Accessibility
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .hero-progress {
+    animation: none;
+    transform: scaleX(1);
+  }
+
+  body::after {
+    animation: none;
+  }
+}

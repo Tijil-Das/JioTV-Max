@@ -1,0 +1,18 @@
+/** IPC channel names. Namespaced to avoid collisions with Electron internals. */
+export const IPC = {
+  appInfo: 'app:info',
+  toggleFullscreen: 'window:toggle-fullscreen',
+  fullscreenChanged: 'window:fullscreen-changed',
+  setAlwaysOnTop: 'window:always-on-top',
+  setPlayerActive: 'power:player-active',
+  requestOtp: 'jio:request-otp',
+  verifyOtp: 'jio:verify-otp',
+  restoreSession: 'jio:restore-session',
+  logout: 'jio:logout',
+  fetchChannels: 'jio:fetch-channels',
+  getStream: 'jio:get-stream',
+  getEpg: 'jio:get-epg',
+  secureSave: 'secure:save-token',
+  secureLoad: 'secure:load-token',
+  secureClear: 'secure:clear-token'
+} as const

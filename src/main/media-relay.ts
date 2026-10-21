@@ -139,7 +139,7 @@ function rewriteHls(
     const trimmed = line.trim()
     if (!trimmed) return line
     if (trimmed.startsWith('#')) {
-      return line.replace(/URI="([^"]+)"/, (full, uri: string) => {
+      return line.replace(/URI="([^"]+)"/gi, (full, uri: string) => {
         const absolute = withHlsToken(new URL(uri, manifestUrl).href, token)
         if (!isHttpUrl(absolute)) return full
         return `URI="${proxify(absolute, request, sessionId)}"`
@@ -199,6 +199,7 @@ export class MediaRelay {
     if (this.server) return
     this.server = createServer((req, res) => {
       void this.handle(req, res).catch((error: unknown) => {
+        console.error('[MediaRelay] Uncaught handler error:', error)
         if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
         res.end(error instanceof Error ? error.message : 'Relay error')
       })
@@ -208,6 +209,7 @@ export class MediaRelay {
       this.server!.listen(0, '127.0.0.1', () => {
         const address = this.server!.address()
         this.port = typeof address === 'object' && address ? address.port : 0
+        console.log(`[MediaRelay] Server running on 127.0.0.1:${this.port}`)
         resolve()
       })
     })
@@ -240,6 +242,7 @@ export class MediaRelay {
       licenseUrl: input.licenseUrl,
       headers: input.headers ?? {}
     })
+    console.log(`[MediaRelay] Registered session ${id} for channel ${input.channelId}`)
     const base = `http://127.0.0.1:${this.port}/stream/${id}`
     return {
       id,
@@ -275,17 +278,58 @@ export class MediaRelay {
     if (raw) {
       const target = url.searchParams.get('u')
       if (!target || !isHttpUrl(target)) {
+        console.warn('[MediaRelay] /raw invalid target:', target)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid target')
         return
       }
-      // The session id tells the relay whose authenticated headers to use.
-      // Without it the CDN sees an anonymous request and answers `403`,
-      // which the player surfaces as "the live stream could not be reached".
-      const session = this.resolveSession(url.searchParams.get('s'))
-      const upstream = await fetchUpstream(target, session?.headers ?? {}, {
+      const sessionId = url.searchParams.get('s')
+      const session = this.resolveSession(sessionId)
+      const isKey = /\.p?key(\?|$)/i.test(target) || target.includes('tv.media.jio.com')
+      console.log(`[MediaRelay] /raw fetching: ${target.slice(0, 110)}... (session: ${sessionId ?? 'none'}, isKey: ${isKey})`)
+
+      const upstreamHeaders: Record<string, string> = {
+        ...(session?.headers ?? {})
+      }
+      if (session?.channelId) {
+        upstreamHeaders.channelId = session.channelId
+      }
+      if (!upstreamHeaders.srno) {
+        upstreamHeaders.srno = '230203144000'
+      }
+
+      const upstream = await fetchUpstream(target, upstreamHeaders, {
         range: typeof req.headers.range === 'string' ? req.headers.range : undefined
       })
+      console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${target.slice(0, 80)}`)
+
+      // Capture upstream rotated __hdnea__ cookie if present
+      const setCookie = upstream.headers.get('set-cookie')
+      if (setCookie && session) {
+        const match = setCookie.match(/__hdnea__=([^;]+)/)
+        if (match) {
+          console.log(`[MediaRelay] Upstream updated __hdnea__ cookie: ${match[1].slice(0, 30)}...`)
+          session.headers = withHdneaCookie(session.headers, match[1])
+        }
+      }
+
+      if (!upstream.ok) {
+        console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${target}`)
+        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
+        res.writeHead(statusToSend, CORS_HEADERS)
+        res.end(`Upstream error (${upstream.status})`)
+        return
+      }
+
+      if (isKey) {
+        const buf = Buffer.from(await upstream.arrayBuffer())
+        console.log(`[MediaRelay] AES-128 key successfully fetched! Length: ${buf.byteLength} bytes`)
+        copyHeaders(upstream.headers, res)
+        res.writeHead(200, CORS_HEADERS)
+        res.end(buf)
+        return
+      }
+
       const contentType = upstream.headers.get('content-type') ?? ''
       if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(target)) {
         // Nested HLS playlists must be rewritten too, not passed through raw.
@@ -298,6 +342,7 @@ export class MediaRelay {
         res.end(rewriteHls(text, target, req, session?.id ?? ''))
         return
       }
+
       copyHeaders(upstream.headers, res)
       res.writeHead(upstream.status, CORS_HEADERS)
       res.end(Buffer.from(await upstream.arrayBuffer()))
@@ -308,18 +353,31 @@ export class MediaRelay {
       const [, segId, rest] = segmentMatch
       const session = this.sessions.get(segId)
       if (!session?.segmentBase) {
+        console.warn(`[MediaRelay] Unknown segment session: ${segId}`)
         res.writeHead(404, CORS_HEADERS)
         res.end('Unknown segment session')
         return
       }
       const target = new URL(rest + url.search, session.segmentBase).href
       if (!isHttpUrl(target)) {
+        console.warn(`[MediaRelay] Invalid segment target: ${target}`)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid segment')
         return
       }
+      console.log(`[MediaRelay] /seg fetching: ${target.slice(0, 110)}...`)
       const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
       const upstream = await fetchUpstream(target, session.headers, { range })
+      console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
+
+      if (!upstream.ok) {
+        console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
+        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
+        res.writeHead(statusToSend, CORS_HEADERS)
+        res.end(`Upstream error (${upstream.status})`)
+        return
+      }
+
       copyHeaders(upstream.headers, res)
       res.writeHead(upstream.status, CORS_HEADERS)
       res.end(Buffer.from(await upstream.arrayBuffer()))
@@ -327,6 +385,7 @@ export class MediaRelay {
     }
 
     if (!streamMatch) {
+      console.warn(`[MediaRelay] Not found: ${url.pathname}`)
       res.writeHead(404, CORS_HEADERS)
       res.end('Not found')
       return
@@ -335,15 +394,31 @@ export class MediaRelay {
     const [, id, action] = streamMatch
     const session = this.sessions.get(id)
     if (!session) {
+      console.warn(`[MediaRelay] Unknown playback session: ${id}`)
       res.writeHead(404, CORS_HEADERS)
       res.end('Unknown playback session')
       return
     }
 
     if (action === 'manifest') {
+      console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
       const upstream = await fetchUpstream(session.manifestUrl, session.headers)
+      console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
+
+      const setCookie = upstream.headers.get('set-cookie')
+      if (setCookie) {
+        const match = setCookie.match(/__hdnea__=([^;]+)/)
+        if (match) {
+          console.log(`[MediaRelay] Manifest rotated __hdnea__ cookie: ${match[1].slice(0, 30)}...`)
+          session.headers = withHdneaCookie(session.headers, match[1])
+          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
+        }
+      }
+
       if (!upstream.ok) {
-        res.writeHead(upstream.status, CORS_HEADERS)
+        console.warn(`[MediaRelay] Upstream manifest error: ${upstream.status}`)
+        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
+        res.writeHead(statusToSend, CORS_HEADERS)
         res.end(`Upstream manifest error (${upstream.status})`)
         return
       }

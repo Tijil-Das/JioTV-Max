@@ -38,6 +38,13 @@ interface UseHlsPlayerOptions {
   /** Height requested by the user. 1080 by default per product spec. */
   initialQuality?: QualityPreference
   onError?: (message: string) => void
+  /**
+   * Called before each automatic reconnect attempt.
+   * If the callback returns a new StreamInfo the engine will load that URL
+   * instead of the existing one — use this to re-fetch a signed stream URL
+   * so a stale CDN token never causes an infinite reconnect loop.
+   */
+  onReconnect?: () => Promise<StreamInfo | null>
 }
 
 export interface UseHlsPlayerResult {
@@ -76,7 +83,8 @@ function friendlyMediaError(detail?: string): string {
 export function useHlsPlayer({
   stream,
   initialQuality = 1080,
-  onError
+  onError,
+  onReconnect
 }: UseHlsPlayerOptions): UseHlsPlayerResult {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -97,6 +105,12 @@ export function useHlsPlayer({
   const autoAttemptsRef = useRef(0)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bufferingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stable ref so fail() can call the latest onReconnect without being a dep.
+  const onReconnectRef = useRef(onReconnect)
+  useEffect(() => { onReconnectRef.current = onReconnect }, [onReconnect])
+
+  // Mutable ref-backed stream so onReconnect can swap it without restarting the effect.
+  const pendingStreamRef = useRef<StreamInfo | null>(null)
 
   const fail = useCallback(
     (message: string, retryable = true) => {
@@ -104,10 +118,20 @@ export function useHlsPlayer({
         autoAttemptsRef.current += 1
         setReconnecting(true)
         setError(null)
-        retryTimer.current = setTimeout(
-          () => setReloadKey((key) => key + 1),
-          Math.min(8000, 900 * 2 ** (autoAttemptsRef.current - 1))
-        )
+        const delay = Math.min(8000, 900 * 2 ** (autoAttemptsRef.current - 1))
+        retryTimer.current = setTimeout(() => {
+          const cb = onReconnectRef.current
+          if (cb) {
+            cb()
+              .then((fresh) => {
+                if (fresh) pendingStreamRef.current = fresh
+              })
+              .catch(() => undefined)
+              .finally(() => setReloadKey((key) => key + 1))
+          } else {
+            setReloadKey((key) => key + 1)
+          }
+        }, delay)
       } else {
         setReconnecting(false)
         setError(message)
@@ -142,6 +166,10 @@ export function useHlsPlayer({
     const video = videoRef.current
     if (!video) return
 
+    // Use a fresh signed URL if onReconnect provided one, then clear the slot.
+    const activeStream = pendingStreamRef.current ?? stream
+    pendingStreamRef.current = null
+
     let disposed = false
     let localAttempts = attemptRef.current
     setBuffering(false)
@@ -158,19 +186,43 @@ export function useHlsPlayer({
     }
 
     const onPlaying = () => {
+      console.log('[useHlsPlayer] Video event: playing')
       clearBuffering()
       setReady(true)
     }
-    const onWaiting = () => showBufferingSoon()
-    const onCanPlay = () => clearBuffering()
+    const onWaiting = () => {
+      console.log('[useHlsPlayer] Video event: waiting')
+      showBufferingSoon()
+    }
+    const onStalled = () => {
+      console.log('[useHlsPlayer] Video event: stalled')
+      showBufferingSoon()
+    }
+    const onCanPlay = () => {
+      console.log('[useHlsPlayer] Video event: canplay')
+      clearBuffering()
+      setReady(true)
+    }
+    const onLoadedData = () => {
+      console.log('[useHlsPlayer] Video event: loadeddata')
+      clearBuffering()
+      setReady(true)
+    }
+    const onPause = () => {
+      console.log('[useHlsPlayer] Video event: pause')
+      clearBuffering()
+    }
     const onNativeError = () => {
+      console.error('[useHlsPlayer] Video event: native error', video.error)
       if (!stream) return
       fail('The video could not be decoded. Try another quality or channel.')
     }
     video.addEventListener('playing', onPlaying)
     video.addEventListener('waiting', onWaiting)
-    video.addEventListener('stalled', onWaiting)
+    video.addEventListener('stalled', onStalled)
     video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('loadeddata', onLoadedData)
+    video.addEventListener('pause', onPause)
     video.addEventListener('error', onNativeError)
 
     const applyInitialHeight = (available: EngineLevel[], select: (index: number | 'auto') => void) => {
@@ -180,32 +232,45 @@ export function useHlsPlayer({
         select('auto')
         return
       }
-      const closest = [...available]
-        .filter((level) => level.height > 0)
-        .sort((a, b) => Math.abs(a.height - desired) - Math.abs(b.height - desired))[0]
+      const withHeight = available.filter((level) => level.height > 0)
+      const pool = withHeight.length > 0 ? withHeight : available
+      const closest = [...pool].sort(
+        (a, b) => Math.abs((a.height || a.bitrate) - desired) - Math.abs((b.height || b.bitrate) - desired)
+      )[0]
       if (closest) {
         setActiveLevel(closest.index)
         select(closest.index)
+      } else {
+        setActiveLevel('auto')
+        select('auto')
       }
     }
 
     const setupHls = () => {
       const media = video
-      if (!stream) return
+      if (!activeStream) return
       setEngine('hls')
+      console.log('[useHlsPlayer] setupHls for URL:', activeStream.url)
       if (Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
           backBufferLength: 30,
           maxBufferLength: 30,
-          capLevelToPlayerSize: true,
+          capLevelToPlayerSize: false,
           startLevel: -1
         })
         hlsRef.current = hls
         let mediaRecoveryAttempts = 0
 
+        hls.on(HlsEvents.MANIFEST_LOADING, () => {
+          console.log('[useHlsPlayer] HlsEvent: MANIFEST_LOADING')
+        })
+        hls.on(HlsEvents.MANIFEST_LOADED, (_event, data) => {
+          console.log(`[useHlsPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
+        })
         hls.on(HlsEvents.MANIFEST_PARSED, () => {
+          console.log('[useHlsPlayer] HlsEvent: MANIFEST_PARSED')
           if (disposed) return
           const mapped: EngineLevel[] = hls.levels.map((level, index) => ({
             index,
@@ -223,19 +288,25 @@ export function useHlsPlayer({
               hls.currentLevel = index
             }
           })
-          void media.play().catch(() => undefined)
+          void media.play().catch((err: unknown) => {
+            console.warn('[useHlsPlayer] Autoplay play() rejected in MANIFEST_PARSED:', err)
+            clearBuffering()
+          })
         })
 
         hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
           if (disposed) return
+          console.log(`[useHlsPlayer] HlsEvent: LEVEL_SWITCHED to ${data.level}`)
           setActiveLevel(hls.autoLevelEnabled ? 'auto' : data.level)
         })
 
         hls.on(HlsEvents.ERROR, (_event, data) => {
+          console.warn('[useHlsPlayer] Hls error:', data.type, data.details, 'fatal:', data.fatal, data.response?.code, data.response?.text)
           if (disposed || !data.fatal) return
           if (data.type === ErrorTypes.NETWORK_ERROR) {
             if (localAttempts < 1) {
               localAttempts += 1
+              console.log('[useHlsPlayer] Fatal network error: attempting hls.startLoad()')
               showBufferingSoon()
               hls.startLoad()
               return
@@ -244,6 +315,7 @@ export function useHlsPlayer({
           } else if (data.type === ErrorTypes.MEDIA_ERROR) {
             if (mediaRecoveryAttempts < 1) {
               mediaRecoveryAttempts += 1
+              console.log('[useHlsPlayer] Fatal media error: attempting hls.recoverMediaError()')
               hls.recoverMediaError()
               return
             }
@@ -259,24 +331,31 @@ export function useHlsPlayer({
         })
 
         hls.attachMedia(media)
-        hls.loadSource(stream.url)
+        hls.loadSource(activeStream.url)
       } else if (media.canPlayType('application/vnd.apple.mpegurl')) {
+        console.log('[useHlsPlayer] Native HLS supported, loading:', activeStream.url)
         setEngine('native')
-        media.src = stream.url
+        media.src = activeStream.url
         setReady(true)
-        void media.play().catch(() => undefined)
+        void media.play().catch((err: unknown) => {
+          console.warn('[useHlsPlayer] Native play() rejected:', err)
+          clearBuffering()
+        })
       } else {
+        console.error('[useHlsPlayer] HLS playback is not supported on this system')
         fail('HLS playback is not supported on this system.', false)
       }
     }
 
     const setupShaka = async () => {
-      if (!stream) return
+      if (!activeStream) return
       setEngine('shaka')
+      console.log('[useHlsPlayer] Setting up Shaka for URL:', activeStream.url)
       try {
         const shaka = await shakaPromise()
         if (disposed) return
         if (!shaka.Player.isBrowserSupported()) {
+          console.error('[useHlsPlayer] MPEG-DASH not supported by browser/engine')
           fail('This system does not support MPEG-DASH playback.', false)
           return
         }
@@ -285,7 +364,7 @@ export function useHlsPlayer({
         shakaRef.current = player
         player.configure({
           drm: {
-            servers: stream.drm?.licenseUrl ? { 'com.widevine.alpha': stream.drm.licenseUrl } : {},
+            servers: activeStream.drm?.licenseUrl ? { 'com.widevine.alpha': activeStream.drm.licenseUrl } : {},
             advanced: {
               'com.widevine.alpha': {
                 videoRobustness: 'SW_SECURE_CRYPTO',
@@ -301,8 +380,8 @@ export function useHlsPlayer({
           }
         })
         const networking = player.getNetworkingEngine()
-        if (networking && stream.drm?.headers) {
-          const headers = stream.drm.headers
+        if (networking && activeStream.drm?.headers) {
+          const headers = activeStream.drm.headers
           networking.registerRequestFilter((type, request) => {
             if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
               Object.assign(request.headers, headers)
@@ -312,14 +391,18 @@ export function useHlsPlayer({
         player.addEventListener('error', (event) => {
           if (disposed) return
           const detail = event.detail ?? {}
+          console.warn('[useHlsPlayer] Shaka error event:', detail)
           const message = friendlyMediaError(
             typeof detail.message === 'string' ? detail.message : JSON.stringify(detail)
           )
           const retryable = !/drm|widevine|eme|key system|license/i.test(message)
           fail(message, retryable)
         })
-        await player.load(stream.url)
+        await player.load(activeStream.url)
         if (disposed) return
+        console.log('[useHlsPlayer] Shaka stream loaded successfully')
+        setReady(true)
+        clearBuffering()
         const tracks = player.getVariantTracks()
         const byHeight = new Map<number, EngineLevel>()
         tracks.forEach((track, index) => {
@@ -341,7 +424,6 @@ export function useHlsPlayer({
           .map((level, index) => ({ ...level, index }))
         levelsRef.current = mapped
         setLevels(mapped)
-        setReady(true)
         applyInitialHeight(mapped, (index) => {
           if (index === 'auto') {
             player.configure({ abr: { enabled: true } })
@@ -354,15 +436,19 @@ export function useHlsPlayer({
           const best = candidates.sort((a, b) => b.bandwidth - a.bandwidth)[0]
           if (best) player.selectVariantTrack(best, true)
         })
-        void video.play().catch(() => undefined)
+        void video.play().catch((err: unknown) => {
+          console.warn('[useHlsPlayer] Shaka play() rejected:', err)
+          clearBuffering()
+        })
       } catch (cause) {
         if (disposed) return
+        console.error('[useHlsPlayer] Shaka setup failed:', cause)
         const message = cause instanceof Error ? cause.message : ''
         fail(friendlyMediaError(message), !/drm|widevine|eme|key system/i.test(message))
       }
     }
 
-    if (!stream) {
+    if (!activeStream) {
       video.pause()
       video.removeAttribute('src')
       setEngine(null)
@@ -371,13 +457,15 @@ export function useHlsPlayer({
       return () => {
         video.removeEventListener('playing', onPlaying)
         video.removeEventListener('waiting', onWaiting)
-        video.removeEventListener('stalled', onWaiting)
+        video.removeEventListener('stalled', onStalled)
         video.removeEventListener('canplay', onCanPlay)
+        video.removeEventListener('loadeddata', onLoadedData)
+        video.removeEventListener('pause', onPause)
         video.removeEventListener('error', onNativeError)
       }
     }
 
-    if (stream.type === 'dash') void setupShaka()
+    if (activeStream.type === 'dash') void setupShaka()
     else setupHls()
 
     return () => {
@@ -386,8 +474,10 @@ export function useHlsPlayer({
       if (retryTimer.current) clearTimeout(retryTimer.current)
       video.removeEventListener('playing', onPlaying)
       video.removeEventListener('waiting', onWaiting)
-      video.removeEventListener('stalled', onWaiting)
+      video.removeEventListener('stalled', onStalled)
       video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('loadeddata', onLoadedData)
+      video.removeEventListener('pause', onPause)
       video.removeEventListener('error', onNativeError)
       hlsRef.current?.destroy()
       hlsRef.current = null

@@ -4,12 +4,11 @@ import { mockChannels } from '@/mocks/channels'
 import { getMockPrograms } from '@/mocks/epg'
 import { ApiError, delay, getBridge } from './api'
 
-function qualityToJio(quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
-  if (quality === 'auto') return 'auto'
-  if (quality >= 1080) return 'high'
-  if (quality >= 720) return 'high'
-  if (quality >= 480) return 'medium'
-  return 'low'
+function qualityToJio(_quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
+  // Always request 'auto' from JioTV API so the full multi-variant master manifest
+  // is returned without server-side bitrate filtering (which causes audio-only fallback).
+  // The client player (hls.js) chooses the exact rendition based on the user's quality preference.
+  return 'auto'
 }
 
 export const channelService = {
@@ -36,11 +35,14 @@ export const channelService = {
     mode: AuthMode,
     quality: 'auto' | number
   ): Promise<StreamInfo> {
+    console.log(`[channelService] getStream channel=${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
     if (mode === 'demo') {
       await delay(320)
       if (!channel.streamUrl) {
+        console.warn(`[channelService] demo channel ${channel.id} has no streamUrl`)
         throw new ApiError('This demo channel has no stream attached.', 'NO_STREAM')
       }
+      console.log(`[channelService] demo stream URL:`, channel.streamUrl)
       return {
         channelId: channel.id,
         url: channel.streamUrl,
@@ -52,9 +54,16 @@ export const channelService = {
       }
     }
     const bridge = getBridge()
-    if (!bridge) throw new ApiError('Playback is available in the desktop app only.', 'NO_BRIDGE')
+    if (!bridge) {
+      console.error('[channelService] No bridge available (running in web browser?)')
+      throw new ApiError('Playback is available in the desktop app only.', 'NO_BRIDGE')
+    }
     const result = await bridge.channels.getStream(channel.id, qualityToJio(quality))
-    if (!result.ok) throw new ApiError(result.error, result.code, result.retryable)
+    if (!result.ok) {
+      console.error(`[channelService] bridge.channels.getStream error:`, result.error, result.code)
+      throw new ApiError(result.error, result.code, result.retryable)
+    }
+    console.log(`[channelService] bridge.channels.getStream success:`, result.data)
     return result.data
   },
 

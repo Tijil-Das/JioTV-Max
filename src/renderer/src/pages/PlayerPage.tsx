@@ -106,13 +106,31 @@ export function PlayerPage(): JSX.Element {
   const [unlockedChannelId, setUnlockedChannelId] = useState<string | null>(null)
 
   const locked = parentalEnabled && channel?.category === 'kids' && unlockedChannelId !== channelId
-  const engine = useHlsPlayer({
-    stream: locked ? null : stream,
-    initialQuality: quality
-  })
-  const { videoRef } = engine
 
   const jioQualityKey = mode === 'jio' ? String(quality) : 'demo'
+
+  // ---- Stream re-resolution for reconnects ------------------------------
+  // Called by the engine before each automatic retry so it can load a fresh
+  // signed URL (new hdnea token) instead of the stale relay session.
+  const resolveStream = useCallback(async (): Promise<StreamInfo | null> => {
+    if (!channel) return null
+    console.log('[PlayerPage] Reconnecting: resolving fresh stream for', channel.id)
+    try {
+      const res = await channelService.getStream(channel, mode, quality)
+      console.log('[PlayerPage] Fresh stream resolved successfully:', res)
+      return res
+    } catch (err) {
+      console.error('[PlayerPage] Fresh stream resolution failed:', err)
+      return null
+    }
+  }, [channel, mode, quality])
+
+  const engine = useHlsPlayer({
+    stream: locked ? null : stream,
+    initialQuality: quality,
+    onReconnect: mode === 'jio' ? resolveStream : undefined
+  })
+  const { videoRef } = engine
 
   // ---- Stream resolution -------------------------------------------------
   useEffect(() => {
@@ -125,16 +143,19 @@ export function PlayerPage(): JSX.Element {
     setStream(null)
     setStreamLoading(true)
     setStreamError(null)
+    console.log(`[PlayerPage] Fetching stream for ${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
     channelService
       .getStream(channel, mode, quality)
       .then((result) => {
         if (cancelled) return
+        console.log(`[PlayerPage] Successfully resolved stream for ${channel.id}:`, result)
         setStream(result)
         setStreamLoading(false)
         recordRecent(channel.id, 0)
       })
       .catch((cause: unknown) => {
         if (cancelled) return
+        console.error(`[PlayerPage] Failed to resolve stream for ${channel.id}:`, cause)
         setStreamLoading(false)
         const error = cause instanceof ApiError ? cause : null
         setStreamError({
@@ -152,12 +173,15 @@ export function PlayerPage(): JSX.Element {
   // ---- Store/player synchronisation -------------------------------------
   useEffect(() => {
     setCurrentChannel(channelId)
+    if (autoplay) {
+      setPlaying(true)
+    }
     return () => {
       setCurrentChannel(null)
       setControlsVisible(true)
       setBuffering(false)
     }
-  }, [channelId, setBuffering, setControlsVisible, setCurrentChannel])
+  }, [channelId, autoplay, setBuffering, setControlsVisible, setCurrentChannel, setPlaying])
 
   useEffect(() => {
     setEngine(stream?.type ?? null)
@@ -189,9 +213,15 @@ export function PlayerPage(): JSX.Element {
   useEffect(() => {
     const media = videoRef.current
     if (!media) return
-    if (isPlaying) void media.play().catch(() => undefined)
-    else media.pause()
-  }, [isPlaying, stream, videoRef])
+    if (isPlaying) {
+      void media.play().catch((err: unknown) => {
+        console.warn('[PlayerPage] media.play() was prevented/blocked:', err)
+        setPlaying(false)
+      })
+    } else {
+      media.pause()
+    }
+  }, [isPlaying, stream, videoRef, setPlaying])
 
   useEffect(() => {
     const media = videoRef.current
@@ -531,8 +561,21 @@ export function PlayerPage(): JSX.Element {
                     variant="primary"
                     icon={<ListVideo className="h-4 w-4" />}
                     onClick={() => {
-                      setAttempt((value) => value + 1)
-                      engine.retry()
+                      // Re-fetch a fresh signed URL before retrying so a stale
+                      // hdnea token doesn't immediately fail again.
+                      if (mode === 'jio') {
+                        resolveStream().then((fresh) => {
+                          if (fresh) setStream(fresh)
+                          setAttempt((value) => value + 1)
+                          engine.retry()
+                        }).catch(() => {
+                          setAttempt((value) => value + 1)
+                          engine.retry()
+                        })
+                      } else {
+                        setAttempt((value) => value + 1)
+                        engine.retry()
+                      }
                     }}
                   >
                     Retry

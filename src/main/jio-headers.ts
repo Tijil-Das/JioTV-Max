@@ -107,16 +107,15 @@ export function buildPlaybackHeaders(options: PlaybackHeaderOptions = {}): Recor
   const headers: Record<string, string> = {}
   for (const [name, value] of Object.entries(options.authHeaders ?? {})) {
     const lower = name.toLowerCase()
-    if (lower === 'user-agent' || lower === 'accept') continue
+    // Drop JSON API headers and browser origin headers.
+    // Jio's CDN and key endpoints reject requests carrying Origin/Referer with 403.
+    if (lower === 'user-agent' || lower === 'accept' || lower === 'origin' || lower === 'referer') continue
     headers[name] = value
   }
 
   headers['User-Agent'] = PLAYER_UA
-  headers.Accept = '*/*'
-  headers['Accept-Language'] = 'en-IN,en;q=0.9'
-  headers.Origin = PLAYER_ORIGIN
-  headers.Referer = `${PLAYER_ORIGIN}/`
 
   const token = options.hdnea?.trim() ?? ''
   return token ? withHdneaCookie(headers, token) : headers
 }
+

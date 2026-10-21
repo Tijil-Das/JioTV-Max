@@ -590,23 +590,42 @@ export class JioService {
     const m3u8Bits = response.m3u8 ?? {}
     const hlsFor = (tier: 'auto' | 'high' | 'medium' | 'low'): string =>
       hlsBits[tier] || m3u8Bits[tier] || ''
-    const order: Array<'auto' | 'high' | 'medium' | 'low'> =
-      quality === 'auto'
-        ? ['auto', 'high', 'medium', 'low']
-        : quality === 'high'
-          ? ['high', 'auto', 'medium', 'low']
-          : quality === 'medium'
-            ? ['medium', 'high', 'auto', 'low']
-            : ['low', 'medium', 'high', 'auto']
-    let hlsUrl = ''
-    for (const tier of order) {
-      hlsUrl = hlsFor(tier)
-      if (hlsUrl) break
+
+    // In Jio's CDN (Broadpeak Origin Packager), tier-specific URLs like `bitrates.high`
+    // enforce `minrate=840000`. If a channel's maximum video bitrate is lower than 840k
+    // (common on fallback CDNs and SD channels), Broadpeak strips out ALL video variants
+    // and returns an audio-only variant playlist (CODECS="mp4a.40.2").
+    //
+    // Following JioTV-Go and Kodi inputstream.adaptive conventions, we ALWAYS prefer
+    // 'auto' or `response.result` (minrate=80000&maxrate=3024000) so the master manifest
+    // contains all video variants. HLS.js on the client then selects the appropriate level.
+    let hlsUrl = hlsFor('auto')
+    if (!hlsUrl && response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
+      hlsUrl = response.result
+    }
+    if (!hlsUrl) {
+      const order: Array<'auto' | 'high' | 'medium' | 'low'> =
+        quality === 'auto'
+          ? ['auto', 'high', 'medium', 'low']
+          : quality === 'high'
+            ? ['high', 'auto', 'medium', 'low']
+            : quality === 'medium'
+              ? ['medium', 'high', 'auto', 'low']
+              : ['low', 'medium', 'high', 'auto']
+      for (const tier of order) {
+        hlsUrl = hlsFor(tier)
+        if (hlsUrl) break
+      }
     }
     if (!hlsUrl && response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
       hlsUrl = response.result
     }
-    if (hlsUrl) return { url: hlsUrl, type: 'hls', isDrm: false }
+
+    if (hlsUrl) {
+      // Clamp minrate so Broadpeak packager never filters out video variants
+      hlsUrl = hlsUrl.replace(/minrate=\d+/i, 'minrate=80000')
+      return { url: hlsUrl, type: 'hls', isDrm: false }
+    }
 
     const mpdBits = response.mpd?.bitrates ?? {}
     const mpdUrl =
@@ -629,9 +648,11 @@ export class JioService {
 
   async getStream(
     channelId: string,
-    quality: 'auto' | 'high' | 'medium' | 'low' = 'high'
+    quality: 'auto' | 'high' | 'medium' | 'low' = 'auto'
   ): Promise<Result<StreamInfo>> {
+    console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
+      console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
       return {
         ok: false,
         error: 'Sign in with your Jio number to watch live channels.',
@@ -665,10 +686,13 @@ export class JioService {
     try {
       let { response, body: parsedBody } = await requestOnce()
       if ((response.status === 401 || response.status === 403) && (await this.refreshAccessToken())) {
+        console.log('[JioService] Playback token refreshed after 401/403, retrying requestOnce')
         ;({ response, body: parsedBody } = await requestOnce())
       }
       const parsed = (parsedBody ?? {}) as PlaybackResponse
+      console.log(`[JioService] Playback API response status: ${response.status}, code: ${parsed.code ?? 'none'}`)
       if (!response.ok) {
+        console.warn(`[JioService] Playback API returned HTTP ${response.status}:`, parsedBody)
         return {
           ok: false,
           error: errorMessage(parsedBody, response.status),
@@ -678,6 +702,7 @@ export class JioService {
       }
       // Some subscription-locked channels return HTTP 200 with a failure code.
       if (parsed.code && parsed.code !== 200 && !parsed.result && !parsed.mpd) {
+        console.warn(`[JioService] Channel subscription lock (code ${parsed.code}): ${parsed.message}`)
         return {
           ok: false,
           error: parsed.message || 'This channel is not available on your Jio account.',
@@ -686,7 +711,9 @@ export class JioService {
       }
 
       const selected = this.pickStreamUrl(parsed, quality)
+      console.log(`[JioService] Picked stream: url=${selected.url ? selected.url.slice(0, 90) + '...' : '(none)'}, type=${selected.type}, isDrm=${selected.isDrm}`)
       if (!selected.url) {
+        console.warn('[JioService] No playable stream found in response')
         return {
           ok: false,
           error: parsed.message || 'JioTV did not return a playable stream for this channel.',
@@ -698,12 +725,17 @@ export class JioService {
       // one quality tier, so look through every URL the API returned and keep
       // the token that goes with the stream we picked.
       const hdnea = extractHdnea(selected.url) || this.findHdnea(parsed)
+      console.log(`[JioService] hdnea token found: ${hdnea ? 'yes' : 'no'}`)
 
       // The CDN requires the Android *player* agent and `Accept: */*`.
       // `authenticatedHeaders()` carries `okhttp/4.12.0` + `application/json`
       // for the JSON APIs, so it must not be spread over the top of these.
       const manifestHeaders = buildPlaybackHeaders({
-        authHeaders: this.authenticatedHeaders(),
+        authHeaders: {
+          ...this.authenticatedHeaders(),
+          channelId,
+          srno: '230203144000'
+        },
         hdnea
       })
 
@@ -733,6 +765,7 @@ export class JioService {
         }
       }
     } catch (error) {
+      console.error('[JioService] getStream caught error:', error)
       await sleep(150)
       return {
         ok: false,

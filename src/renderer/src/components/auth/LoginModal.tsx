@@ -31,6 +31,14 @@ const RESEND_SECONDS = 30
 
 const phoneIsValid = (value: string) => /^[6-9]\d{9}$/.test(value)
 
+/** Accept pasted numbers with +91 or a leading 0 without truncating them. */
+const sanitizePhone = (raw: string) => {
+  let digits = raw.replace(/\D/g, '')
+  if (digits.length > 10 && digits.startsWith('91')) digits = digits.slice(2)
+  else if (digits.length > 10 && digits.startsWith('0')) digits = digits.slice(1)
+  return digits.slice(0, 10)
+}
+
 /**
  * Two-step JioTV sign-in: phone → OTP.
  *
@@ -345,7 +353,7 @@ export function LoginModal(): JSX.Element | null {
                           data-autofocus="true"
                           value={phone}
                           onChange={(event) => {
-                            setPhone(event.target.value.replace(/\D/g, '').slice(0, 10))
+                            setPhone(sanitizePhone(event.target.value))
                             setError(null)
                           }}
                           onKeyDown={(event) => {

@@ -209,4 +209,8 @@ which icon they want (or generate a branded one) before the final installer.
 - **Window chrome:** Sidebar/TopBar/footer unmount on `/watch`; the title bar
   fades when player controls hide.
 - **Demo OTP:** any valid Indian mobile (starts 6–9) + `123456`.
+- **Jio OTP number format:** `loginotp/send` and `loginotp/verify` must receive
+  `base64("+91" + 10-digit number)`, not the bare 10 digits. With bare digits
+  Jio answers "Please login with a Jio phone number" even for a valid Jio SIM.
+  This matches JioTV-Go's `cmd/login.go`.
 - **Do not log** OTPs, tokens, or full phone numbers.

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { PLAYER_UA } from './jio-headers'
 
 /**
  * A tiny loopback media relay.
@@ -20,7 +21,14 @@ interface Session {
   segmentBase?: string
 }
 
-const PLAYER_UA = 'plaYtv/7.1.8 (Linux;Android 8.1.0) ExoPlayerLib/2.11.7'
+/** A registered playback session plus the URLs the renderer should use. */
+export interface RelaySession {
+  /** Opaque session id used to authenticate `/raw` requests. */
+  id: string
+  manifestUrl: string
+  licenseUrl?: string
+}
+
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -39,9 +47,17 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function proxify(rawUrl: string, request: IncomingMessage): string {
+/**
+ * Rewrites an upstream URL into a relay URL.
+ *
+ * The session id travels with the URL so that `/raw` can recover the
+ * authenticated header set (player agent, session tokens, `__hdnea__` cookie)
+ * that the CDN requires. Without it the relay would fetch the segment as an
+ * anonymous client and Jio would answer `403`.
+ */
+function proxify(rawUrl: string, request: IncomingMessage, sessionId: string): string {
   const host = request.headers.host
-  return `http://${host}/raw?u=${encodeURIComponent(rawUrl)}`
+  return `http://${host}/raw?u=${encodeURIComponent(rawUrl)}&s=${encodeURIComponent(sessionId)}`
 }
 
 /**
@@ -54,7 +70,8 @@ function rewriteMpd(
   xml: string,
   manifestUrl: string,
   localBase: string,
-  request: IncomingMessage
+  request: IncomingMessage,
+  sessionId: string
 ): { xml: string; segmentBase: string } {
   const baseMatch = xml.match(/<BaseURL[^>]*>([\s\S]*?)<\/BaseURL>/i)
   const segmentBase = baseMatch ? new URL(baseMatch[1].trim(), manifestUrl).href : manifestUrl
@@ -79,7 +96,7 @@ function rewriteMpd(
         return full
       }
       if (!isHttpUrl(resolved)) return full
-      return `${attr}="${proxify(resolved, request)}"`
+      return `${attr}="${proxify(resolved, request, sessionId)}"`
     }
   )
   // Inject the relay base immediately after the opening MPD tag.
@@ -88,19 +105,48 @@ function rewriteMpd(
 }
 
 /** HLS playlists: rewrite every media URI and key/map URI. */
-function rewriteHls(playlist: string, manifestUrl: string, request: IncomingMessage): string {
+function hlsToken(manifestUrl: string): string {
+  try {
+    const parsed = new URL(manifestUrl)
+    return parsed.searchParams.get('__hdnea__') || parsed.searchParams.get('hdnea') || ''
+  } catch {
+    return ''
+  }
+}
+
+function withHlsToken(rawUrl: string, token: string): string {
+  if (!token) return rawUrl
+  try {
+    const parsed = new URL(rawUrl)
+    if (!parsed.searchParams.has('__hdnea__') && !parsed.searchParams.has('hdnea')) {
+      parsed.searchParams.set('__hdnea__', token)
+    }
+    return parsed.href
+  } catch {
+    return rawUrl
+  }
+}
+
+function rewriteHls(
+  playlist: string,
+  manifestUrl: string,
+  request: IncomingMessage,
+  sessionId: string
+): string {
+  const token = hlsToken(manifestUrl)
   const lines = playlist.split(/\r?\n/)
   const resolved = lines.map((line) => {
     const trimmed = line.trim()
     if (!trimmed) return line
     if (trimmed.startsWith('#')) {
       return line.replace(/URI="([^"]+)"/, (full, uri: string) => {
-        if (!isHttpUrl(new URL(uri, manifestUrl).href)) return full
-        return `URI="${proxify(new URL(uri, manifestUrl).href, request)}"`
+        const absolute = withHlsToken(new URL(uri, manifestUrl).href, token)
+        if (!isHttpUrl(absolute)) return full
+        return `URI="${proxify(absolute, request, sessionId)}"`
       })
     }
-    const absolute = new URL(trimmed, manifestUrl).href
-    return isHttpUrl(absolute) ? proxify(absolute, request) : line
+    const absolute = withHlsToken(new URL(trimmed, manifestUrl).href, token)
+    return isHttpUrl(absolute) ? proxify(absolute, request, sessionId) : line
   })
   return resolved.join('\n')
 }
@@ -185,7 +231,7 @@ export class MediaRelay {
     manifestUrl: string
     licenseUrl?: string
     headers?: Record<string, string>
-  }): { manifestUrl: string; licenseUrl?: string } {
+  }): RelaySession {
     if (!this.port) throw new Error('Media relay is not running')
     const id = randomUUID()
     this.sessions.set(id, {
@@ -196,9 +242,22 @@ export class MediaRelay {
     })
     const base = `http://127.0.0.1:${this.port}/stream/${id}`
     return {
+      id,
       manifestUrl: `${base}/manifest`,
       licenseUrl: input.licenseUrl ? `${base}/license` : undefined
     }
+  }
+
+  /**
+   * Looks up a playback session by id.
+   *
+   * `/raw` requests carry the id of the session that produced them, so the
+   * relay can replay that session's authenticated headers against the CDN.
+   */
+  private resolveSession(id: string | null): (Session & { id: string }) | null {
+    if (!id) return null
+    const session = this.sessions.get(id)
+    return session ? { ...session, id } : null
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -220,8 +279,13 @@ export class MediaRelay {
         res.end('Invalid target')
         return
       }
-      const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
-      const upstream = await fetchUpstream(target, {}, { range })
+      // The session id tells the relay whose authenticated headers to use.
+      // Without it the CDN sees an anonymous request and answers `403`,
+      // which the player surfaces as "the live stream could not be reached".
+      const session = this.resolveSession(url.searchParams.get('s'))
+      const upstream = await fetchUpstream(target, session?.headers ?? {}, {
+        range: typeof req.headers.range === 'string' ? req.headers.range : undefined
+      })
       const contentType = upstream.headers.get('content-type') ?? ''
       if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(target)) {
         // Nested HLS playlists must be rewritten too, not passed through raw.
@@ -231,7 +295,7 @@ export class MediaRelay {
           'Content-Type': 'application/vnd.apple.mpegurl',
           'Cache-Control': 'no-store'
         })
-        res.end(rewriteHls(text, target, req))
+        res.end(rewriteHls(text, target, req, session?.id ?? ''))
         return
       }
       copyHeaders(upstream.headers, res)
@@ -290,11 +354,11 @@ export class MediaRelay {
       let rewritten: string
       if (isMpd) {
         const localBase = `http://${req.headers.host}/stream/${id}/seg/`
-        const result = rewriteMpd(text, session.manifestUrl, localBase, req)
+        const result = rewriteMpd(text, session.manifestUrl, localBase, req, id)
         session.segmentBase = result.segmentBase
         rewritten = result.xml
       } else {
-        rewritten = rewriteHls(text, session.manifestUrl, req)
+        rewritten = rewriteHls(text, session.manifestUrl, req, id)
       }
       res.writeHead(200, {
         ...CORS_HEADERS,

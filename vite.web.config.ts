@@ -17,6 +17,12 @@ export default defineConfig({
       '@shared': resolve('src/shared')
     }
   },
+  // Keep the browser-only dev server's optimiser in step with electron-vite.
+  // Both shaka-player and hls.js are heavy media engines; prebundling them
+  // avoids a first-playback stall (and a missing dep URL after a cache reset).
+  optimizeDeps: {
+    include: ['hls.js', 'shaka-player']
+  },
   server: {
     port: 5173,
     strictPort: true

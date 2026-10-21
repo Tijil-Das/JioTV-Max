@@ -68,6 +68,14 @@ export default defineConfig({
         '@shared': resolve('src/shared')
       }
     },
+    // shaka-player is loaded through a dynamic import. Vite normally discovers
+    // it during the initial scan, but electron-vite's renderer can start before
+    // the optimiser has written the dep, which leaves the player requesting a
+    // missing /@fs/.../.vite/deps/shaka-player.js URL. Listing it explicitly
+    // makes the optimiser build it before the window opens.
+    optimizeDeps: {
+      include: ['hls.js', 'shaka-player']
+    },
     plugins: [react(), contentSecurityPolicy()]
   }
 })

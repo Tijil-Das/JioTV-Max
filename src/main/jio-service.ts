@@ -13,6 +13,12 @@ import type {
 } from '@shared/types'
 import { SecureStore } from './secure-store'
 import type { MediaRelay } from './media-relay'
+import { jioNumberPayload } from './jio-format'
+import {
+  API_UA,
+  buildPlaybackHeaders,
+  extractHdnea
+} from './jio-headers'
 
 /**
  * JioTV backend.
@@ -39,8 +45,8 @@ const API = {
 const APP_KEY = 'NzNiMDhlYzQyNjJm'
 const USER_GROUP = 'tvYR7NSNn7rymo3F'
 const VERSION_CODE = '422'
-const USER_AGENT = 'okhttp/4.12.0'
-const PLAYER_UA = 'plaYtv/7.1.8 (Linux;Android 8.1.0) ExoPlayerLib/2.11.7'
+/** Agent used for the JSON APIs (catalogue, EPG, playback). */
+const USER_AGENT = API_UA
 
 interface JioCredentials {
   accessToken: string
@@ -257,7 +263,7 @@ export class JioService {
     if (!/^[6-9]\d{9}$/.test(phone)) {
       return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.', code: 'INVALID_PHONE' }
     }
-    const number = Buffer.from(phone, 'utf8').toString('base64')
+    const number = jioNumberPayload(phone)
     try {
       const { response, body, text } = await requestJson(API.loginSendOtp, {
         method: 'POST',
@@ -265,6 +271,7 @@ export class JioService {
           appname: 'RJIL_JioTV',
           os: 'android',
           devicetype: 'phone',
+          'User-Agent': USER_AGENT,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ number })
@@ -299,7 +306,7 @@ export class JioService {
       return { ok: false, error: 'Enter the 6-digit code.', code: 'INVALID_OTP' }
     }
     const payload = {
-      number: Buffer.from(phone, 'utf8').toString('base64'),
+      number: jioNumberPayload(phone),
       otp,
       deviceInfo: {
         consumptionDeviceName: 'SM-G930F',
@@ -317,6 +324,7 @@ export class JioService {
           appname: 'RJIL_JioTV',
           os: 'android',
           devicetype: 'phone',
+          'User-Agent': USER_AGENT,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -540,12 +548,66 @@ export class JioService {
     }
   }
 
-  private pickStreamUrl(response: PlaybackResponse): {
+  /**
+   * Scans every URL in a playback response for an Akamai `hdnea` token.
+   *
+   * Jio sometimes attaches the token to a single quality tier only, so the
+   * stream we picked may not carry it even though the response does.
+   */
+  private findHdnea(response: PlaybackResponse): string {
+    const candidates: string[] = [
+      response.result ?? '',
+      ...Object.values(response.m3u8 ?? {}),
+      ...Object.values(response.bitrates ?? {}),
+      response.mpd?.result ?? '',
+      ...Object.values(response.mpd?.bitrates ?? {}),
+      response.mpd?.auto ?? '',
+      response.mpd?.high ?? '',
+      response.mpd?.medium ?? '',
+      response.mpd?.low ?? ''
+    ]
+    for (const candidate of candidates) {
+      const token = extractHdnea(candidate)
+      if (token) return token
+    }
+    return ''
+  }
+
+  private pickStreamUrl(
+    response: PlaybackResponse,
+    quality: 'auto' | 'high' | 'medium' | 'low'
+  ): {
     url: string
     type: 'hls' | 'dash'
     licenseUrl?: string
     isDrm: boolean
   } {
+    // Jio returns both HLS and DASH for most live channels. Prefer HLS:
+    // JioTV-Go's normal live player uses HLS, and hls.js can play it in stock
+    // Electron. The DASH variant is usually Widevine-protected, which requires
+    // a proprietary CDM that stock Electron does not ship.
+    const hlsBits = response.bitrates ?? {}
+    const m3u8Bits = response.m3u8 ?? {}
+    const hlsFor = (tier: 'auto' | 'high' | 'medium' | 'low'): string =>
+      hlsBits[tier] || m3u8Bits[tier] || ''
+    const order: Array<'auto' | 'high' | 'medium' | 'low'> =
+      quality === 'auto'
+        ? ['auto', 'high', 'medium', 'low']
+        : quality === 'high'
+          ? ['high', 'auto', 'medium', 'low']
+          : quality === 'medium'
+            ? ['medium', 'high', 'auto', 'low']
+            : ['low', 'medium', 'high', 'auto']
+    let hlsUrl = ''
+    for (const tier of order) {
+      hlsUrl = hlsFor(tier)
+      if (hlsUrl) break
+    }
+    if (!hlsUrl && response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
+      hlsUrl = response.result
+    }
+    if (hlsUrl) return { url: hlsUrl, type: 'hls', isDrm: false }
+
     const mpdBits = response.mpd?.bitrates ?? {}
     const mpdUrl =
       response.mpd?.high ||
@@ -560,21 +622,6 @@ export class JioService {
       ''
     const licenseUrl = (response.keyUrl || response.mpd?.key || '').trim()
     const isDrm = Boolean(response.isDRM || licenseUrl)
-
-    if (isDrm && mpdUrl) return { url: mpdUrl, type: 'dash', licenseUrl, isDrm: true }
-
-    const hlsBits = response.bitrates ?? {}
-    const m3u8Bits = response.m3u8 ?? {}
-    const hlsUrl =
-      hlsBits.high ||
-      hlsBits.auto ||
-      response.result ||
-      m3u8Bits.high ||
-      m3u8Bits.auto ||
-      m3u8Bits.medium ||
-      m3u8Bits.low ||
-      ''
-    if (hlsUrl) return { url: hlsUrl, type: 'hls', licenseUrl, isDrm }
 
     if (mpdUrl) return { url: mpdUrl, type: 'dash', licenseUrl, isDrm }
     return { url: '', type: 'hls', licenseUrl, isDrm }
@@ -638,7 +685,7 @@ export class JioService {
         }
       }
 
-      const selected = this.pickStreamUrl(parsed)
+      const selected = this.pickStreamUrl(parsed, quality)
       if (!selected.url) {
         return {
           ok: false,
@@ -647,19 +694,18 @@ export class JioService {
         }
       }
 
-      // Jio rotates its signed `hdnea` CDN token. Preserve it on every URL even
-      // when the API only attached it to one quality tier.
-      const hdneaMatch = selected.url.match(/[?&]hdnea=([^&]+)/)
-      const hdnea = hdneaMatch?.[1]
+      // Jio rotates its signed `hdnea` CDN token. It may only be attached to
+      // one quality tier, so look through every URL the API returned and keep
+      // the token that goes with the stream we picked.
+      const hdnea = extractHdnea(selected.url) || this.findHdnea(parsed)
 
-      const manifestHeaders: Record<string, string> = {
-        'User-Agent': PLAYER_UA,
-        Accept: '*/*',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        Origin: 'https://www.jiotv.com',
-        Referer: 'https://www.jiotv.com/',
-        ...this.authenticatedHeaders()
-      }
+      // The CDN requires the Android *player* agent and `Accept: */*`.
+      // `authenticatedHeaders()` carries `okhttp/4.12.0` + `application/json`
+      // for the JSON APIs, so it must not be spread over the top of these.
+      const manifestHeaders = buildPlaybackHeaders({
+        authHeaders: this.authenticatedHeaders(),
+        hdnea
+      })
 
       const relaySession = this.relay.register({
         channelId,

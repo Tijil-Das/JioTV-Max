@@ -6,6 +6,7 @@ import { TitleBar } from './TitleBar'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { BrandMark } from '@/components/ui/BrandMark'
+import { usePlayerStore } from '@/store/usePlayerStore'
 
 /**
  * Persistent chrome around the routed pages. The player route takes over the
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const isPlayer = location.pathname.startsWith('/watch')
+  const isFullscreen = usePlayerStore((state) => state.isFullscreen)
 
   useEffect(() => {
     if (!isPlayer && mainRef.current) mainRef.current.scrollTop = 0
@@ -22,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <TitleBar />
+      {!isFullscreen ? <TitleBar /> : null}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {!isPlayer ? <Sidebar /> : null}
         <main

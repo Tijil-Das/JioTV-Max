@@ -235,11 +235,6 @@ async function createWindow(): Promise<void> {
     backgroundColor: supportsMaterial ? '#00000000' : '#050507',
     ...(supportsMaterial ? { backgroundMaterial: 'acrylic' as const } : {}),
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: '#F5F5F7',
-      height: 40
-    },
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -298,11 +293,19 @@ async function createWindow(): Promise<void> {
   mainWindow.on('move', persist)
   mainWindow.on('close', persist)
 
-  mainWindow.on('enter-full-screen', () => {
-    mainWindow?.webContents.send(IPC.fullscreenChanged, true)
+  const sendFullscreen = (val: boolean): void => {
+    mainWindow?.webContents.send(IPC.fullscreenChanged, val)
+  }
+  mainWindow.on('enter-full-screen', () => sendFullscreen(true))
+  mainWindow.on('leave-full-screen', () => sendFullscreen(false))
+  mainWindow.on('enter-html-full-screen', () => sendFullscreen(true))
+  mainWindow.on('leave-html-full-screen', () => sendFullscreen(false))
+
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, true)
   })
-  mainWindow.on('leave-full-screen', () => {
-    mainWindow?.webContents.send(IPC.fullscreenChanged, false)
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, false)
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -320,8 +323,9 @@ async function createWindow(): Promise<void> {
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.key === 'F11' && input.type === 'keyDown') {
       event.preventDefault()
-      if (mainWindow?.isFullScreen()) mainWindow.setFullScreen(false)
-      else mainWindow?.setFullScreen(true)
+      const next = !mainWindow?.isFullScreen()
+      mainWindow?.setFullScreen(next)
+      sendFullscreen(next)
     }
   })
 
@@ -435,7 +439,31 @@ function registerIpc(): void {
     if (!mainWindow) return false
     const next = !mainWindow.isFullScreen()
     mainWindow.setFullScreen(next)
+    mainWindow.webContents.send(IPC.fullscreenChanged, next)
     return next
+  })
+
+  ipcMain.handle(IPC.windowMinimize, (): void => {
+    mainWindow?.minimize()
+  })
+
+  ipcMain.handle(IPC.windowMaximize, (): boolean => {
+    if (!mainWindow) return false
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+      return false
+    } else {
+      mainWindow.maximize()
+      return true
+    }
+  })
+
+  ipcMain.handle(IPC.windowClose, (): void => {
+    mainWindow?.close()
+  })
+
+  ipcMain.handle(IPC.windowIsMaximized, (): boolean => {
+    return mainWindow?.isMaximized() ?? false
   })
 
   ipcMain.handle(IPC.setAlwaysOnTop, (_event, value: boolean): boolean => {

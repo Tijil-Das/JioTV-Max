@@ -6,6 +6,7 @@ import { useOnline } from '@/hooks/useOnline'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { BrandMark, BrandWordmark } from '@/components/ui/BrandMark'
+import { WindowControls } from './WindowControls'
 
 const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
@@ -25,11 +26,10 @@ export function TitleBar(): JSX.Element {
   return (
     <header
       className={cn(
-        'drag-region relative z-50 flex h-[40px] shrink-0 items-center justify-between border-b border-white/[0.045] px-4',
+        'drag-region relative z-50 flex h-[40px] shrink-0 items-center justify-between border-b border-white/[0.045] pl-4 pr-0',
         'bg-[linear-gradient(to_bottom,rgba(10,10,14,.72),rgba(5,5,7,.35))] backdrop-blur-xl',
         isPlayer && 'border-transparent bg-black/25'
       )}
-      style={{ paddingRight: '142px' }}
     >
       <div
         className={cn(
@@ -46,7 +46,7 @@ export function TitleBar(): JSX.Element {
       <div
         className={cn(
           'flex items-center gap-3 transition-opacity duration-500',
-          faded ? 'opacity-0' : 'opacity-100'
+          faded ? 'pointer-events-none opacity-0' : 'opacity-100'
         )}
       >
         {!online ? (
@@ -65,9 +65,10 @@ export function TitleBar(): JSX.Element {
         >
           {mode === 'demo' ? 'Demo' : 'JioTV'}
         </span>
-        <span className="text-[11px] font-medium tabular-nums text-text-secondary">
+        <span className="mr-1 text-[11px] font-medium tabular-nums text-text-secondary">
           {clockFormatter.format(now)}
         </span>
+        <WindowControls />
       </div>
     </header>
   )

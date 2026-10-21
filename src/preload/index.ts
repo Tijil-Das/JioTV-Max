@@ -15,6 +15,15 @@ const api = {
     ipcRenderer.on(IPC.fullscreenChanged, listener)
     return () => ipcRenderer.removeListener(IPC.fullscreenChanged, listener)
   },
+  minimize: (): Promise<void> => ipcRenderer.invoke(IPC.windowMinimize),
+  maximize: (): Promise<boolean> => ipcRenderer.invoke(IPC.windowMaximize),
+  close: (): Promise<void> => ipcRenderer.invoke(IPC.windowClose),
+  isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC.windowIsMaximized),
+  onMaximizedChange: (callback: (maximized: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized)
+    ipcRenderer.on(IPC.windowMaximizedChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.windowMaximizedChanged, listener)
+  },
   setAlwaysOnTop: (value: boolean): Promise<boolean> => ipcRenderer.invoke(IPC.setAlwaysOnTop, value),
   setPlayerActive: (active: boolean): Promise<void> => ipcRenderer.invoke(IPC.setPlayerActive, active),
   auth: {

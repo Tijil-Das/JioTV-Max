@@ -124,6 +124,11 @@ export interface StreamDeckApi {
   getAppInfo(): Promise<AppInfo>
   toggleFullscreen(): Promise<boolean>
   onFullscreenChange(callback: (fullscreen: boolean) => void): () => void
+  minimize(): Promise<void>
+  maximize(): Promise<boolean>
+  close(): Promise<void>
+  isMaximized(): Promise<boolean>
+  onMaximizedChange(callback: (maximized: boolean) => void): () => void
   setAlwaysOnTop(value: boolean): Promise<boolean>
   setPlayerActive(active: boolean): Promise<void>
   auth: {

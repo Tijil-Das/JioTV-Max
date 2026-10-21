@@ -198,13 +198,17 @@ export function PlayerPage(): JSX.Element {
   }, [bridge])
 
   useEffect(() => {
-    if (!bridge) return
-    const off = bridge.onFullscreenChange((value) => setFullscreen(value))
-    const onDocumentFullscreen = () => setFullscreen(Boolean(document.fullscreenElement))
+    const onDocumentFullscreen = (): void => {
+      const isFs = Boolean(document.fullscreenElement)
+      setFullscreen(isFs)
+    }
     document.addEventListener('fullscreenchange', onDocumentFullscreen)
+    const off = bridge?.onFullscreenChange((value) => {
+      setFullscreen(value)
+    })
     return () => {
-      off()
       document.removeEventListener('fullscreenchange', onDocumentFullscreen)
+      off?.()
     }
   }, [bridge, setFullscreen])
 
@@ -266,13 +270,22 @@ export function PlayerPage(): JSX.Element {
   }, [isPlaying, setPlaying, wake])
 
   const toggleFullscreen = useCallback(async () => {
-    if (bridge) {
-      await bridge.toggleFullscreen()
-      return
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+        setFullscreen(false)
+      } else {
+        await document.documentElement.requestFullscreen()
+        setFullscreen(true)
+      }
+    } catch (err) {
+      console.warn('[PlayerPage] HTML5 requestFullscreen failed, falling back to Electron toggle:', err)
+      if (bridge) {
+        const next = await bridge.toggleFullscreen()
+        setFullscreen(next)
+      }
     }
-    if (document.fullscreenElement) await document.exitFullscreen()
-    else await document.documentElement.requestFullscreen().catch(() => undefined)
-  }, [bridge])
+  }, [bridge, setFullscreen])
 
   const togglePip = useCallback(async () => {
     const media = videoRef.current

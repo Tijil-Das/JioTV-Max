@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "pack:dir": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win dir",
-    "dist": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win nsis"
+    "dist": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win nsis",
+    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -58,6 +59,7 @@
     ],
     "win": {
       "target": "nsis",
+      "icon": "build/icon.png",
       "artifactName": "StreamDeck-TV-${version}-setup.${ext}"
     },
     "nsis": {

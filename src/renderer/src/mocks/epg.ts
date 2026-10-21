@@ -12,6 +12,16 @@ interface EpgSeed {
   rating: string
 }
 
+/** Editorial genre shown under programmes in cards and the hero. */
+const GENRE_BY_CATEGORY: Record<ChannelCategory, string> = {
+  sports: 'Sports',
+  news: 'News',
+  movies: 'Film',
+  kids: 'Kids',
+  entertainment: 'Entertainment',
+  regional: 'Regional'
+}
+
 const TITLES: Record<ChannelCategory, string[]> = {
   sports: [
     'Matchday Live',
@@ -237,7 +247,7 @@ export function getMockPrograms(channel: Channel, date = new Date()): Program[] 
       description: descriptions[Math.floor(random() * descriptions.length)],
       start: new Date(cursor).toISOString(),
       end: new Date(end).toISOString(),
-      genre: channel.category === 'movies' ? 'Film' : channel.category === 'news' ? 'News' : 'Entertainment',
+      genre: GENRE_BY_CATEGORY[channel.category],
       rating: RATINGS[Math.floor(random() * RATINGS.length)]
     })
     cursor = end

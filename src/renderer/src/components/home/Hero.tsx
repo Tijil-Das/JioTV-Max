@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarClock, ChevronRight, Info, Play } from 'lucide-react'
+import { CalendarClock, CalendarRange, ChevronRight, Play } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { hexToRgba, initials } from '@/lib/color'
@@ -173,7 +173,7 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
                 <Button
                   variant="glass"
                   size="lg"
-                  icon={<Info className="h-4 w-4" />}
+                  icon={<CalendarRange className="h-4 w-4" />}
                   onClick={() => navigate(`/guide?channel=${channel.id}`)}
                 >
                   Open guide
@@ -222,7 +222,7 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
               <ul className="mt-3 space-y-3">
                 {(upcoming.length > 0 ? upcoming : next ? [next] : []).slice(0, 3).map((program) => (
                   <li key={program.id} className="flex items-start gap-3">
-                    <span className="w-12 shrink-0 pt-0.5 text-[11px] font-semibold tabular-nums text-white/60">
+                    <span className="w-[62px] shrink-0 whitespace-nowrap pt-0.5 text-[11px] font-semibold tabular-nums text-white/60">
                       {formatTime(program.start)}
                     </span>
                     <span className="min-w-0 flex-1">

@@ -13,7 +13,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win nsis"
+    "pack:dir": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win dir",
+    "dist": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win nsis"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

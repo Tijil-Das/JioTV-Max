@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Check, Gauge } from 'lucide-react'
-import type { EngineLevel } from '@/hooks/useHlsPlayer'
+import type { EngineLevel } from '@/hooks/useMediaPlayer'
 import { cn } from '@/lib/cn'
 import { popover } from '@/lib/motion'
 

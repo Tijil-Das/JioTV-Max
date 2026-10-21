@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { PLAYER_UA } from './jio-headers'
+import { PLAYER_UA, withHdneaCookie, extractHdnea } from './jio-headers'
 
 /**
  * A tiny loopback media relay.
@@ -73,22 +73,82 @@ function rewriteMpd(
   request: IncomingMessage,
   sessionId: string
 ): { xml: string; segmentBase: string } {
+  const token = hlsToken(manifestUrl)
   const baseMatch = xml.match(/<BaseURL[^>]*>([\s\S]*?)<\/BaseURL>/i)
-  const segmentBase = baseMatch ? new URL(baseMatch[1].trim(), manifestUrl).href : manifestUrl
-  let output = xml.replace(/<BaseURL[^>]*>[\s\S]*?<\/BaseURL>/gi, '')
-  output = output.replace(/<Location[^>]*>[\s\S]*?<\/Location>/gi, '')
+  const rawBase = baseMatch ? baseMatch[1].trim() : ''
+
+  let segmentBase: string
+  try {
+    if (rawBase && /^https?:\/\//i.test(rawBase)) {
+      segmentBase = rawBase
+    } else if (rawBase) {
+      segmentBase = new URL(rawBase, manifestUrl).href
+    } else {
+      segmentBase = new URL('.', manifestUrl).href
+    }
+  } catch {
+    segmentBase = manifestUrl
+  }
+
+  if (!segmentBase.endsWith('/') && !segmentBase.includes('?') && !/\.[a-z0-9]+$/i.test(segmentBase)) {
+    segmentBase += '/'
+  }
+
+  try {
+    const manifestParsed = new URL(manifestUrl)
+    const baseParsed = new URL(segmentBase)
+    if (!baseParsed.search && manifestParsed.search) {
+      baseParsed.search = manifestParsed.search
+      segmentBase = baseParsed.href
+    }
+  } catch {
+    // ignore
+  }
+
+  const host = request.headers.host || '127.0.0.1'
+  const localManifestUrl = `http://${host}/stream/${sessionId}/manifest`
+  const baseClean = segmentBase.split('?')[0].replace(/\/+$/, '')
+
+  let output = xml
+
+  // 1. Rewrite <Location> tags to local relay manifest URL so Shaka polls local relay for live manifest updates
+  output = output.replace(/<Location[^>]*>[\s\S]*?<\/Location>/gi, `<Location>${localManifestUrl}</Location>`)
+
+  // 2. Remove any original <BaseURL> tags (root or nested)
+  output = output.replace(/<BaseURL[^>]*>[\s\S]*?<\/BaseURL>/gi, '')
+
+  // 3. Inject local relay BaseURL right after <MPD>
+  output = output.replace(/(<MPD\b[^>]*>)/i, `$1\n  <BaseURL>${localBase}</BaseURL>`)
+
+  // 4. Rewrite any absolute URLs matching baseClean (including templated $Number$ segments)
+  if (baseClean) {
+    const baseEscaped = baseClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(baseEscaped + '(/[^"\'\\s>]*)?', 'gi')
+    output = output.replace(pattern, (_full, rest) => {
+      const cleanRest = rest ? rest.replace(/^\/+/, '') : ''
+      return `${localBase}${cleanRest}`
+    })
+  }
+
+  // 5. Rewrite any media/initialization attributes
   output = output.replace(
     /(media|initialization|sourceURL|href|index)="([^"]+)"/g,
     (full, attr: string, value: string) => {
       if (!value || value.startsWith('data:') || value.includes('127.0.0.1')) return full
-      // Leave relative templates alone: they resolve against the injected
-      // local BaseURL, so DASH's own placeholder expansion stays intact.
-      if (value.includes('$') && !/^https?:/i.test(value)) return full
-      if (value.includes('$')) {
-        // Absolute templated URLs are rare. Keep them intact rather than
-        // corrupting the placeholders; if the CDN allows CORS they still play.
+
+      // Relative templates resolve against injected local BaseURL automatically
+      if (value.includes('$') && !/^https?:/i.test(value)) {
         return full
       }
+
+      // Absolute templated URLs (e.g. https://.../seg_$Number$.mp4)
+      if (value.includes('$') && /^https?:/i.test(value)) {
+        const lastSlash = value.lastIndexOf('/')
+        const filename = lastSlash !== -1 ? value.slice(lastSlash + 1) : value
+        return `${attr}="${localBase}${filename}"`
+      }
+
+      // Non-templated URLs: resolve and proxify
       let resolved: string
       try {
         resolved = /^https?:/i.test(value) ? value : new URL(value, segmentBase).href
@@ -96,11 +156,17 @@ function rewriteMpd(
         return full
       }
       if (!isHttpUrl(resolved)) return full
+      if (token) resolved = withHlsToken(resolved, token)
       return `${attr}="${proxify(resolved, request, sessionId)}"`
     }
   )
-  // Inject the relay base immediately after the opening MPD tag.
-  output = output.replace(/(<MPD\b[^>]*>)/i, `$1<BaseURL>${localBase}</BaseURL>`)
+
+  // 6. Extra safety net: prefix any remaining *.cdn.jio.com absolute URLs with localBase
+  output = output.replace(/https?:\/\/[a-z0-9.-]*cdn\.jio\.com\/[^\s"'>]+/gi, (matchedUrl) => {
+    if (matchedUrl.includes('127.0.0.1')) return matchedUrl
+    return `${localBase}${matchedUrl}`
+  })
+
   return { xml: output, segmentBase }
 }
 
@@ -189,6 +255,7 @@ function copyHeaders(from: Headers, to: ServerResponse): void {
 export class MediaRelay {
   private server: Server | null = null
   private port = 0
+  private lastActiveSessionId: string | null = null
   private readonly sessions = new Map<string, Session>()
 
   get running(): boolean {
@@ -217,6 +284,7 @@ export class MediaRelay {
 
   async stop(): Promise<void> {
     this.sessions.clear()
+    this.lastActiveSessionId = null
     await new Promise<void>((resolve) => {
       if (!this.server) return resolve()
       this.server.close(() => resolve())
@@ -236,6 +304,7 @@ export class MediaRelay {
   }): RelaySession {
     if (!this.port) throw new Error('Media relay is not running')
     const id = randomUUID()
+    this.lastActiveSessionId = id
     this.sessions.set(id, {
       channelId: input.channelId,
       manifestUrl: input.manifestUrl,
@@ -247,7 +316,7 @@ export class MediaRelay {
     return {
       id,
       manifestUrl: `${base}/manifest`,
-      licenseUrl: input.licenseUrl ? `${base}/license` : undefined
+      licenseUrl: `${base}/license`
     }
   }
 
@@ -271,9 +340,24 @@ export class MediaRelay {
     }
 
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${this.port}`)
-    const streamMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/(manifest|license)$/i)
-    const segmentMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/seg\/(.*)$/i)
     const raw = url.pathname === '/raw'
+    const streamMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/(manifest|license)$/i)
+    const segmentMatch = url.pathname.match(
+      /^\/(?:stream\/([a-f0-9-]{36})\/seg|proxy-segment\/([a-f0-9-]{36})|proxy-segment)\/(.*)$/i
+    )
+    const directLicenseMatch = url.pathname.match(/^\/license(?:\/([a-f0-9-]{36}))?$/i)
+
+    if (directLicenseMatch) {
+      const id = directLicenseMatch[1] || url.searchParams.get('s') || this.lastActiveSessionId
+      const session = this.resolveSession(id)
+      if (!session) {
+        console.warn(`[MediaRelay] Unknown license session: ${id}`)
+        res.writeHead(404, CORS_HEADERS)
+        res.end('Unknown license session')
+        return
+      }
+      return this.handleLicense(req, res, session)
+    }
 
     if (raw) {
       const target = url.searchParams.get('u')
@@ -298,10 +382,17 @@ export class MediaRelay {
         upstreamHeaders.srno = '230203144000'
       }
 
-      const upstream = await fetchUpstream(target, upstreamHeaders, {
+      const token = session ? hlsToken(session.manifestUrl) : ''
+      let fetchTarget = target
+      if (token) {
+        fetchTarget = withHlsToken(fetchTarget, token)
+        Object.assign(upstreamHeaders, withHdneaCookie(upstreamHeaders, token))
+      }
+
+      const upstream = await fetchUpstream(fetchTarget, upstreamHeaders, {
         range: typeof req.headers.range === 'string' ? req.headers.range : undefined
       })
-      console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${target.slice(0, 80)}`)
+      console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${fetchTarget.slice(0, 80)}`)
 
       // Capture upstream rotated __hdnea__ cookie if present
       const setCookie = upstream.headers.get('set-cookie')
@@ -310,11 +401,12 @@ export class MediaRelay {
         if (match) {
           console.log(`[MediaRelay] Upstream updated __hdnea__ cookie: ${match[1].slice(0, 30)}...`)
           session.headers = withHdneaCookie(session.headers, match[1])
+          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
         }
       }
 
       if (!upstream.ok) {
-        console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${target}`)
+        console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
         const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
         res.writeHead(statusToSend, CORS_HEADERS)
         res.end(`Upstream error (${upstream.status})`)
@@ -331,7 +423,7 @@ export class MediaRelay {
       }
 
       const contentType = upstream.headers.get('content-type') ?? ''
-      if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(target)) {
+      if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(fetchTarget)) {
         // Nested HLS playlists must be rewritten too, not passed through raw.
         const text = await upstream.text()
         res.writeHead(200, {
@@ -339,7 +431,7 @@ export class MediaRelay {
           'Content-Type': 'application/vnd.apple.mpegurl',
           'Cache-Control': 'no-store'
         })
-        res.end(rewriteHls(text, target, req, session?.id ?? ''))
+        res.end(rewriteHls(text, fetchTarget, req, session?.id ?? ''))
         return
       }
 
@@ -350,25 +442,86 @@ export class MediaRelay {
     }
 
     if (segmentMatch) {
-      const [, segId, rest] = segmentMatch
-      const session = this.sessions.get(segId)
-      if (!session?.segmentBase) {
+      const segId = segmentMatch[1] || segmentMatch[2] || url.searchParams.get('s') || this.lastActiveSessionId
+      const rest = segmentMatch[3]
+      const session = this.resolveSession(segId)
+      if (!session) {
         console.warn(`[MediaRelay] Unknown segment session: ${segId}`)
         res.writeHead(404, CORS_HEADERS)
         res.end('Unknown segment session')
         return
       }
-      const target = new URL(rest + url.search, session.segmentBase).href
+      this.lastActiveSessionId = session.id
+
+      let rawRest = rest
+      if (/^https?:\/+[^\/]/i.test(rawRest)) {
+        rawRest = rawRest.replace(/^(https?):\/+([^\/])/, '$1://$2')
+      }
+
+      let target: string
+      if (/^https?:\/\//i.test(rawRest)) {
+        target = rawRest
+      } else if (rawRest.startsWith('bpk-tv/') || rawRest.startsWith('/bpk-tv/')) {
+        const base = session.segmentBase || new URL('.', session.manifestUrl).href
+        const cdnOrigin = new URL(base).origin
+        target = new URL(rawRest.replace(/^\/+/, ''), cdnOrigin + '/').href
+      } else {
+        const base = session.segmentBase || new URL('.', session.manifestUrl).href
+        target = new URL(rawRest, base).href
+      }
+
+      // Preserve query params from incoming request and from session.manifestUrl
+      try {
+        const targetUrl = new URL(target)
+        if (url.search) {
+          for (const [k, v] of url.searchParams.entries()) {
+            if (!targetUrl.searchParams.has(k)) targetUrl.searchParams.set(k, v)
+          }
+        }
+        const manifestParsed = new URL(session.manifestUrl)
+        for (const [k, v] of manifestParsed.searchParams.entries()) {
+          if (!targetUrl.searchParams.has(k)) targetUrl.searchParams.set(k, v)
+        }
+        target = targetUrl.href
+      } catch {
+        // ignore
+      }
+
       if (!isHttpUrl(target)) {
         console.warn(`[MediaRelay] Invalid segment target: ${target}`)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid segment')
         return
       }
+      const token = hlsToken(session.manifestUrl)
+      if (token) {
+        target = withHlsToken(target, token)
+      }
       console.log(`[MediaRelay] /seg fetching: ${target.slice(0, 110)}...`)
       const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
-      const upstream = await fetchUpstream(target, session.headers, { range })
+      const upstreamHeaders: Record<string, string> = {
+        ...session.headers
+      }
+      if (session.channelId) {
+        upstreamHeaders.channelId = session.channelId
+      }
+      if (!upstreamHeaders.srno) {
+        upstreamHeaders.srno = '230203144000'
+      }
+      if (token) {
+        Object.assign(upstreamHeaders, withHdneaCookie(upstreamHeaders, token))
+      }
+      const upstream = await fetchUpstream(target, upstreamHeaders, { range })
       console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
+
+      const setCookie = upstream.headers.get('set-cookie')
+      if (setCookie) {
+        const match = setCookie.match(/__hdnea__=([^;]+)/)
+        if (match) {
+          session.headers = withHdneaCookie(session.headers, match[1])
+          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
+        }
+      }
 
       if (!upstream.ok) {
         console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
@@ -400,8 +553,13 @@ export class MediaRelay {
       return
     }
 
+    if (action === 'license') {
+      return this.handleLicense(req, res, { ...session, id })
+    }
+
     if (action === 'manifest') {
       console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
+      this.lastActiveSessionId = id
       const upstream = await fetchUpstream(session.manifestUrl, session.headers)
       console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
 
@@ -428,7 +586,7 @@ export class MediaRelay {
         contentType.includes('dash') || text.trimStart().startsWith('<?xml') || text.includes('<MPD')
       let rewritten: string
       if (isMpd) {
-        const localBase = `http://${req.headers.host}/stream/${id}/seg/`
+        const localBase = `http://${req.headers.host}/proxy-segment/${id}/`
         const result = rewriteMpd(text, session.manifestUrl, localBase, req, id)
         session.segmentBase = result.segmentBase
         rewritten = result.xml
@@ -443,42 +601,166 @@ export class MediaRelay {
       res.end(rewritten)
       return
     }
+  }
 
-    // Widevine license: forward the raw challenge and mirror the response.
+  /**
+   * Proxies Widevine license requests: forwards the raw challenge, attaches required
+   * authentication tokens, strips browser CORS headers, and mirrors response bytes.
+   */
+  private async handleLicense(
+    req: IncomingMessage,
+    res: ServerResponse,
+    session: Session & { id: string }
+  ): Promise<void> {
     if (!session.licenseUrl) {
-      res.writeHead(404, CORS_HEADERS)
-      res.end('No license endpoint for this channel')
-      return
+      session.licenseUrl = 'https://tv.media.jio.com/proxy?provider=reliance'
     }
     const chunks: Buffer[] = []
     for await (const chunk of req) chunks.push(Buffer.from(chunk))
     const body = Buffer.concat(chunks)
 
-    // Jio license endpoints expect cookies seeded by a HEAD to the channel URL.
-    const licenseHeaders: Record<string, string> = {
-      ...session.headers,
-      'Content-Type': 'application/octet-stream'
+    let targetLicenseUrl = session.licenseUrl
+    const token = hlsToken(session.manifestUrl)
+    if (token) {
+      targetLicenseUrl = withHlsToken(targetLicenseUrl, token)
     }
+
+    // Build license headers with case-insensitive normalization so conflicting casings are avoided
+    const licenseHeaders: Record<string, string> = {}
+    const setHeader = (name: string, value: string): void => {
+      const lower = name.toLowerCase()
+      for (const k of Object.keys(licenseHeaders)) {
+        if (k.toLowerCase() === lower) delete licenseHeaders[k]
+      }
+      licenseHeaders[name] = value
+    }
+
+    // 1. Start with session headers (credentials, device info, etc.)
+    for (const [k, v] of Object.entries(session.headers)) {
+      setHeader(k, v)
+    }
+
+    // 2. Forward headers sent by client / Shaka Player (excluding hop-by-hop & loopback host)
+    for (const [k, v] of Object.entries(req.headers)) {
+      const lower = k.toLowerCase()
+      if (['host', 'connection', 'content-length', 'accept-encoding'].includes(lower)) continue
+      if (lower.startsWith('sec-fetch-') || lower.startsWith('sec-ch-ua')) continue
+      if (typeof v === 'string') {
+        setHeader(k, v)
+      }
+    }
+
+    // 3. Ensure required JioTV / Widevine headers are properly set
+    setHeader('Content-Type', 'application/octet-stream')
+
+    // Origin and Referer: must point to JioTV web player domain.
+    // If incoming origin/referer was localhost/127.0.0.1 or missing, sanitize to official Jio domain.
+    const incomingOrigin = req.headers['origin'] as string | undefined
+    if (incomingOrigin && incomingOrigin.startsWith('https://www.jiotv.com')) {
+      setHeader('Origin', incomingOrigin)
+    } else {
+      setHeader('Origin', 'https://www.jiotv.com')
+    }
+
+    const incomingReferer = req.headers['referer'] as string | undefined
+    if (incomingReferer && incomingReferer.startsWith('https://www.jiotv.com')) {
+      setHeader('Referer', incomingReferer)
+    } else {
+      setHeader('Referer', 'https://www.jiotv.com/')
+    }
+
+    // User-Agent: prefer browser UA sent by Shaka / client or fallback to standard Chrome UA
+    const clientUa = (req.headers['user-agent'] as string | undefined) || (session.headers['User-Agent'] as string | undefined)
+    if (clientUa && !clientUa.includes('plaYtv') && !clientUa.includes('ExoPlayer')) {
+      setHeader('User-Agent', clientUa)
+    } else {
+      setHeader(
+        'User-Agent',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      )
+    }
+
+    // Ensure authorization & session tokens are present
+    if (session.headers.accessToken) {
+      setHeader('Authorization', `Bearer ${session.headers.accessToken}`)
+      setHeader('accesstoken', session.headers.accessToken)
+    }
+    if (session.headers.ssotoken) {
+      setHeader('ssotoken', session.headers.ssotoken)
+    }
+    if (session.channelId) {
+      setHeader('channelid', session.channelId)
+      setHeader('channelId', session.channelId)
+    }
+    if (session.headers.crmid) {
+      setHeader('crmid', session.headers.crmid)
+      setHeader('subscriberId', session.headers.crmid)
+    }
+    if (session.headers.deviceId) {
+      setHeader('deviceId', session.headers.deviceId)
+    }
+    if (session.headers.uniqueId) {
+      setHeader('uniqueId', session.headers.uniqueId)
+    }
+    setHeader('appName', 'RJIL_JioTV')
+    setHeader('os', 'android')
+    setHeader('devicetype', 'phone')
+    setHeader('versionCode', '422')
+    setHeader('usergroup', 'tvYR7NSNn7rymo3F')
+    setHeader('osVersion', '13')
+    setHeader('srno', session.headers.srno || new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14))
+
+    // Attach __hdnea__ cookie if token is present
+    if (token) {
+      const withCookie = withHdneaCookie(licenseHeaders, token)
+      for (const [k, v] of Object.entries(withCookie)) {
+        setHeader(k, v)
+      }
+    }
+
+    // Query manifest HEAD for CDN session cookies (like JioTV-Go does)
     try {
       const head = await fetch(session.manifestUrl, {
         method: 'HEAD',
-        headers: { 'User-Agent': PLAYER_UA, ...session.headers },
+        headers: {
+          'User-Agent': licenseHeaders['User-Agent'] || PLAYER_UA,
+          ...session.headers
+        },
         redirect: 'follow',
         signal: AbortSignal.timeout(8_000)
       })
       const cookie = head.headers.get('set-cookie')
-      if (cookie) licenseHeaders.Cookie = cookie.split(';')[0]
+      if (cookie) {
+        const headCookie = cookie.split(';')[0]
+        const currentCookie = licenseHeaders['Cookie'] || licenseHeaders['cookie'] || ''
+        setHeader('Cookie', currentCookie ? `${currentCookie}; ${headCookie}` : headCookie)
+      }
     } catch {
-      // A HEAD failure is non-fatal; some CDNs reject HEAD.
+      // Non-fatal if CDN rejects HEAD
     }
 
-    const upstream = await fetch(session.licenseUrl, {
+    console.log(`[MediaRelay] /license requesting upstream: ${targetLicenseUrl}`)
+    console.log('[MediaRelay] License request headers:', JSON.stringify(licenseHeaders, null, 2))
+
+    const upstream = await fetch(targetLicenseUrl, {
       method: 'POST',
       headers: licenseHeaders,
       body,
       redirect: 'follow',
       signal: AbortSignal.timeout(20_000)
     })
+
+    console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
+
+    if (!upstream.ok) {
+      try {
+        const textPreview = await upstream.clone().text()
+        console.warn(`[MediaRelay] /license upstream error body (HTTP ${upstream.status}):`, textPreview.slice(0, 500))
+      } catch {
+        /* ignore */
+      }
+    }
+
     copyHeaders(upstream.headers, res)
     res.writeHead(upstream.status, CORS_HEADERS)
     res.end(Buffer.from(await upstream.arrayBuffer()))

@@ -7,4 +7,9 @@ declare global {
   }
 }
 
+declare module 'shaka-player' {
+  export = shaka
+  export as namespace shaka
+}
+
 export {}

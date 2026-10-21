@@ -13,14 +13,14 @@ import type { Plugin } from 'vite'
  */
 function contentSecurityPolicy(): Plugin {
   const policy = [
-    "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "media-src 'self' blob: data: https: http://127.0.0.1:* http://localhost:*",
-    "connect-src 'self' https: http://127.0.0.1:* http://localhost:*",
-    "font-src 'self' data:",
-    "worker-src 'self' blob:"
+    "default-src 'self' app:",
+    "script-src 'self' app:",
+    "style-src 'self' app: 'unsafe-inline'",
+    "img-src 'self' app: data: blob: https:",
+    "media-src 'self' app: blob: data: https: http://127.0.0.1:* http://localhost:*",
+    "connect-src 'self' app: https: http://127.0.0.1:* http://localhost:*",
+    "font-src 'self' app: data:",
+    "worker-src 'self' app: blob:"
   ].join('; ')
   return {
     name: 'streamdeck-csp',

@@ -119,3 +119,16 @@ export function buildPlaybackHeaders(options: PlaybackHeaderOptions = {}): Recor
   return token ? withHdneaCookie(headers, token) : headers
 }
 
+export function withHlsToken(rawUrl: string, token: string): string {
+  if (!token) return rawUrl
+  try {
+    const parsed = new URL(rawUrl)
+    if (!parsed.searchParams.has('__hdnea__') && !parsed.searchParams.has('hdnea')) {
+      parsed.searchParams.set('__hdnea__', token)
+    }
+    return parsed.href
+  } catch {
+    return rawUrl
+  }
+}
+

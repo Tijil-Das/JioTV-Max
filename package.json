@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:wv": "node scripts/dev-wv.mjs",
     "dev:web": "vite --config vite.web.config.ts --port 5173",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -28,7 +29,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",
-    "shaka-player": "^4.16.4",
+    "shaka-player": "4.14.10",
     "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.8"
   },
@@ -38,7 +39,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.0.2",
     "autoprefixer": "^10.4.21",
-    "electron": "^45.0.0",
+    "electron": "^32.0.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^6.0.0",
     "postcss": "^8.5.6",

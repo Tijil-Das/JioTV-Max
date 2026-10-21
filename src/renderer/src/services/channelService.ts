@@ -4,11 +4,11 @@ import { mockChannels } from '@/mocks/channels'
 import { getMockPrograms } from '@/mocks/epg'
 import { ApiError, delay, getBridge } from './api'
 
-function qualityToJio(_quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
-  // Always request 'auto' from JioTV API so the full multi-variant master manifest
-  // is returned without server-side bitrate filtering (which causes audio-only fallback).
-  // The client player (hls.js) chooses the exact rendition based on the user's quality preference.
-  return 'auto'
+function qualityToJio(quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
+  if (quality === 'auto') return 'auto'
+  if (quality >= 720) return 'high'
+  if (quality >= 480) return 'medium'
+  return 'low'
 }
 
 export const channelService = {

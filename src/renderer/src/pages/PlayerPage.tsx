@@ -27,7 +27,7 @@ import { sha256Hex } from '@/lib/hash'
 import { formatRange, formatTimeLeft, getNowNext, getProgress } from '@/lib/time'
 import { ApiError, getBridge } from '@/services/api'
 import { channelService } from '@/services/channelService'
-import { useHlsPlayer } from '@/hooks/useHlsPlayer'
+import { useMediaPlayer } from '@/hooks/useMediaPlayer'
 import { useHotkeys } from '@/hooks/useDebounce'
 import { useIdle } from '@/hooks/useIdle'
 import { useNow } from '@/hooks/useNow'
@@ -125,7 +125,7 @@ export function PlayerPage(): JSX.Element {
     }
   }, [channel, mode, quality])
 
-  const engine = useHlsPlayer({
+  const engine = useMediaPlayer({
     stream: locked ? null : stream,
     initialQuality: quality,
     onReconnect: mode === 'jio' ? resolveStream : undefined
@@ -166,9 +166,7 @@ export function PlayerPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-    // Quality only re-resolves the stream in real JioTV mode.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel?.id, mode, jioQualityKey, attempt, locked])
+  }, [channel?.id, mode, attempt, locked])
 
   // ---- Store/player synchronisation -------------------------------------
   useEffect(() => {

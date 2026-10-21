@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell } from 'electron'
-import { promises as fs } from 'node:fs'
+import { app, BrowserWindow, ipcMain, Menu, net, powerSaveBlocker, protocol, shell } from 'electron'
+import { promises as fs, readdirSync, existsSync, readFileSync, cpSync } from 'node:fs'
+import { join as pathJoin } from 'node:path'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { AppInfo, AuthSession, ChannelFetchPayload, Result } from '@shared/types'
 import { IPC } from '@shared/ipc'
 import { JioService } from './jio-service'
@@ -10,6 +11,21 @@ import { SecureStore } from './secure-store'
 import { WindowStateStore } from './window-state'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Must be called before app 'ready' - Crucial for EME / Widevine DRM
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+      allowServiceWorkers: true
+    }
+  }
+])
 
 // Dev-only: the renderer receives its content from the Vite dev server, so the
 // production CSP in the built index.html cannot apply. The warning is noise in
@@ -27,9 +43,166 @@ const windowStateStore = new WindowStateStore(app.getPath('userData'))
 const rendererTokenStore = new SecureStore('renderer-token.bin')
 let jio: JioService
 
+// Diagnostic: print which electron binary is running so we know if castLabs is active.
+console.log(`[Electron] execPath: ${process.execPath}`)
+
+// castLabs Electron provides a 'components' module for Widevine CDM management.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const electronAny = require('electron') as any
+const hasCastLabsComponents = Boolean(electronAny.components)
+
+/**
+ * For castLabs Electron: ensures the Widevine CDM component directory exists
+ * in the application's userData folder by copying from local Chrome/Edge if needed.
+ */
+function ensureWidevineCdmInUserData(userDataDir: string): void {
+  if (process.platform !== 'win32') return
+  const targetBase = pathJoin(userDataDir, 'WidevineCdm')
+  try {
+    if (existsSync(targetBase)) {
+      const existing = readdirSync(targetBase).filter((d) =>
+        existsSync(pathJoin(targetBase, d, '_platform_specific', 'win_x64', 'widevinecdm.dll'))
+      )
+      if (existing.length > 0) {
+        console.log(`[CDM] Widevine CDM already present in userData (${existing[0]})`)
+        return
+      }
+    }
+  } catch {
+    /* proceed to search and copy */
+  }
+
+  const localAppData = process.env.LOCALAPPDATA ?? ''
+  const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files'
+  const programFilesX86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'
+
+  const searchRoots = [
+    pathJoin(programFiles, 'Google', 'Chrome', 'Application'),
+    pathJoin(programFilesX86, 'Google', 'Chrome', 'Application'),
+    pathJoin(localAppData, 'Google', 'Chrome', 'Application'),
+    pathJoin(programFiles, 'Microsoft', 'Edge', 'Application'),
+    pathJoin(programFilesX86, 'Microsoft', 'Edge', 'Application'),
+    pathJoin(localAppData, 'Microsoft', 'Edge', 'Application'),
+    'T:\\DevLibs\\hibbiki\\Chrome-bin'
+  ]
+
+  for (const root of searchRoots) {
+    if (!root || !existsSync(root)) continue
+    try {
+      const versionDirs = readdirSync(root).filter((d) => /^\d+\.\d+\.\d+\.\d+$/.test(d))
+      for (const version of versionDirs) {
+        const cdmSource = pathJoin(root, version, 'WidevineCdm')
+        const dllPath = pathJoin(cdmSource, '_platform_specific', 'win_x64', 'widevinecdm.dll')
+        if (existsSync(dllPath)) {
+          let cdmVersion = version
+          const manifestPath = pathJoin(cdmSource, 'manifest.json')
+          if (existsSync(manifestPath)) {
+            try {
+              const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as { version?: string }
+              if (manifest.version) cdmVersion = manifest.version
+            } catch {
+              /* fallback */
+            }
+          }
+          const dest = pathJoin(targetBase, cdmVersion)
+          console.log(`[CDM] Copying Widevine CDM v${cdmVersion} to: ${dest}`)
+          cpSync(cdmSource, dest, { recursive: true })
+          return
+        }
+      }
+    } catch (err) {
+      console.warn(`[CDM] Error checking ${root}:`, err)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Widevine CDM Loader (Stock Electron fallback)
+// ---------------------------------------------------------------------------
+function tryLoadWidevineCdm(): void {
+  if (process.platform !== 'win32') {
+    console.log('[CDM] Non-Windows platform — skipping Chrome CDM loader.')
+    return
+  }
+
+  const localAppData = process.env.LOCALAPPDATA ?? ''
+  const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files'
+  const programFilesX86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'
+
+  const searchRoots = [
+    pathJoin(programFiles, 'Google', 'Chrome', 'Application'),
+    pathJoin(programFilesX86, 'Google', 'Chrome', 'Application'),
+    pathJoin(localAppData, 'Google', 'Chrome', 'Application'),
+    pathJoin(programFiles, 'Microsoft', 'Edge', 'Application'),
+    pathJoin(programFilesX86, 'Microsoft', 'Edge', 'Application'),
+    pathJoin(localAppData, 'Microsoft', 'Edge', 'Application'),
+    'T:\\DevLibs\\hibbiki\\Chrome-bin'
+  ]
+
+  for (const root of searchRoots) {
+    if (!root || !existsSync(root)) continue
+    try {
+      const versionDirs = readdirSync(root)
+        .filter((d) => /^\d+\.\d+\.\d+\.\d+$/.test(d))
+        .sort((a, b) => {
+          const ap = a.split('.').map(Number)
+          const bp = b.split('.').map(Number)
+          for (let i = 0; i < 4; i++) {
+            if ((ap[i] ?? 0) !== (bp[i] ?? 0)) return (bp[i] ?? 0) - (ap[i] ?? 0)
+          }
+          return 0
+        })
+
+      for (const version of versionDirs) {
+        const cdmPath = pathJoin(
+          root,
+          version,
+          'WidevineCdm',
+          '_platform_specific',
+          'win_x64',
+          'widevinecdm.dll'
+        )
+        if (existsSync(cdmPath)) {
+          let cdmVersion = version
+          const manifestPath = pathJoin(root, version, 'WidevineCdm', 'manifest.json')
+          if (existsSync(manifestPath)) {
+            try {
+              const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as { version?: string }
+              if (manifest.version) cdmVersion = manifest.version
+            } catch {
+              /* fallback */
+            }
+          }
+          console.log(`[CDM] Found Widevine CDM v${cdmVersion} (Chrome ${version}) at: ${cdmPath}`)
+          app.commandLine.appendSwitch('widevine-cdm-path', cdmPath)
+          app.commandLine.appendSwitch('widevine-cdm-version', cdmVersion)
+          return
+        }
+      }
+    } catch (err) {
+      console.warn(`[CDM] Error scanning ${root}:`, err)
+    }
+  }
+
+  console.warn(
+    '[CDM] Widevine CDM not found in Chrome or Edge. ' +
+    'DRM channels will show Error 6001. ' +
+    'Install Google Chrome or switch to @castlabs/electron-releases.'
+  )
+}
+
+if (hasCastLabsComponents) {
+  console.log('[CDM] castLabs Electron detected (components API available).')
+  ensureWidevineCdmInUserData(app.getPath('userData'))
+} else {
+  tryLoadWidevineCdm()
+}
+
+
 // Hardware video decode / autoplay are essential for a TV-like experience.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
+app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://127.0.0.1,http://localhost')
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -85,6 +258,36 @@ async function createWindow(): Promise<void> {
     mainWindow?.show()
   })
 
+  // Mirror renderer console → main process terminal so Shaka DRM logs are visible
+  // without needing DevTools open. Remove once DRM is confirmed working.
+  //
+  // Electron ≤34 uses positional args: (event, level, message, line, sourceId)
+  // Electron 35+  passes a single params object: { level, message, line, sourceId }
+  // We handle both by checking whether the first arg has a .message property.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mainWindow.webContents.on('console-message', (...args: any[]) => {
+    let level: number, message: string, line: number, sourceId: string
+    const first = args[0] as Record<string, unknown>
+    if (first && typeof first.message === 'string') {
+      // Electron 35+ single-object API
+      level = (first.level as number) ?? 0
+      message = first.message as string
+      line = (first.line as number) ?? 0
+      sourceId = (first.sourceId as string) ?? ''
+    } else {
+      // Electron ≤34 positional API: args = [event, level, message, line, sourceId]
+      level = typeof args[1] === 'number' ? args[1] : 0
+      message = typeof args[2] === 'string' ? args[2] : ''
+      line = typeof args[3] === 'number' ? args[3] : 0
+      sourceId = typeof args[4] === 'string' ? args[4] : ''
+    }
+    const source = sourceId ? sourceId.split('/').pop() : 'renderer'
+    const prefix = level === 3 ? '[renderer:error]' : level === 2 ? '[renderer:warn]' : '[renderer]'
+    if (/shaka|drm|widevine|eme|license|mediaplayer|6001|6007|1001|1002|cdm|probe/i.test(message)) {
+      console.log(`${prefix} (${source}:${line}) ${message}`)
+    }
+  })
+
   const persist = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
     const maximized = mainWindow.isMaximized()
@@ -109,6 +312,7 @@ async function createWindow(): Promise<void> {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const devUrl = process.env.ELECTRON_RENDERER_URL
     if (devUrl && url.startsWith(devUrl)) return
+    if (url.startsWith('app://')) return
     event.preventDefault()
   })
 
@@ -124,7 +328,7 @@ async function createWindow(): Promise<void> {
   if (process.env.ELECTRON_RENDERER_URL) {
     await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    await mainWindow.loadURL('app://bundle/index.html')
   }
 
   if (process.env.STREAMDECK_CAPTURE) {
@@ -163,8 +367,11 @@ async function runCaptureHarness(window: BrowserWindow): Promise<void> {
     log(`[capture:unhandledRejection] ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`)
   })
 
-  window.webContents.on('console-message', (details) => {
-    log(`[renderer:${details.level}] ${details.message}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  window.webContents.on('console-message', (...args: any[]) => {
+    const msg = typeof args[2] === 'string' ? args[2] : args[0]?.message ?? ''
+    const lvl = typeof args[1] === 'number' ? args[1] : args[0]?.level ?? 0
+    log(`[renderer:${lvl}] ${msg}`)
   })
 
   // Keep animations and the compositor alive even if another window covers
@@ -189,12 +396,7 @@ async function runCaptureHarness(window: BrowserWindow): Promise<void> {
       log(`[capture] visiting ${route}`)
       // A full load per route resets stores and overlays, so each screenshot
       // reflects a cold start exactly like a user opening the app.
-      await window.loadFile(path.join(__dirname, '../renderer/index.html'), {
-        hash: route,
-        // Unique query forces a real document load; otherwise Chromium treats a
-        // hash-only change as same-document navigation and keeps React state.
-        query: { capture: String(Date.now()) }
-      })
+      await window.loadURL(`app://bundle/index.html?capture=${Date.now()}#${route}`)
       log(`[capture] navigated to ${route}`)
       await wait(2600)
       if (action) {
@@ -286,6 +488,27 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  if (hasCastLabsComponents) {
+    try {
+      console.log('[CDM] Waiting for castLabs components.whenReady()...')
+      await electronAny.components.whenReady()
+      console.log('[CDM] castLabs components ready! Status:', JSON.stringify(electronAny.components.status()))
+    } catch (err) {
+      console.warn('[CDM] castLabs components.whenReady warning:', err)
+    }
+  }
+
+  // Serve the React application over the secure app:// protocol
+  protocol.handle('app', (request) => {
+    const { pathname } = new URL(request.url)
+    // Strip the virtual 'bundle' host prefix from the URL path.
+    // app://bundle/index.html  → pathname = /bundle/index.html → strip to index.html
+    // app://bundle/assets/foo  → strip to assets/foo
+    const withoutBundle = pathname.replace(/^\/+bundle\/+/, '').replace(/^\/+/, '')
+    const relative = !withoutBundle || withoutBundle === '/' ? 'index.html' : withoutBundle
+    const targetFile = path.normalize(path.join(__dirname, '../renderer', relative))
+    return net.fetch(pathToFileURL(targetFile).toString())
+  })
   app.setAppUserModelId('tv.streamdeck.app')
   await relay.start()
   jio = new JioService(relay)

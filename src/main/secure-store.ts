@@ -20,9 +20,10 @@ export class SecureStore {
   }
 
   private async encryptionAvailable(): Promise<boolean> {
-    if (typeof safeStorage.isAsyncEncryptionAvailable === 'function') {
+    const storage = safeStorage as unknown as Record<string, unknown>
+    if (typeof storage.isAsyncEncryptionAvailable === 'function') {
       try {
-        return await safeStorage.isAsyncEncryptionAvailable()
+        return await (storage.isAsyncEncryptionAvailable as () => Promise<boolean>)()
       } catch {
         return false
       }
@@ -35,8 +36,9 @@ export class SecureStore {
     if (!(await this.encryptionAvailable())) return null
     try {
       const encrypted = await fs.readFile(this.file)
-      if (typeof safeStorage.decryptStringAsync === 'function') {
-        const { result } = await safeStorage.decryptStringAsync(encrypted)
+      const storage = safeStorage as unknown as Record<string, unknown>
+      if (typeof storage.decryptStringAsync === 'function') {
+        const { result } = await (storage.decryptStringAsync as (b: Buffer) => Promise<{ result: string }>)(encrypted)
         this.memory = result
       } else {
         this.memory = safeStorage.decryptString(encrypted)
@@ -51,9 +53,10 @@ export class SecureStore {
     this.memory = value
     if (!(await this.encryptionAvailable())) return false
     try {
+      const storage = safeStorage as unknown as Record<string, unknown>
       const encrypted =
-        typeof safeStorage.encryptStringAsync === 'function'
-          ? await safeStorage.encryptStringAsync(value)
+        typeof storage.encryptStringAsync === 'function'
+          ? await (storage.encryptStringAsync as (s: string) => Promise<Buffer>)(value)
           : safeStorage.encryptString(value)
       await fs.mkdir(path.dirname(this.file), { recursive: true })
       await fs.writeFile(this.file, encrypted, { mode: 0o600 })

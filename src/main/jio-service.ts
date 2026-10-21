@@ -17,7 +17,8 @@ import { jioNumberPayload } from './jio-format'
 import {
   API_UA,
   buildPlaybackHeaders,
-  extractHdnea
+  extractHdnea,
+  withHlsToken
 } from './jio-headers'
 
 /**
@@ -70,11 +71,24 @@ interface PlaybackResponse {
   result?: string
   isDRM?: boolean
   keyUrl?: string
+  key?: string
+  license_url?: string
+  licenseUrl?: string
+  drm?: {
+    license_url?: string
+    licenseUrl?: string
+    keyUrl?: string
+    url?: string
+    key?: string
+  }
   bitrates?: Partial<Record<'auto' | 'high' | 'medium' | 'low', string>>
   m3u8?: Partial<Record<'auto' | 'high' | 'medium' | 'low', string>>
   mpd?: {
     result?: string
     key?: string
+    keyUrl?: string
+    license_url?: string
+    licenseUrl?: string
     auto?: string
     high?: string
     medium?: string
@@ -573,6 +587,83 @@ export class JioService {
     return ''
   }
 
+  private selectQuality(
+    quality: 'auto' | 'high' | 'medium' | 'low',
+    autoUrl?: string,
+    highUrl?: string,
+    mediumUrl?: string,
+    lowUrl?: string
+  ): string {
+    switch (quality) {
+      case 'high':
+        return highUrl || ''
+      case 'medium':
+        return mediumUrl || ''
+      case 'low':
+        return lowUrl || ''
+      default:
+        return autoUrl || ''
+    }
+  }
+
+  /** Strictly mirrors JioTV-Go's selectBestLiveHLSURL in internal/handlers/handlers.go */
+  private selectBestLiveHLSURL(
+    response: PlaybackResponse,
+    quality: 'auto' | 'high' | 'medium' | 'low'
+  ): string {
+    const bits = response.bitrates ?? {}
+    const m3u8 = response.m3u8 ?? {}
+    const auto = bits.auto || m3u8.auto
+    const high = bits.high || m3u8.high
+    const med = bits.medium || m3u8.medium
+    const low = bits.low || m3u8.low
+
+    // 1. Try requested quality first (from JioTV-Go internalUtils.SelectQuality)
+    const selected = this.selectQuality(quality, auto, high, med, low)
+    if (selected) return selected
+
+    // 2. Try candidate fallback order: high, auto, medium, low
+    for (const candidate of [high, auto, med, low]) {
+      if (candidate) return candidate
+    }
+
+    // 3. Playable HLS in result
+    if (response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
+      return response.result
+    }
+
+    // 4. Safety fallback when MPD block contains an HLS URL
+    if (response.mpd?.result && /\.m3u8(?:[?#]|$)/i.test(response.mpd.result)) {
+      return response.mpd.result
+    }
+
+    return ''
+  }
+
+  /** Strictly mirrors JioTV-Go's selectBestLiveMPDURL in internal/handlers/handlers.go */
+  private selectBestLiveMPDURL(
+    response: PlaybackResponse,
+    quality: 'auto' | 'high' | 'medium' | 'low'
+  ): string {
+    const mpdBits = response.mpd?.bitrates ?? {}
+    const auto = mpdBits.auto
+    const high = mpdBits.high
+    const med = mpdBits.medium
+    const low = mpdBits.low
+
+    // 1. Try requested quality first
+    const selected = this.selectQuality(quality, auto, high, med, low)
+    if (selected) return selected
+
+    // 2. Try candidate fallback order: high, auto, medium, low
+    for (const candidate of [high, auto, med, low]) {
+      if (candidate) return candidate
+    }
+
+    // 3. Fallback to mpd.result
+    return response.mpd?.result || ''
+  }
+
   private pickStreamUrl(
     response: PlaybackResponse,
     quality: 'auto' | 'high' | 'medium' | 'low'
@@ -582,73 +673,63 @@ export class JioService {
     licenseUrl?: string
     isDrm: boolean
   } {
-    // Jio returns both HLS and DASH for most live channels. Prefer HLS:
-    // JioTV-Go's normal live player uses HLS, and hls.js can play it in stock
-    // Electron. The DASH variant is usually Widevine-protected, which requires
-    // a proprietary CDM that stock Electron does not ship.
-    const hlsBits = response.bitrates ?? {}
-    const m3u8Bits = response.m3u8 ?? {}
-    const hlsFor = (tier: 'auto' | 'high' | 'medium' | 'low'): string =>
-      hlsBits[tier] || m3u8Bits[tier] || ''
+    // Step 3: Handle Sony and DRM channels.
+    // If mpd object is present and contains a valid URL, use DASH (MPEG-DASH with Widevine).
+    const mpdUrl = this.selectBestLiveMPDURL(response, quality)
+    if (mpdUrl) {
+      const rawDrm = (response.drm ?? {}) as Record<string, unknown>
+      const provider =
+        String(
+          (response as Record<string, unknown>).provider ||
+          rawDrm.provider ||
+          (response.mpd as Record<string, unknown> | undefined)?.provider ||
+          ''
+        ).trim() || 'reliance'
 
-    // In Jio's CDN (Broadpeak Origin Packager), tier-specific URLs like `bitrates.high`
-    // enforce `minrate=840000`. If a channel's maximum video bitrate is lower than 840k
-    // (common on fallback CDNs and SD channels), Broadpeak strips out ALL video variants
-    // and returns an audio-only variant playlist (CODECS="mp4a.40.2").
-    //
-    // Following JioTV-Go and Kodi inputstream.adaptive conventions, we ALWAYS prefer
-    // 'auto' or `response.result` (minrate=80000&maxrate=3024000) so the master manifest
-    // contains all video variants. HLS.js on the client then selects the appropriate level.
-    let hlsUrl = hlsFor('auto')
-    if (!hlsUrl && response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
-      hlsUrl = response.result
-    }
-    if (!hlsUrl) {
-      const order: Array<'auto' | 'high' | 'medium' | 'low'> =
-        quality === 'auto'
-          ? ['auto', 'high', 'medium', 'low']
-          : quality === 'high'
-            ? ['high', 'auto', 'medium', 'low']
-            : quality === 'medium'
-              ? ['medium', 'high', 'auto', 'low']
-              : ['low', 'medium', 'high', 'auto']
-      for (const tier of order) {
-        hlsUrl = hlsFor(tier)
-        if (hlsUrl) break
+      let licenseUrl = String(
+        response.license_url ||
+        response.licenseUrl ||
+        rawDrm.license_url ||
+        rawDrm.licenseUrl ||
+        rawDrm.keyUrl ||
+        rawDrm.url ||
+        response.mpd?.license_url ||
+        response.mpd?.licenseUrl ||
+        response.mpd?.key ||
+        (response.mpd as Record<string, unknown> | undefined)?.keyUrl ||
+        response.keyUrl ||
+        (response as Record<string, unknown>).key ||
+        ''
+      ).trim()
+
+      if (!licenseUrl && mpdUrl) {
+        licenseUrl = `https://tv.media.jio.com/proxy?provider=${encodeURIComponent(provider)}`
+      }
+
+      return {
+        url: mpdUrl,
+        type: 'dash',
+        licenseUrl: licenseUrl || undefined,
+        isDrm: Boolean(licenseUrl || response.isDRM || response.mpd)
       }
     }
-    if (!hlsUrl && response.result && !/\.mpd(?:[?#]|$)/i.test(response.result)) {
-      hlsUrl = response.result
-    }
 
+    // Step 1: Replicate JioTV-Go's HLS stream selection (do not modify CDN URLs).
+    const hlsUrl = this.selectBestLiveHLSURL(response, quality)
     if (hlsUrl) {
-      // Clamp minrate so Broadpeak packager never filters out video variants
-      hlsUrl = hlsUrl.replace(/minrate=\d+/i, 'minrate=80000')
-      return { url: hlsUrl, type: 'hls', isDrm: false }
+      return {
+        url: hlsUrl,
+        type: 'hls',
+        isDrm: false
+      }
     }
 
-    const mpdBits = response.mpd?.bitrates ?? {}
-    const mpdUrl =
-      response.mpd?.high ||
-      mpdBits.high ||
-      response.mpd?.auto ||
-      mpdBits.auto ||
-      response.mpd?.result ||
-      response.mpd?.medium ||
-      mpdBits.medium ||
-      response.mpd?.low ||
-      mpdBits.low ||
-      ''
-    const licenseUrl = (response.keyUrl || response.mpd?.key || '').trim()
-    const isDrm = Boolean(response.isDRM || licenseUrl)
-
-    if (mpdUrl) return { url: mpdUrl, type: 'dash', licenseUrl, isDrm }
-    return { url: '', type: 'hls', licenseUrl, isDrm }
+    return { url: '', type: 'hls', isDrm: false }
   }
 
   async getStream(
     channelId: string,
-    quality: 'auto' | 'high' | 'medium' | 'low' = 'auto'
+    quality: 'auto' | 'high' | 'medium' | 'low' = 'high'
   ): Promise<Result<StreamInfo>> {
     console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
@@ -739,10 +820,15 @@ export class JioService {
         hdnea
       })
 
+      let licenseUrl = selected.licenseUrl
+      if (licenseUrl && hdnea) {
+        licenseUrl = withHlsToken(licenseUrl, hdnea)
+      }
+
       const relaySession = this.relay.register({
         channelId,
         manifestUrl: selected.url,
-        licenseUrl: selected.licenseUrl,
+        licenseUrl,
         headers: manifestHeaders
       })
 
@@ -755,8 +841,16 @@ export class JioService {
           isLive: true,
           isDrm: selected.isDrm,
           drm:
-            selected.isDrm && relaySession.licenseUrl
-              ? { licenseUrl: relaySession.licenseUrl, headers: {} }
+            (selected.isDrm || selected.type === 'dash') && relaySession.licenseUrl
+              ? {
+                  licenseUrl: relaySession.licenseUrl,
+                  headers: {
+                    Authorization: `Bearer ${this.session.credentials.accessToken}`,
+                    ssotoken: this.session.credentials.ssoToken,
+                    channelId,
+                    srno: '230203144000'
+                  }
+                }
               : undefined,
           note: hdnea
             ? 'Jio signed stream · relayed through StreamDeck'

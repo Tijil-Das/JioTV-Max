@@ -175,19 +175,18 @@ export function useHeroPlayer({
         }
         if (video.requestVideoFrameCallback) {
           video.requestVideoFrameCallback(() => trackFrame())
-        } else {
-          video.addEventListener('timeupdate', () => trackFrame(), { once: true })
         }
       }
+
+      // Multiple event listeners guarantee the slot is revealed immediately upon first media arrival
+      video.addEventListener('playing', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('timeupdate', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('loadeddata', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('canplay', () => trackFrame(), { signal: slot.listeners.signal })
 
       video.addEventListener('waiting', () => {
         if (slotsRef.current[index] !== slot) return
         slot.stalledSince = performance.now()
-      }, { signal: slot.listeners.signal })
-      video.addEventListener('playing', () => {
-        if (slotsRef.current[index] !== slot) return
-        slot.stalledSince = 0
-        slot.lastFrameAt = performance.now()
       }, { signal: slot.listeners.signal })
 
       const isDash = incoming.type === 'dash' || /\.mpd(?:[?#]|$)/i.test(incoming.url)
@@ -231,13 +230,38 @@ export function useHeroPlayer({
               }
             })()
 
+            let workingRobustness: string | null = null
+            if (incoming.isDrm) {
+              const robustnessLevels = ['SW_SECURE_CRYPTO', 'SW_SECURE_DECODE', '']
+              for (const level of robustnessLevels) {
+                try {
+                  const config: MediaKeySystemConfiguration[] = [
+                    {
+                      initDataTypes: ['cenc'],
+                      audioCapabilities: [
+                        { contentType: 'audio/mp4;codecs="mp4a.40.2"', robustness: level }
+                      ],
+                      videoCapabilities: [
+                        { contentType: 'video/mp4;codecs="avc1.64001F"', robustness: level }
+                      ]
+                    }
+                  ]
+                  await navigator.requestMediaKeySystemAccess('com.widevine.alpha', config)
+                  workingRobustness = level
+                  break
+                } catch {
+                  // try next level
+                }
+              }
+            }
+
             player.configure({
               drm: {
                 servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {},
                 advanced: {
                   'com.widevine.alpha': {
-                    videoRobustness: ['SW_SECURE_CRYPTO'],
-                    audioRobustness: ['SW_SECURE_CRYPTO']
+                    videoRobustness: workingRobustness ? [workingRobustness] : [],
+                    audioRobustness: workingRobustness ? [workingRobustness] : []
                   }
                 }
               },
@@ -264,16 +288,11 @@ export function useHeroPlayer({
               destroySlot(index)
             })
 
-            const onReady = (): void => {
-              trackFrame()
-            }
-            video.addEventListener('playing', onReady, { once: true, signal: slot.listeners.signal })
-            video.addEventListener('timeupdate', onReady, { once: true, signal: slot.listeners.signal })
-
             await player.load(incoming.url, null, 'application/dash+xml')
             if (slotsRef.current[index] !== slot) return
             video.muted = true
             if (!pausedRef.current) playSlot(index)
+            trackFrame()
           } catch (err) {
             console.warn('[useHeroPlayer] Shaka stream load failed:', err)
             if (slotsRef.current[index] !== slot) return
@@ -287,12 +306,15 @@ export function useHeroPlayer({
         hls.on(HlsEvents.MANIFEST_PARSED, () => {
           applyHeroLevelCaps(hls)
           if (!pausedRef.current) playSlot(index)
+          trackFrame()
         })
         hls.on(HlsEvents.LEVEL_LOADED, () => {
           if (video.currentTime === 0) seekLive(index)
+          trackFrame()
         })
         hls.on(HlsEvents.ERROR, (_event, data) => {
           if (!data.fatal) return
+          if (slotsRef.current[index] !== slot) return
           if (data.type === ErrorTypes.MEDIA_ERROR && !slot.recoveryAttempted) {
             slot.recoveryAttempted = true
             try {
@@ -301,22 +323,19 @@ export function useHeroPlayer({
             } catch {
               // fall through to failure
             }
+          }
           console.warn('[useHeroPlayer] HLS fatal error:', data)
           destroySlot(index)
         })
         hls.on(HlsEvents.FRAG_BUFFERED, () => {
           slot.stalledSince = 0
+          trackFrame()
         })
 
         hls.loadSource(incoming.url)
         hls.attachMedia(video)
         if (video.requestVideoFrameCallback) {
           video.requestVideoFrameCallback(() => trackFrame())
-        } else {
-          video.addEventListener('timeupdate', function loop() {
-            trackFrame()
-            video.addEventListener('timeupdate', loop, { once: true })
-          })
         }
       }
     },

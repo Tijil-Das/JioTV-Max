@@ -300,6 +300,18 @@ export function Hero(): JSX.Element {
     }
   }, [])
 
+  const activeIdx = activeId ? verifiedOrdered.indexOf(activeId) : 0
+  const prevId =
+    verifiedOrdered.length > 1
+      ? verifiedOrdered[(activeIdx - 1 + verifiedOrdered.length) % verifiedOrdered.length]
+      : null
+  const nextId =
+    verifiedOrdered.length > 1
+      ? verifiedOrdered[(activeIdx + 1) % verifiedOrdered.length]
+      : null
+  const prevChannel = prevId ? channelById.get(prevId) ?? null : null
+  const nextChannel = nextId ? channelById.get(nextId) ?? null : null
+
   // ---- Interaction ---------------------------------------------------------
   const select = useCallback((id: string) => {
     setUserPaused(false)
@@ -342,18 +354,6 @@ export function Hero(): JSX.Element {
     tooltipTimer.current = null
     setTooltipId(null)
   }, [])
-
-  const activeIdx = activeId ? verifiedOrdered.indexOf(activeId) : 0
-  const prevId =
-    verifiedOrdered.length > 1
-      ? verifiedOrdered[(activeIdx - 1 + verifiedOrdered.length) % verifiedOrdered.length]
-      : null
-  const nextId =
-    verifiedOrdered.length > 1
-      ? verifiedOrdered[(activeIdx + 1) % verifiedOrdered.length]
-      : null
-  const prevChannel = prevId ? channelById.get(prevId) ?? null : null
-  const nextChannel = nextId ? channelById.get(nextId) ?? null : null
 
   const goToPrev = useCallback(() => {
     if (verifiedOrdered.length <= 1) return
@@ -471,7 +471,7 @@ export function Hero(): JSX.Element {
             onMouseEnter={() => setMouseActive(true)}
             onMouseLeave={() => setMouseActive(false)}
             onClick={() => activeChannel && watch(activeChannel.id)}
-            className="group/hero relative h-[clamp(600px,80vh,880px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
+            className="group/hero relative h-[clamp(680px,86vh,980px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
           >
             {/* Cinema Stage — full width & height */}
             <div className="relative h-full w-full overflow-hidden">
@@ -487,8 +487,17 @@ export function Hero(): JSX.Element {
                 ) : null}
               </div>
 
-              {/* A/B video slots: padded from top, sides and bottom */}
-              <div className="absolute inset-0 pt-[56px] pb-3 px-3 md:px-6" aria-hidden>
+              {/* A/B video slots: full bleed with soft edge mask */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  WebkitMaskImage:
+                    'radial-gradient(ellipse 74% 70% at 50% 50%, black 25%, rgba(0,0,0,0.85) 50%, rgba(0,0,0,0.2) 75%, transparent 92%)',
+                  maskImage:
+                    'radial-gradient(ellipse 74% 70% at 50% 50%, black 25%, rgba(0,0,0,0.85) 50%, rgba(0,0,0,0.2) 75%, transparent 92%)'
+                }}
+                aria-hidden
+              >
                 <div className="relative h-full w-full overflow-hidden">
                   {[0, 1].map((slot) => (
                     <video
@@ -501,7 +510,7 @@ export function Hero(): JSX.Element {
                       disableRemotePlayback
                       tabIndex={-1}
                       aria-hidden
-                      className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
+                      className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
                       style={{
                         opacity: opacity[slot],
                         transition: 'opacity 300ms ease'
@@ -511,52 +520,51 @@ export function Hero(): JSX.Element {
                 </div>
               </div>
 
-              {/* Four-sided cinema vignette: fades seamlessly into #0A0A0B from all 4 sides */}
+              {/* Strong four-sided cinema crossfade: seamlessly transitions video into solid #0A0A0B from all 4 sides */}
               <div
                 className="pointer-events-none absolute inset-0 z-10"
                 aria-hidden
               >
-                {/* Top edge fade */}
+                {/* Top edge crossfade */}
                 <div
-                  className="absolute inset-x-0 top-0 h-[140px]"
+                  className="absolute inset-x-0 top-0 h-[220px]"
                   style={{
                     background:
-                      'linear-gradient(to bottom, #0A0A0B 0%, rgba(10,10,11,0.85) 35%, rgba(10,10,11,0.4) 65%, transparent 100%)'
+                      'linear-gradient(to bottom, #0A0A0B 0%, #0A0A0B 24%, rgba(10,10,11,0.96) 50%, rgba(10,10,11,0.7) 72%, rgba(10,10,11,0.25) 90%, transparent 100%)'
                   }}
                 />
-                {/* Bottom edge fade */}
+                {/* Bottom edge crossfade */}
                 <div
-                  className="absolute inset-x-0 bottom-0 h-[220px]"
+                  className="absolute inset-x-0 bottom-0 h-[340px]"
                   style={{
                     background:
-                      'linear-gradient(to top, #0A0A0B 0%, rgba(10,10,11,0.92) 35%, rgba(10,10,11,0.5) 70%, transparent 100%)'
+                      'linear-gradient(to top, #0A0A0B 0%, #0A0A0B 26%, rgba(10,10,11,0.98) 52%, rgba(10,10,11,0.8) 72%, rgba(10,10,11,0.35) 90%, transparent 100%)'
                   }}
                 />
-                {/* Left edge fade */}
+                {/* Left edge crossfade */}
                 <div
-                  className="absolute inset-y-0 left-0 w-[55%]"
+                  className="absolute inset-y-0 left-0 w-[62%]"
                   style={{
                     background:
-                      'linear-gradient(to right, #0A0A0B 0%, rgba(10,10,11,0.92) 35%, rgba(10,10,11,0.5) 65%, transparent 100%)'
+                      'linear-gradient(to right, #0A0A0B 0%, #0A0A0B 24%, rgba(10,10,11,0.96) 48%, rgba(10,10,11,0.7) 70%, rgba(10,10,11,0.2) 90%, transparent 100%)'
                   }}
                 />
-                {/* Right edge fade */}
+                {/* Right edge crossfade */}
                 <div
-                  className="absolute inset-y-0 right-0 w-[40%]"
+                  className="absolute inset-y-0 right-0 w-[45%]"
                   style={{
                     background:
-                      'linear-gradient(to left, #0A0A0B 0%, rgba(10,10,11,0.85) 25%, rgba(10,10,11,0.3) 60%, transparent 100%)'
+                      'linear-gradient(to left, #0A0A0B 0%, #0A0A0B 18%, rgba(10,10,11,0.92) 42%, rgba(10,10,11,0.6) 68%, rgba(10,10,11,0.16) 88%, transparent 100%)'
                   }}
                 />
-                {/* Radial perimeter vignette for smooth cinema curve */}
+                {/* Perimeter ellipse crossfade */}
                 <div
                   className="absolute inset-0"
                   style={{
                     background:
-                      'radial-gradient(ellipse at center, transparent 35%, rgba(10,10,11,0.35) 65%, rgba(10,10,11,0.9) 100%)'
+                      'radial-gradient(ellipse 88% 82% at 50% 50%, transparent 20%, rgba(10,10,11,0.45) 45%, rgba(10,10,11,0.9) 72%, #0A0A0B 90%, #0A0A0B 100%)'
                   }}
                 />
-                <div className="absolute inset-0 bg-black/15" />
               </div>
 
               {/* Navigation Arrow: Left (shown on mouse active) */}

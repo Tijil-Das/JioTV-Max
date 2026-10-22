@@ -25,7 +25,7 @@ export function ChannelGrid({
   emptyDescription = 'Try another filter or browse the full catalogue.'
 }: ChannelGridProps): JSX.Element {
   const [language, setLanguage] = useState<string>('all')
-  const [quality, setQuality] = useState<'all' | ChannelQuality>('all')
+  const [quality, setQuality] = useState<'all' | 'HD'>('all')
   const [sort, setSort] = useState<SortKey>('number')
 
   const languages = useMemo(
@@ -78,7 +78,7 @@ export function ChannelGrid({
         </select>
 
         <div className="flex rounded-xl border border-white/10 bg-bg-card p-1">
-          {(['all', 'HD', '4K'] as const).map((option) => (
+          {(['all', 'HD'] as const).map((option) => (
             <button
               key={option}
               type="button"

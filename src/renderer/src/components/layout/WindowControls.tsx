@@ -41,7 +41,7 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
         title="Minimize"
         aria-label="Minimize window"
         onClick={handleMinimize}
-        className="flex h-[36px] w-[46px] items-center justify-center text-[#66666C] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
+        className="flex h-[36px] w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
@@ -50,7 +50,7 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
         title={maximized ? 'Restore' : 'Maximize'}
         aria-label={maximized ? 'Restore window' : 'Maximize window'}
         onClick={handleMaximize}
-        className="flex h-[36px] w-[46px] items-center justify-center text-[#66666C] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
+        className="flex h-[36px] w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
       >
         {maximized ? (
           <Copy className="h-3 w-3 -scale-x-100" />
@@ -63,7 +63,7 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
         title="Close"
         aria-label="Close window"
         onClick={handleClose}
-        className="flex h-[36px] w-[46px] items-center justify-center text-[#66666C] transition-colors duration-[120ms] hover:bg-[#E11D2E] hover:text-white"
+        className="flex h-[36px] w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-[#E11D2E] hover:text-white"
       >
         <X className="h-4 w-4" />
       </button>

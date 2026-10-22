@@ -71,7 +71,7 @@ body {
   transform: translateX(-50%);
   width: 900px;
   height: 500px;
-  background: radial-gradient(ellipse at center, rgba(157, 12, 165, 0.14) 0%, rgba(225, 29, 46, 0.12) 35%, rgba(0, 0, 0, 0) 70%);
+  background: radial-gradient(ellipse at center, rgba(225, 29, 46, 0.18) 0%, rgba(184, 18, 31, 0.10) 40%, rgba(0, 0, 0, 0) 70%);
   filter: blur(80px);
   pointer-events: none;
   z-index: 0;
@@ -152,7 +152,7 @@ a {
   height: 34px;
   border-radius: 8px;
   object-contain: contain;
-  box-shadow: 0 0 16px var(--purple-glow);
+  box-shadow: 0 0 16px var(--red-glow);
 }
 
 .brand-title {
@@ -164,7 +164,7 @@ a {
 }
 
 .brand-title span {
-  color: #B815C2;
+  color: var(--red);
 }
 
 .nav-links {
@@ -567,7 +567,7 @@ a {
 
 .scene-player {
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.95) 100%),
-              radial-gradient(ellipse at 80% 30%, rgba(157, 12, 165, 0.2) 0%, rgba(0, 0, 0, 0) 60%),
+              radial-gradient(ellipse at 80% 30%, rgba(225, 29, 46, 0.2) 0%, rgba(0, 0, 0, 0) 60%),
               #070709;
 }
 

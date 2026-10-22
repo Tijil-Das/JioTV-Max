@@ -25,7 +25,7 @@ export function Toggle({
           {label}
         </p>
         {description ? (
-          <p className="mt-1 text-[12px] leading-relaxed text-text-muted">{description}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">{description}</p>
         ) : null}
       </div>
       <button
@@ -86,7 +86,7 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             className={cn(
               'relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors duration-200',
-              active ? 'text-[#F4F4F5]' : 'text-[#66666C] hover:text-[#A1A1A6]'
+              active ? 'text-[#F4F4F5]' : 'text-[#A1A1A6] hover:text-[#A1A1A6]'
             )}
           >
             {active ? (

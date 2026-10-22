@@ -45,13 +45,13 @@ export function ProfileMenu(): JSX.Element {
         )}
       >
         {/* Avatar — neutral monogram on surface-3, no gradient */}
-        <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-[#18181B] text-[11px] font-[700] text-[#A1A1A6]">
+        <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-[#18181B] text-[12px] font-[700] text-[#A1A1A6]">
           {initials ?? <UserRound className="h-3.5 w-3.5" />}
         </span>
         <span className="hidden max-w-[100px] truncate text-[13px] font-[500] text-[#A1A1A6] lg:block">
           {user ? user.name : status === 'authenticating' ? 'Connecting…' : 'Sign in'}
         </span>
-        <ChevronDown className={cn('h-3.5 w-3.5 text-[#66666C] transition-transform duration-[120ms]', open && 'rotate-180')} />
+        <ChevronDown className={cn('h-3.5 w-3.5 text-[#A1A1A6] transition-transform duration-[120ms]', open && 'rotate-180')} />
       </button>
 
       <AnimatePresence>
@@ -71,7 +71,7 @@ export function ProfileMenu(): JSX.Element {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{user.name}</p>
-                <p className="truncate text-[11px] text-[#66666C]">
+                <p className="truncate text-[12px] text-[#A1A1A6]">
                   +91 ••••• {user.phone.slice(-5)} · {user.mode === 'demo' ? 'Demo' : 'JioTV'}
                 </p>
               </div>

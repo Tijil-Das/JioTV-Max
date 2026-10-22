@@ -11,6 +11,8 @@ interface SettingsState {
   language: string
   reduceMotion: boolean
   autoplay: boolean
+  /** Play muted live previews on the Home hero (Addendum 3 §8). Default on. */
+  livePreviewOnHome: boolean
   alwaysOnTop: boolean
   parentalEnabled: boolean
   parentalPinHash: string
@@ -20,6 +22,7 @@ interface SettingsState {
   setLanguage: (language: string) => void
   setReduceMotion: (value: boolean) => void
   setAutoplay: (value: boolean) => void
+  setLivePreviewOnHome: (value: boolean) => void
   setAlwaysOnTop: (value: boolean) => void
   setParental: (enabled: boolean, hash?: string) => void
   addRecentSearch: (term: string) => void
@@ -34,6 +37,7 @@ export const useSettingsStore = create<SettingsState>()(
       language: 'English',
       reduceMotion: false,
       autoplay: true,
+      livePreviewOnHome: true,
       alwaysOnTop: false,
       parentalEnabled: false,
       parentalPinHash: '',
@@ -43,6 +47,7 @@ export const useSettingsStore = create<SettingsState>()(
       setLanguage: (language) => set({ language }),
       setReduceMotion: (reduceMotion) => set({ reduceMotion }),
       setAutoplay: (autoplay) => set({ autoplay }),
+      setLivePreviewOnHome: (livePreviewOnHome) => set({ livePreviewOnHome }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),
       setParental: (parentalEnabled, parentalPinHash) =>
         set((state) => ({

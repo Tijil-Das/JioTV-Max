@@ -1,6 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc'
-import type { AppInfo, AuthSession, ChannelFetchPayload, EpgEntry, OtpChallenge, Result, StreamInfo } from '../shared/types'
+import type {
+  AppInfo,
+  AssetFetchPayload,
+  AuthSession,
+  ChannelFetchPayload,
+  EpgEntry,
+  OtpChallenge,
+  Result,
+  StreamInfo,
+  StreamProbeStage1
+} from '../shared/types'
 
 /**
  * The only surface the renderer can touch. No Node.js primitives or raw IPC
@@ -26,6 +36,13 @@ const api = {
   },
   setAlwaysOnTop: (value: boolean): Promise<boolean> => ipcRenderer.invoke(IPC.setAlwaysOnTop, value),
   setPlayerActive: (active: boolean): Promise<void> => ipcRenderer.invoke(IPC.setPlayerActive, active),
+  assets: {
+    fetch: (url: string): Promise<Result<AssetFetchPayload>> => ipcRenderer.invoke(IPC.assetFetch, url)
+  },
+  streams: {
+    probeStage1: (url: string): Promise<StreamProbeStage1> =>
+      ipcRenderer.invoke(IPC.probeStage1, url)
+  },
   auth: {
     requestOtp: (phone: string): Promise<Result<OtpChallenge>> => ipcRenderer.invoke(IPC.requestOtp, phone),
     verifyOtp: (phone: string, otp: string): Promise<Result<AuthSession>> =>

@@ -50,7 +50,7 @@ function Section({
         </span>
         <div className="min-w-0">
           <h2 className="font-sans text-[15px] font-[600] text-[#F4F4F5]">{title}</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#66666C]">{description}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#A1A1A6]">{description}</p>
         </div>
       </div>
       <div className="mt-5 space-y-5">{children}</div>
@@ -72,6 +72,8 @@ export function SettingsPage(): JSX.Element {
   const setReduceMotion = useSettingsStore((state) => state.setReduceMotion)
   const autoplay = useSettingsStore((state) => state.autoplay)
   const setAutoplay = useSettingsStore((state) => state.setAutoplay)
+  const livePreviewOnHome = useSettingsStore((state) => state.livePreviewOnHome)
+  const setLivePreviewOnHome = useSettingsStore((state) => state.setLivePreviewOnHome)
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop)
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop)
   const recentSearches = useSettingsStore((state) => state.recentSearches)
@@ -154,7 +156,7 @@ export function SettingsPage(): JSX.Element {
                 { value: 'jio', label: 'JioTV account' }
               ]}
             />
-            <p className="mt-2 text-[11px] leading-relaxed text-[#66666C]">
+            <p className="mt-2 text-[12px] leading-relaxed text-[#A1A1A6]">
               {mode === 'demo'
                 ? 'Ships with a curated demo channel line-up. Works entirely offline.'
                 : 'Loads your live JioTV catalogue with real-time streams.'}
@@ -179,7 +181,7 @@ export function SettingsPage(): JSX.Element {
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-[11px] text-[#66666C]">
+            <p className="mt-2 text-[12px] text-[#A1A1A6]">
               The player starts at this level when the stream offers it.
             </p>
           </div>
@@ -190,6 +192,14 @@ export function SettingsPage(): JSX.Element {
             onChange={setAutoplay}
             label="Autoplay when opening a channel"
             description="Start playback immediately instead of showing the paused frame."
+          />
+
+          <Toggle
+            id="live-preview"
+            checked={livePreviewOnHome}
+            onChange={setLivePreviewOnHome}
+            label="Live preview on Home"
+            description="Play a muted live preview in the Home hero. Only verified streams are shown."
           />
         </Section>
 
@@ -207,7 +217,7 @@ export function SettingsPage(): JSX.Element {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{user.name}</p>
-                  <p className="truncate text-[11px] text-[#66666C]">
+                  <p className="truncate text-[12px] text-[#A1A1A6]">
                     +91 ••••• {user.phone.slice(-5)} · {user.mode === 'demo' ? 'Demo account' : 'JioTV account'}
                   </p>
                 </div>
@@ -232,7 +242,7 @@ export function SettingsPage(): JSX.Element {
           ) : (
             <div className="rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4">
               <p className="text-[13px] font-[500] text-[#F4F4F5]">No account linked</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-[#66666C]">
+              <p className="mt-1 text-[12px] leading-relaxed text-[#A1A1A6]">
                 {status === 'authenticating'
                   ? 'A sign-in attempt is in progress.'
                   : 'Sign in with a JioTV mobile number to access live channels.'}
@@ -248,7 +258,7 @@ export function SettingsPage(): JSX.Element {
             </div>
           )}
 
-          <div className="flex items-start gap-3 rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4 text-[11.5px] leading-relaxed text-[#66666C]">
+          <div className="flex items-start gap-3 rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4 text-[12px] leading-relaxed text-[#A1A1A6]">
             <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#A1A1A6]" />
             Tokens are sealed with your OS keystore (DPAPI on Windows). Never written to localStorage or logs.
           </div>
@@ -353,7 +363,7 @@ export function SettingsPage(): JSX.Element {
                 className="flex items-center justify-between gap-3 rounded-[8px] border border-[rgba(255,255,255,0.07)] bg-[#111113] px-3 py-2"
               >
                 <span className="text-[12px] text-[#A1A1A6]">{description}</span>
-                <kbd className="rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[#18181B] px-2 py-0.5 font-sans text-[10.5px] text-[#F4F4F5]">
+                <kbd className="rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[#18181B] px-2 py-0.5 font-sans text-[12px] text-[#F4F4F5]">
                   {keys}
                 </kbd>
               </li>
@@ -377,20 +387,20 @@ export function SettingsPage(): JSX.Element {
               ['Guide', 'JioTV EPG with deterministic offline fallback']
             ].map(([label, value]) => (
               <div key={label} className="flex items-start justify-between gap-6 border-b border-[rgba(255,255,255,0.05)] pb-1.5">
-                <dt className="text-[#66666C]">{label}</dt>
+                <dt className="text-[#A1A1A6]">{label}</dt>
                 <dd className="text-right text-[#A1A1A6]">{value}</dd>
               </div>
             ))}
           </dl>
-          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
+          <div className="flex items-center gap-2 text-[12px] text-[#A1A1A6]">
             <Cpu className="h-3.5 w-3.5" />
             Hardware decoding follows your GPU and codec support.
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
+          <div className="flex items-center gap-2 text-[12px] text-[#A1A1A6]">
             <Sparkles className="h-3.5 w-3.5" />
             Widevine playback requires an Electron build bundled with a CDM.
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
+          <div className="flex items-center gap-2 text-[12px] text-[#A1A1A6]">
             <Gauge className="h-3.5 w-3.5" />
             Media relay keeps manifests, segments and licence requests on loopback.
           </div>

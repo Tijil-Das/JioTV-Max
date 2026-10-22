@@ -21,12 +21,14 @@ import { FavoritesPage } from '@/pages/FavoritesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { PlayerPage } from '@/pages/PlayerPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { DevLogosPage } from '@/pages/DevLogosPage'
 
 const titles: Record<string, string> = {
   '/': 'Home',
   '/guide': 'TV Guide',
   '/favorites': 'My List',
-  '/settings': 'Settings'
+  '/settings': 'Settings',
+  '/dev/logos': 'Logo audit'
 }
 
 /**
@@ -46,7 +48,6 @@ export default function App(): JSX.Element {
   const mode = useSettingsStore((state) => state.mode)
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop)
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
-  const seedRecentsIfEmpty = useChannelStore((state) => state.seedRecentsIfEmpty)
   const setSession = useAuthStore((state) => state.setSession)
   const status = useAuthStore((state) => state.status)
   const pushToast = useUIStore((state) => state.pushToast)
@@ -107,7 +108,6 @@ export default function App(): JSX.Element {
     }
 
     void bootstrap()
-    seedRecentsIfEmpty()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -176,6 +176,9 @@ export default function App(): JSX.Element {
               <Route path="/guide" element={<GuidePage />} />
               <Route path="/favorites" element={<FavoritesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              {import.meta.env.DEV ? (
+                <Route path="/dev/logos" element={<DevLogosPage />} />
+              ) : null}
               <Route path="/watch/:channelId" element={<PlayerPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

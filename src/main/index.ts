@@ -7,6 +7,8 @@ import type { AppInfo, AuthSession, ChannelFetchPayload, Result } from '@shared/
 import { IPC } from '@shared/ipc'
 import { JioService } from './jio-service'
 import { MediaRelay } from './media-relay'
+import { fetchAsset } from './asset-cache'
+import { probeStage1 } from './stream-probe'
 import { SecureStore } from './secure-store'
 import { WindowStateStore } from './window-state'
 
@@ -244,7 +246,8 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
-      spellcheck: false
+      spellcheck: false,
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 
@@ -509,6 +512,14 @@ function registerIpc(): void {
     jio.getStream(channelId, quality)
   )
   ipcMain.handle(IPC.getEpg, async (_event, channelId: string) => jio.fetchEpg(channelId))
+
+  // Addendum 3 · logo bytes through the privileged main process. Keeping this
+  // out of the renderer preserves webSecurity and keeps canvases untainted.
+  ipcMain.handle(IPC.assetFetch, async (_event, url: string) => fetchAsset(url))
+
+  // Stage 1 of live-hero verification. The URL is the same resolved relay URL
+  // the player consumes; no second token/header path is introduced.
+  ipcMain.handle(IPC.probeStage1, async (_event, url: string) => probeStage1(url))
 
   ipcMain.handle(IPC.secureSave, async (_event, token: string) => {
     if (typeof token !== 'string' || token.length > 20_000) return false

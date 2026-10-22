@@ -3,13 +3,15 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Channel, AuthMode, Program } from '@shared/types'
 import { channelService } from '@/services/channelService'
 import { epgService } from '@/services/epgService'
-import { buildFallbackEpg, buildMockEpg } from '@/mocks/epg'
+import { buildMockEpg } from '@/mocks/epg'
 import { mockChannels } from '@/mocks/channels'
 
 export interface RecentChannel {
   channelId: string
   progress: number
   watchedAt: string
+  /** Optional real session length in minutes (older persisted rows omit it). */
+  minutes?: number
 }
 
 interface ChannelState {
@@ -27,16 +29,9 @@ interface ChannelState {
   loadEpgForChannel: (channel: Channel, mode: AuthMode) => Promise<void>
   toggleFavorite: (channelId: string) => void
   clearFavorites: () => void
-  recordRecent: (channelId: string, progress?: number) => void
-  seedRecentsIfEmpty: () => void
+  recordRecent: (channelId: string, progress?: number, minutes?: number) => void
   clearRecents: () => void
 }
-
-const initialRecents: RecentChannel[] = [
-  { channelId: 'ch-109', progress: 0.36, watchedAt: new Date(Date.now() - 1000 * 60 * 24).toISOString() },
-  { channelId: 'ch-115', progress: 0.71, watchedAt: new Date(Date.now() - 1000 * 60 * 78).toISOString() },
-  { channelId: 'ch-133', progress: 0.48, watchedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString() }
-]
 
 export const useChannelStore = create<ChannelState>()(
   persist(
@@ -48,7 +43,8 @@ export const useChannelStore = create<ChannelState>()(
       error: null,
       fetchedAt: null,
       favorites: [],
-      recents: initialRecents,
+      // Real watch history only — never seed fabricated sessions.
+      recents: [],
 
       setChannels: (channels, source, epg) =>
         set({
@@ -67,10 +63,8 @@ export const useChannelStore = create<ChannelState>()(
         set({ loading: true, error: null })
         try {
           const payload = await channelService.loadCatalogue(mode)
-          const epg =
-            payload.source === 'demo'
-              ? buildMockEpg(payload.channels)
-              : buildFallbackEpg(payload.channels)
+          // Real Jio channels start with no EPG until the API supplies it.
+          const epg = payload.source === 'demo' ? buildMockEpg(payload.channels) : {}
           for (const [channelId, programs] of Object.entries(epg)) {
             epgService.setCached(channelId, programs)
           }
@@ -121,17 +115,21 @@ export const useChannelStore = create<ChannelState>()(
 
       clearFavorites: () => set({ favorites: [] }),
 
-      recordRecent: (channelId, progress = 0) =>
-        set((state) => ({
-          recents: [
-            { channelId, progress, watchedAt: new Date().toISOString() },
-            ...state.recents.filter((recent) => recent.channelId !== channelId)
-          ].slice(0, 12)
-        })),
-
-      seedRecentsIfEmpty: () => {
-        if (get().recents.length === 0) set({ recents: initialRecents })
-      },
+      recordRecent: (channelId, progress = 0, minutes) =>
+        set((state) => {
+          const existing = state.recents.find((recent) => recent.channelId === channelId)
+          return {
+            recents: [
+              {
+                channelId,
+                progress,
+                watchedAt: new Date().toISOString(),
+                minutes: minutes ?? existing?.minutes
+              },
+              ...state.recents.filter((recent) => recent.channelId !== channelId)
+            ].slice(0, 12)
+          }
+        }),
 
       clearRecents: () => set({ recents: [] })
     }),

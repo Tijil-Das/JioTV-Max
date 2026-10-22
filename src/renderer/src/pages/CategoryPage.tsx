@@ -88,14 +88,14 @@ export function CategoryPage(): JSX.Element {
             <div className="flex items-center gap-6 pr-2">
               <div className="text-right">
                 <p className="font-display text-[22px] font-semibold text-white">{items.length}</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Channels</p>
+                <p className="text-[12px] uppercase tracking-[0.14em] text-text-secondary">Channels</p>
               </div>
               <div className="h-10 w-px bg-white/10" />
               <div className="text-right">
                 <p className="font-display text-[22px] font-semibold text-white">
                   {items.filter((channel) => channel.quality.includes('HD')).length}
                 </p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-text-muted">In HD</p>
+                <p className="text-[12px] uppercase tracking-[0.14em] text-text-secondary">In HD</p>
               </div>
             </div>
           </div>

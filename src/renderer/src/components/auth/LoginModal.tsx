@@ -256,7 +256,7 @@ export function LoginModal(): JSX.Element | null {
                 exit={{ opacity: 0, x: step === 'otp' ? -24 : 24 }}
                 transition={tween(0.24)}
               >
-                <p className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
+                <p className="text-[12px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
                   {step === 'otp' ? 'Step 2 of 2' : 'Step 1 of 2'}
                 </p>
                 <h2 id="login-title" className="mt-2 font-display text-[24px] font-bold tracking-tight text-white">
@@ -319,19 +319,19 @@ export function LoginModal(): JSX.Element | null {
                           inputMode="tel"
                           autoComplete="tel-national"
                           placeholder="98765 43210"
-                          className="h-full flex-1 bg-transparent text-[15px] tracking-wide text-white outline-none placeholder:text-text-muted"
+                          className="h-full flex-1 bg-transparent text-[15px] tracking-wide text-white outline-none placeholder:text-text-secondary"
                         />
                         {mode === 'demo' ? (
                           <button
                             type="button"
                             onClick={() => setPhone(DEMO_PHONE)}
-                            className="rounded-[8px] border border-[rgba(255,255,255,0.07)] px-2.5 py-1 text-[11px] text-[#A1A1A6] transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] hover:text-[#F4F4F5]"
+                            className="rounded-[8px] border border-[rgba(255,255,255,0.07)] px-2.5 py-1 text-[12px] text-[#A1A1A6] transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] hover:text-[#F4F4F5]"
                           >
                             Use demo
                           </button>
                         ) : null}
                       </div>
-                      <p className="mt-2 text-[11px] text-text-muted">
+                      <p className="mt-2 text-[12px] text-text-secondary">
                         {mode === 'demo'
                           ? 'Demo mode accepts any valid Indian number and the code 123456.'
                           : 'JioTV sends a one-time password to this number by SMS.'}
@@ -370,7 +370,7 @@ export function LoginModal(): JSX.Element | null {
                       ))}
                     </div>
                     <div className="mt-3 flex items-center justify-between text-[12px]">
-                      <span className="text-text-muted">
+                      <span className="text-text-secondary">
                         {secondsLeft > 0
                           ? `Resend available in ${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}`
                           : 'Didn’t get the code?'}
@@ -381,7 +381,7 @@ export function LoginModal(): JSX.Element | null {
                         onClick={() => void requestOtp()}
                         className={cn(
                           'font-medium transition-colors',
-                          secondsLeft > 0 ? 'cursor-not-allowed text-[#66666C]' : 'text-[#E11D2E] hover:text-[#EF3340]'
+                          secondsLeft > 0 ? 'cursor-not-allowed text-[#A1A1A6]' : 'text-[#E11D2E] hover:text-[#EF3340]'
                         )}
                       >
                         {sending ? 'Sending…' : 'Resend code'}
@@ -441,7 +441,7 @@ export function LoginModal(): JSX.Element | null {
                   )}
                 </div>
 
-                <p className="mt-5 text-center text-[11px] leading-relaxed text-text-muted">
+                <p className="mt-5 text-center text-[12px] leading-relaxed text-text-secondary">
                   By continuing you agree to keep this sign-in on trusted devices only. JioTv Max
                   stores your Jio tokens in the operating system keychain.
                 </p>

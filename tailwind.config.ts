@@ -23,11 +23,11 @@ export default {
         text: {
           1: '#F4F4F5',
           2: '#A1A1A6',
-          3: '#66666C',
+          3: '#8A8A91',
           // backward-compat aliases
           primary:   '#F4F4F5',
           secondary: '#A1A1A6',
-          muted:     '#66666C'
+          muted:     '#8A8A91'
         },
         red: {
           DEFAULT: '#E11D2E',

@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
             <>
               <TopBar />
               <div className="relative">{children}</div>
-              <footer className="mt-8 flex items-center justify-between border-t border-white/[0.05] px-8 py-6 text-[11px] text-text-muted">
+              <footer className="mt-8 flex items-center justify-between border-t border-white/[0.05] px-8 py-6 text-[12px] text-text-secondary">
                 <div className="flex items-center gap-2.5">
                   <BrandMark size={16} />
                   <span>JioTv Max · local-first, privacy-respecting playback</span>

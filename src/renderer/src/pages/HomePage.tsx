@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import type { Channel, ChannelCategory } from '@shared/types'
-import { channelService } from '@/services/channelService'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { PageTransition, StateView } from '@/components/ui/StateView'
@@ -30,23 +29,13 @@ export function HomePage(): JSX.Element {
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
   const mode = useSettingsStore((state) => state.mode)
 
-  const featured = useMemo(() => channelService.featured(channels), [channels])
-
-  const continueWatching = useMemo(() => {
+  const recentlyWatched = useMemo(() => {
     const byId = new Map(channels.map((channel) => [channel.id, channel]))
     return recents
       .map((recent) => byId.get(recent.channelId))
       .filter((channel): channel is Channel => Boolean(channel))
       .slice(0, 10)
   }, [channels, recents])
-
-  const progressByChannel = useMemo(() => {
-    const map: Record<string, number> = {}
-    recents.forEach((recent) => {
-      map[recent.channelId] = recent.progress
-    })
-    return map
-  }, [recents])
 
   const favoriteChannels = useMemo(
     () => channels.filter((channel) => favorites.includes(channel.id)),
@@ -90,7 +79,7 @@ export function HomePage(): JSX.Element {
         </>
       ) : (
         <>
-          <Hero channels={featured} epg={epg} />
+          <Hero />
 
           {error ? (
             <div className="mx-8 mt-6 flex items-center gap-3 rounded-2xl border border-warning/25 bg-warning/[0.07] px-4 py-3">
@@ -111,18 +100,16 @@ export function HomePage(): JSX.Element {
             </div>
           ) : null}
 
-          <div className="mt-10">
+          <div className="relative z-10">
             <CategoryTiles channels={channels} />
           </div>
 
-          {continueWatching.length > 0 ? (
+          {recentlyWatched.length > 0 ? (
             <ChannelRow
               className="mt-12"
-              title="Continue watching"
-              subtitle="Pick up where you left off"
-              channels={continueWatching}
+              title="Recently watched"
+              channels={recentlyWatched}
               epg={epg}
-              progressByChannel={progressByChannel}
             />
           ) : null}
 

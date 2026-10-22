@@ -107,14 +107,14 @@ export function GuidePage(): JSX.Element {
                   >
                     {dayLabel(offset)}
                   </span>
-                  <span className="text-[10px] text-text-muted">{formatDayLabel(date)}</span>
+                  <span className="text-[12px] text-text-secondary">{formatDayLabel(date)}</span>
                 </button>
               )
             })}
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden items-center gap-2 text-[11px] text-text-muted lg:flex">
+            <span className="hidden items-center gap-2 text-[12px] text-text-secondary lg:flex">
               <span className="h-2.5 w-2.5 rounded-full bg-live shadow-[0_0_8px_rgba(255,59,78,.7)]" />
               Live now
             </span>
@@ -142,7 +142,7 @@ export function GuidePage(): JSX.Element {
                   'shrink-0 rounded-pill border px-3.5 py-1.5 text-[12px] font-medium transition-colors',
                   category === item
                     ? 'border-white/20 bg-white/[0.1] text-white'
-                    : 'border-white/[0.07] bg-white/[0.02] text-text-muted hover:text-text-secondary'
+                    : 'border-white/[0.07] bg-white/[0.02] text-text-secondary hover:text-text-secondary'
                 )}
               >
                 {label}
@@ -158,9 +158,9 @@ export function GuidePage(): JSX.Element {
               {formatDayLabel(dayStart)} · {visibleChannels.length} channels · 24-hour grid
             </span>
             {dayOffset !== 0 ? (
-              <span className="text-[11px] text-text-muted">Preview schedule</span>
+              <span className="text-[12px] text-text-secondary">Preview schedule</span>
             ) : (
-              <span className="text-[11px] text-text-muted">Shift + scroll to pan time</span>
+              <span className="text-[12px] text-text-secondary">Shift + scroll to pan time</span>
             )}
           </div>
           <div className="min-h-0 flex-1">

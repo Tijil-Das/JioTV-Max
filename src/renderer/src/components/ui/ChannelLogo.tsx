@@ -1,13 +1,14 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
-import { useRelayStore } from '@/store/useRelayStore'
-import { useLogoMetrics, type CachedLogoMetrics, getLogoMetricsSync } from '@/lib/logoMetrics'
+import { useProcessedLogo } from '@/hooks/useProcessedLogo'
+import { getLogoBox } from '@/lib/logo/logoService'
 
 export type LogoSizeVariant =
   | 'tile'
   | 'cell'
+  | 'switcher'
   | 'bug'
   | 'hero'
   | 'xs'
@@ -16,218 +17,176 @@ export type LogoSizeVariant =
   | 'lg'
   | 'xl'
 
-const legacyBoxMap = {
-  xs: { box: 'h-7 w-7 text-[10px]' },
-  sm: { box: 'h-9 w-9 text-[11px]' },
-  md: { box: 'h-11 w-11 text-[13px]' },
-  lg: { box: 'h-24 w-24 text-[24px]' },
-  xl: { box: 'h-28 w-28 text-[28px]' }
-} as const
-
 interface ChannelLogoProps {
   channel: Channel
   size?: LogoSizeVariant
   className?: string
-  /** Optional pre-resolved metrics to avoid duplicate lookups */
-  metrics?: CachedLogoMetrics | null
-  /** @deprecated — kept for API compatibility */
+  /** Force early processing for above-the-fold artwork (hero, dev sheet). */
+  priority?: 'visible' | 'idle'
+  /** Pipeline area factor: 0.22 for tiles, 0.30 for list/switcher cells. */
+  areaFactor?: number
+  /** @deprecated kept for API compatibility */
   glow?: boolean
+  /** @deprecated kept for API compatibility */
+  metrics?: unknown
+}
+
+const monogramSize: Record<LogoSizeVariant, string> = {
+  tile: 'text-[28px]',
+  cell: 'text-[18px]',
+  switcher: 'text-[18px]',
+  bug: 'text-[12px]',
+  hero: 'text-[28px]',
+  xs: 'text-[12px]',
+  sm: 'text-[14px]',
+  md: 'text-[18px]',
+  lg: 'text-[24px]',
+  xl: 'text-[28px]'
+}
+
+function areaFor(size: LogoSizeVariant, explicit?: number): number {
+  if (explicit !== undefined) return explicit
+  if (size === 'cell' || size === 'switcher') return 0.3
+  return 0.22
 }
 
 /**
- * Normalized channel brand mark presentation (Addendum 2).
- * - Processed tiers: as-is (L >= 0.30), white knockout (L < 0.30 & S < 0.25), neutral halo (L < 0.30 & S >= 0.25)
- * - Transparent bounding box trimming via SVG viewBox
- * - Visual center of mass translation offset
- * - Upscaling cap (1.5x max, 1x if under 120px)
- * - Shimmering plate during load (opacity only)
- * - 300ms fade-in once normalized
- * - Monogram fallback (Inter 600, text-2) on error or missing source
+ * Channel mark presentation (Addendum 3 §2/§3).
+ *
+ * The processed PNG is always rendered in a plain <img>. No filters, blend
+ * modes or backgrounds touch it. Geometry comes from the pipeline's normalized
+ * bbox and luminance centroid, expressed as percentages of the tile.
  */
 export const ChannelLogo = memo(function ChannelLogo({
   channel,
   size = 'tile',
   className,
-  metrics: externalMetrics
-}: ChannelLogoProps) {
-  const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
-  const rawSrc = channel.logoUrl ? logoProxyUrl(channel.logoUrl) : ''
-
-  const hookResult = useLogoMetrics(rawSrc)
-  const metrics = externalMetrics ?? hookResult.metrics
-  const loading = !externalMetrics && hookResult.loading
-  const error = !rawSrc || (!externalMetrics && hookResult.error)
-
-  const [ready, setReady] = useState<boolean>(() => {
-    return Boolean(externalMetrics || getLogoMetricsSync(rawSrc))
-  })
+  priority = 'idle',
+  areaFactor,
+  glow: _glow,
+  metrics: _metrics
+}: ChannelLogoProps): JSX.Element {
+  const hostRef = useRef<HTMLSpanElement>(null)
+  const [visible, setVisible] = useState(priority === 'visible')
+  const { logo, loading } = useProcessedLogo(
+    channel,
+    priority === 'visible' || visible ? 'visible' : 'idle'
+  )
+  const [faded, setFaded] = useState(false)
 
   useEffect(() => {
-    if (metrics) {
-      const id = requestAnimationFrame(() => setReady(true))
-      return () => cancelAnimationFrame(id)
+    if (priority === 'visible' || !hostRef.current) return
+    const element = hostRef.current
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
     }
-    setReady(false)
-    return undefined
-  }, [metrics])
-
-  // Broken or missing logo: clean monogram fallback centered on the plate
-  if (error || (!metrics && !loading)) {
-    const fallbackFontSize =
-      size === 'bug'
-        ? 'text-[11px]'
-        : size === 'cell'
-          ? 'text-[13px]'
-          : size === 'hero'
-            ? 'text-[36px]'
-            : size in legacyBoxMap
-              ? legacyBoxMap[size as keyof typeof legacyBoxMap].box.split(' ').pop()
-              : 'text-[18px]'
-
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(
-          'flex h-full w-full items-center justify-center font-sans font-[600] text-[#A1A1A6] select-none',
-          fallbackFontSize,
-          className
-        )}
-      >
-        {initials(channel.name)}
-      </span>
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '160px 0px' }
     )
-  }
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [priority])
 
-  // Shimmer plate while measuring pixels (1.4s opacity only, no placeholder logo shape)
-  if (loading && !metrics) {
-    return (
-      <div
-        className={cn('shimmer-plate h-full w-full bg-white/[0.04]', className)}
-        aria-hidden="true"
-      />
-    )
-  }
-
-  if (!metrics) return null
-
-  const { bbox, nativeWidth, nativeHeight, shiftXPercent, shiftYPercent, processedSrc, tier } =
-    metrics
-
-  // Upscaling cap: if source under 120px wide, show at native size; else cap at 1.5x
-  const maxPxWidth =
-    bbox.width < 120 ? `${bbox.width}px` : `${Math.round(bbox.width * 1.5)}px`
-
-  // Sizing styles per variant
-  let containerStyle: React.CSSProperties = {}
-  let outerClass = 'relative flex items-center justify-center w-full h-full'
-
-  if (size === 'tile') {
-    // Addendum 2 Section 1: Logo box is 56% of plate width by 38% of plate height
-    containerStyle = {
-      width: '56%',
-      height: '38%',
-      maxWidth: maxPxWidth,
-      maxHeight: '38%'
+  useEffect(() => {
+    if (!logo || !logo.objectUrl) {
+      setFaded(false)
+      return
     }
-  } else if (size === 'cell') {
-    // 64x44px cell with 6px padding inside (Section 4)
-    containerStyle = {
-      maxWidth: '52px',
-      maxHeight: '32px',
-      width: '100%',
-      height: '100%'
-    }
-  } else if (size === 'bug') {
-    // Artwork corner bug: max 24px tall (Section 5)
-    containerStyle = {
-      maxHeight: '24px',
-      maxWidth: '56px',
-      width: 'auto',
-      height: '24px'
-    }
-  } else if (size === 'hero') {
-    containerStyle = {
-      maxWidth: '380px',
-      maxHeight: '160px',
-      width: '60%',
-      height: 'auto'
-    }
-  } else if (size in legacyBoxMap) {
-    const { box } = legacyBoxMap[size as keyof typeof legacyBoxMap]
-    outerClass = cn('relative flex items-center justify-center', box)
-    containerStyle = {
-      maxWidth: '85%',
-      maxHeight: '85%',
-      width: '100%',
-      height: '100%'
-    }
-  }
+    const frame = requestAnimationFrame(() => setFaded(true))
+    return () => cancelAnimationFrame(frame)
+  }, [logo])
+
+  const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
+  const isHero = size === 'hero'
+  const box = logo?.spec && !isHero ? getLogoBox(logo.spec, areaFor(size, areaFactor), 100) : null
 
   return (
-    <div className={cn(outerClass, className)}>
-      {/* Tier 3 Neutral Halo: circle at 70% of logo box, rgba(255,255,255,0.06), blurred 24px */}
-      {tier === 'neutral-halo' ? (
-        <span
-          className="pointer-events-none absolute h-[70%] w-[70%] rounded-full bg-white/[0.06] blur-[24px]"
-          aria-hidden="true"
-        />
+    <span
+      ref={hostRef}
+      aria-hidden="true"
+      className={cn('relative flex h-full w-full items-center justify-center select-none', className)}
+    >
+      {loading ? (
+        <span className="shimmer-plate absolute inset-0 rounded-[inherit] bg-white/[0.025]" />
       ) : null}
 
-      <div
-        className={cn(
-          'relative flex items-center justify-center transition-opacity duration-300 pointer-events-none select-none',
-          ready ? 'opacity-100' : 'opacity-0'
-        )}
-        style={containerStyle}
-      >
-        <svg
-          viewBox={`${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`}
-          className="h-full w-full overflow-visible"
-          style={{
-            transform: `translate(${shiftXPercent}%, ${shiftYPercent}%)`,
-            transformOrigin: 'center center'
-          }}
-          aria-hidden="true"
+      {showMonogram ? (
+        <span
+          className={cn(
+            'pointer-events-none font-sans font-[600] leading-none text-[#A1A1A6]',
+            monogramSize[size]
+          )}
         >
-          <image
-            href={processedSrc || rawSrc}
-            xlinkHref={processedSrc || rawSrc}
-            width={nativeWidth}
-            height={nativeHeight}
-            preserveAspectRatio="xMidYMid meet"
+          {initials(channel.name)}
+        </span>
+      ) : null}
+
+      {!showMonogram && logo?.objectUrl ? (
+        isHero ? (
+          <img
+            src={logo.objectUrl}
+            alt=""
+            draggable={false}
+            className="pointer-events-none block h-auto w-auto max-h-[120px] max-w-[280px] object-contain"
+            style={{ opacity: faded ? 1 : 0, transition: 'opacity 300ms ease' }}
           />
-        </svg>
-      </div>
-    </div>
+        ) : box ? (
+          <img
+            src={logo.objectUrl}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute block object-contain"
+            style={{
+              left: `${50 + box.offsetXRatio * 100}%`,
+              top: `${50 + box.offsetYRatio * 100}%`,
+              width: `${box.widthRatio * 100}%`,
+              height: `${box.heightRatio * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              opacity: faded ? 1 : 0,
+              transition: 'opacity 300ms ease'
+            }}
+          />
+        ) : null
+      ) : null}
+    </span>
   )
 })
 
 /**
- * Fixed 64 x 44px logo cell for guide and list rows (Addendum 2 Section 4).
- * - Plate recipe: #0C0C0E fill, hairline border, 8px radius, 6px inner padding
- * - Absolutely no white or light cells anywhere
- * - All logo cells share identical dimensions across the column
+ * 56 × 56 list/drawer/switcher cell (Addendum 3 §4). Same plate recipe as the
+ * tile, radius 12, pipeline area factor 0.30.
  */
 export const ChannelLogoCell = memo(function ChannelLogoCell({
   channel,
-  className
+  className,
+  priority = 'idle'
 }: {
   channel: Channel
   className?: string
+  priority?: 'visible' | 'idle'
 }): JSX.Element {
-  const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
-  const rawSrc = channel.logoUrl ? logoProxyUrl(channel.logoUrl) : ''
-  const { metrics } = useLogoMetrics(rawSrc)
-
   return (
-    <div
+    <span
       className={cn(
-        'relative flex h-[44px] w-[64px] shrink-0 items-center justify-center rounded-[8px] p-1.5 transition-colors duration-150',
-        'bg-[#0C0C0E] border border-[rgba(255,255,255,0.06)]',
+        'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px]',
+        'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
         className
       )}
     >
-      <ChannelLogo channel={channel} size="cell" metrics={metrics} />
-    </div>
+      <ChannelLogo
+        channel={channel}
+        size="cell"
+        areaFactor={0.3}
+        priority={priority}
+        className="h-full w-full"
+      />
+    </span>
   )
 })

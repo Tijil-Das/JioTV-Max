@@ -5,12 +5,11 @@ import { ArrowRight, Clock3, Search, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tween } from '@/lib/motion'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useNow } from '@/hooks/useNow'
+import { getNowNext } from '@/lib/time'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { getNowNext } from '@/lib/time'
-import { useNow } from '@/hooks/useNow'
-import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
-import { highestQuality } from '@/lib/constants'
+import { ChannelListRow } from '@/components/channels/ChannelListRow'
 import type { Channel } from '@shared/types'
 
 /**
@@ -105,7 +104,7 @@ export function SearchBox(): JSX.Element {
             : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)]'
         )}
       >
-        <Search className="h-4 w-4 shrink-0 text-[#66666C]" />
+        <Search className="h-4 w-4 shrink-0 text-[#A1A1A6]" />
         <input
           ref={inputRef}
           value={query}
@@ -121,7 +120,7 @@ export function SearchBox(): JSX.Element {
           aria-controls="search-results"
           aria-label="Search channels and shows"
           placeholder="Search channels, shows, sport…"
-          className="h-full flex-1 bg-transparent text-[13px] text-[#F4F4F5] outline-none placeholder:text-[#66666C]"
+          className="h-full flex-1 bg-transparent text-[13px] text-[#F4F4F5] outline-none placeholder:text-[#A1A1A6]"
         />
         {query ? (
           <button
@@ -131,12 +130,12 @@ export function SearchBox(): JSX.Element {
               setQuery('')
               inputRef.current?.focus()
             }}
-            className="rounded-[6px] p-1 text-[#66666C] transition-colors hover:text-[#F4F4F5]"
+            className="rounded-[6px] p-1 text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[10px] font-[500] text-[#66666C] lg:flex">
+          <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[12px] font-[500] text-[#A1A1A6] lg:flex">
             ⌃K
           </span>
         )}
@@ -157,7 +156,7 @@ export function SearchBox(): JSX.Element {
               <div className="p-4">
                 {recentSearches.length > 0 ? (
                   <>
-                    <p className="px-2 pb-2 text-[11px] font-[600] uppercase tracking-[0.12em] text-[#66666C]">
+                    <p className="px-2 pb-2 text-[12px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
                       Recent
                     </p>
                     <div className="flex flex-wrap gap-2 px-2 pb-3">
@@ -178,7 +177,7 @@ export function SearchBox(): JSX.Element {
                     </div>
                   </>
                 ) : null}
-                <p className="px-2 pb-2 text-[11px] font-[600] uppercase tracking-[0.12em] text-[#66666C]">
+                <p className="px-2 pb-2 text-[12px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
                   Browse
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -198,50 +197,27 @@ export function SearchBox(): JSX.Element {
             ) : results.length === 0 ? (
               <div className="px-5 py-8 text-center">
                 <p className="text-[13px] font-medium text-text-primary">No matches for “{query}”</p>
-                <p className="mt-1 text-[12px] text-text-muted">
+                <p className="mt-1 text-[12px] text-text-secondary">
                   Try a channel number, language or a show title.
                 </p>
               </div>
             ) : (
               <ul className="max-h-[380px] overflow-y-auto p-2">
-                {results.map((channel, index) => {
-                  const current = getNowNext(epg[channel.id] ?? [], now).current
-                  return (
-                    <li key={channel.id}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={index === activeIndex}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => openChannel(channel, query.trim())}
-                        className={cn(
-                          'flex w-full items-center gap-3 rounded-[8px] py-2 pr-3 text-left transition-colors duration-[120ms]',
-                          index === activeIndex
-                            ? 'border-l-2 border-l-[var(--red)] bg-white/[0.06] pl-2'
-                            : 'border-l-2 border-l-transparent pl-2 hover:bg-white/[0.04]'
-                        )}
-                      >
-                        {/* Tabular channel number: 40px column (text-3, 12px) */}
-                        <span className="w-10 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
-                          {channel.number}
-                        </span>
-                        {/* Fixed 64 x 44px logo cell */}
-                        <ChannelLogoCell channel={channel} />
-                        {/* Channel name (14/600) and muted line (12px text-3) */}
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14px] font-[600] text-[#F4F4F5]">
-                            {channel.name}
-                          </span>
-                          <span className="block truncate text-[12px] text-[#66666C]">
-                            {current
-                              ? current.title
-                              : `${channel.language || channel.category} · ${highestQuality(channel)}`}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
+                {results.map((channel, index) => (
+                  <li
+                    key={channel.id}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    onMouseEnter={() => setActiveIndex(index)}
+                  >
+                    <ChannelListRow
+                      channel={channel}
+                      programs={epg[channel.id]}
+                      selected={index === activeIndex}
+                      onClick={() => openChannel(channel, query.trim())}
+                    />
+                  </li>
+                ))}
               </ul>
             )}
           </motion.div>

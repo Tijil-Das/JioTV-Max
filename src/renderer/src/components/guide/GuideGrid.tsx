@@ -7,17 +7,14 @@ import {
   addMinutes,
   formatRange,
   formatTime,
-  getNowNext,
   minutesSinceDayStart,
   programBlockRect
 } from '@/lib/time'
-import { ChannelLogo, ChannelLogoCell } from '@/components/ui/ChannelLogo'
-import { LiveBadge } from '@/components/ui/LiveBadge'
-import { highestQuality } from '@/lib/constants'
+import { ChannelListRow } from '@/components/channels/ChannelListRow'
 
 const PX_PER_MINUTE = 4
-const CHANNEL_COLUMN = 240
-const ROW_HEIGHT = 84
+const CHANNEL_COLUMN = 320
+const ROW_HEIGHT = 56
 const RULER_HEIGHT = 48
 const DAY_MINUTES = 24 * 60
 
@@ -110,7 +107,7 @@ export function GuideGrid({
       {/* Ruler */}
       <div className="flex border-b border-white/[0.07]" style={{ height: RULER_HEIGHT }}>
         <div
-          className="flex shrink-0 items-center border-r border-white/[0.07] px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted"
+          className="flex shrink-0 items-center border-r border-white/[0.07] px-4 text-[12px] font-semibold uppercase tracking-[0.16em] text-[#A1A1A6]"
           style={{ width: CHANNEL_COLUMN }}
         >
           Channel
@@ -129,7 +126,7 @@ export function GuideGrid({
                   <span
                     className={cn(
                       'absolute left-1.5 top-2 whitespace-nowrap tabular-nums',
-                      hour ? 'text-[11px] font-medium text-text-secondary' : 'text-[10px] text-text-muted'
+                      hour ? 'text-[12px] font-[600] text-[#F4F4F5]' : 'text-[12px] font-[450] text-[#A1A1A6]'
                     )}
                   >
                     {formatTime(addMinutes(dayStart, minute))}
@@ -154,7 +151,6 @@ export function GuideGrid({
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const channel = channels[virtualRow.index]
             const programs = epg[channel.id] ?? []
-            const { current } = getNowNext(programs, now)
             const isHighlighted = channel.id === highlightChannelId
 
             return (
@@ -164,33 +160,18 @@ export function GuideGrid({
                 style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}
               >
                 <div className="flex h-full border-b border-white/[0.045]">
-                  <button
-                    type="button"
-                    onClick={() => onOpenChannel(channel.id)}
-                    className={cn(
-                      'flex shrink-0 items-center gap-3 border-r border-white/[0.07] px-3 text-left transition-colors hover:bg-white/[0.05]',
-                      isHighlighted && 'bg-white/[0.08]'
-                    )}
+                  <div
+                    className="shrink-0 border-r border-white/[0.07]"
                     style={{ width: CHANNEL_COLUMN }}
                   >
-                    {/* Tabular channel number: 40px column (text-3, 12px) */}
-                    <span className="w-10 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
-                      {channel.number}
-                    </span>
-                    {/* Fixed 64 x 44px logo cell */}
-                    <ChannelLogoCell channel={channel} />
-                    {/* Name (14/600) and muted line (12px text-3) */}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-[600] text-[#F4F4F5]">
-                        {channel.name}
-                      </span>
-                      <span className="mt-0.5 block truncate text-[12px] text-[#66666C]">
-                        {current
-                          ? current.title
-                          : `${channel.language || 'General'} · ${highestQuality(channel)}`}
-                      </span>
-                    </span>
-                  </button>
+                    <ChannelListRow
+                      channel={channel}
+                      programs={programs}
+                      selected={isHighlighted}
+                      onClick={() => onOpenChannel(channel.id)}
+                      className="rounded-none"
+                    />
+                  </div>
 
                   <div className="relative min-w-0 flex-1 overflow-hidden">
                     <div
@@ -212,31 +193,44 @@ export function GuideGrid({
                             onClick={() => onOpenChannel(channel.id)}
                             title={`${program.title} · ${formatRange(program.start, program.end)}`}
                             className={cn(
-                              'absolute inset-y-[5px] overflow-hidden rounded-xl border px-2.5 py-2 text-left transition-colors',
+                              'absolute inset-y-[3px] overflow-hidden rounded-[10px] border px-2.5 py-1.5 text-left transition-colors',
                               isNow
-                                ? 'border-accent/50 bg-accent/[0.16]'
+                                ? 'border-[rgba(225,29,46,0.45)] bg-[rgba(225,29,46,0.14)]'
                                 : 'border-white/[0.06] hover:border-white/15 hover:bg-white/[0.08]',
                               isPast ? 'bg-white/[0.02]' : 'bg-white/[0.045]'
                             )}
                             style={{
                               left: rect.offsetMinutes * PX_PER_MINUTE,
                               width: Math.max(rect.durationMinutes * PX_PER_MINUTE - 4, 24),
-                              boxShadow: isNow ? `inset 3px 0 0 ${hexToRgba(channel.brandColor, 0.9)}` : undefined
+                              boxShadow: isNow
+                                ? `inset 3px 0 0 ${hexToRgba(channel.brandColor, 0.9)}`
+                                : undefined
                             }}
                           >
-                            <span className="flex items-center gap-2">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              {isNow ? (
+                                <span
+                                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
+                                  aria-hidden
+                                />
+                              ) : null}
                               <span
                                 className={cn(
-                                  'truncate text-[11.5px] font-medium',
-                                  isNow ? 'text-white' : isPast ? 'text-text-muted' : 'text-text-primary'
+                                  'truncate text-[12px] font-[600] leading-[1.2]',
+                                  isNow
+                                    ? 'text-white'
+                                    : isPast
+                                      ? 'text-[#A1A1A6]'
+                                      : 'text-[#F4F4F5]'
                                 )}
                               >
                                 {program.title}
                               </span>
-                              {isNow ? <LiveBadge label="Now" /> : null}
                             </span>
-                            <span className="mt-0.5 block truncate text-[10px] text-text-muted">
-                              {formatRange(program.start, program.end)} · {program.genre}
+                            <span className="mt-[2px] block truncate text-[12px] font-[450] leading-[1.2] text-[#A1A1A6]">
+                              {[formatRange(program.start, program.end), program.genre]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </span>
                           </button>
                         )

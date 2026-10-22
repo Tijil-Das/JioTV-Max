@@ -32,7 +32,7 @@ export function ShortcutsOverlay({
           <h2 id="shortcuts-title" className="font-display text-[16px] font-semibold text-white">
             Player shortcuts
           </h2>
-          <p className="mt-0.5 text-[12px] text-text-muted">
+          <p className="mt-0.5 text-[12px] text-text-secondary">
             Everything here works without moving your hands off the keyboard.
           </p>
         </div>
@@ -45,7 +45,7 @@ export function ShortcutsOverlay({
             className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5"
           >
             <span className="text-[12.5px] text-text-secondary">{description}</span>
-            <kbd className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-0.5 font-sans text-[11px] text-text-primary">
+            <kbd className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-0.5 font-sans text-[12px] text-text-primary">
               {keys}
             </kbd>
           </li>

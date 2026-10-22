@@ -1,5 +1,14 @@
 import type { Channel, ChannelCategory, Program } from '@shared/types'
 
+/**
+ * Addendum 3 §6 · editorial hero feed. Configure with `VITE_FEATURED_URL`
+ * (JSON `[{channelId, priority, from?, to?}]`). Empty means the source is
+ * simply unavailable and the remaining sources renormalize.
+ */
+export const FEATURED_URL: string = import.meta.env?.VITE_FEATURED_URL ?? ''
+
+export const HERO_LAST_KEY = 'hero:last'
+
 export const APP_NAME = 'JioTv Max'
 export const APP_SHORT = 'JioTv Max'
 export const APP_TAGLINE = 'Live television, beautifully staged.'
@@ -74,6 +83,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/guide': 'TV Guide',
   '/settings': 'Settings',
   '/favorites': 'My List',
+  '/dev/logos': 'Logo audit',
   '/category/sports': 'Sports',
   '/category/news': 'News',
   '/category/movies': 'Movies',

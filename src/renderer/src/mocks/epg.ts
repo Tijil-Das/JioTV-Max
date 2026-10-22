@@ -265,32 +265,3 @@ export function buildMockEpg(channels: Channel[], date = new Date()): Record<str
   }
   return result
 }
-
-/** Placeholder schedule for real Jio channels until their EPG arrives. */
-export function buildFallbackEpg(channels: Channel[]): Record<string, Program[]> {
-  const now = new Date()
-  const dayStart = new Date(now)
-  dayStart.setHours(0, 0, 0, 0)
-  const result: Record<string, Program[]> = {}
-  for (const channel of channels) {
-    const programs: Program[] = []
-    let cursor = dayStart.getTime()
-    let index = 0
-    while (cursor < dayStart.getTime() + 24 * 60 * 60_000) {
-      const end = cursor + 60 * 60_000
-      programs.push({
-        id: `${channel.id}-fallback-${cursor}`,
-        channelId: channel.id,
-        title: index % 2 === 0 ? `${channel.name} Live` : `${channel.name} Broadcast`,
-        description: `Live broadcast on ${channel.name}.`,
-        start: new Date(cursor).toISOString(),
-        end: new Date(end).toISOString(),
-        genre: channel.category === 'news' ? 'News' : 'Live'
-      })
-      cursor = end
-      index += 1
-    }
-    result[channel.id] = programs
-  }
-  return result
-}

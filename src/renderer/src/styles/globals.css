@@ -12,6 +12,8 @@
   --titlebar-height: 36px;
   --sidebar-width:   72px;
   --safe-bottom:     24px;
+  /* Horizontal gutter shared by page headers, rows and the hero. */
+  --gutter:          48px;
 
   /* Color tokens — use these in inline styles when Tailwind utilities aren't enough */
   --bg:              #000000;
@@ -23,7 +25,8 @@
 
   --text-1: #F4F4F5;
   --text-2: #A1A1A6;
-  --text-3: #66666C;
+  /* Legibility: 5.6:1 on #0E0E10. Placeholders/disabled only, 13px+. */
+  --text-3: #8A8A91;
 
   --red:       #E11D2E;
   --red-hover: #EF3340;
@@ -31,10 +34,10 @@
   --red-tint:  rgba(225, 29, 46, 0.12);
   --red-line:  rgba(225, 29, 46, 0.55);
 
-  /* Quiet dark plate tokens per Addendum 2 (max plate brightness is #18181B) */
-  --plate-rest:         #0C0C0E;
+  /* Channel plates (Addendum 3 §3): never lighter than #151518 at rest/hover. */
+  --plate-rest:         #0E0E10;
   --plate-hover:        #151518;
-  --plate-border:       rgba(255, 255, 255, 0.06);
+  --plate-border:       rgba(255, 255, 255, 0.07);
 
   /* Glass recipe — used only for player overlay, popovers, and scrolled top bar */
   --glass-bg:     rgba(10, 10, 11, 0.72);

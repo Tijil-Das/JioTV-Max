@@ -103,7 +103,7 @@ export function Sidebar(): JSX.Element {
                     'group relative flex h-10 items-center gap-3 rounded-[8px] px-3 transition-colors duration-[120ms]',
                     active
                       ? 'text-[#F4F4F5]'
-                      : 'text-[#66666C] hover:text-[#F4F4F5] hover:bg-white/[0.05]'
+                      : 'text-[#A1A1A6] hover:text-[#F4F4F5] hover:bg-white/[0.05]'
                   )}
                 >
                   {/* 2px red left bar when active — no filled background */}
@@ -148,7 +148,7 @@ export function Sidebar(): JSX.Element {
             )}
           >
             {/* Avatar — monogram on neutral surface, no gradient */}
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#18181B] text-[11px] font-[700] text-[#A1A1A6]">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#18181B] text-[12px] font-[700] text-[#A1A1A6]">
               {user ? user.name.slice(0, 1).toUpperCase() : <UserRound className="h-4 w-4" />}
             </span>
 
@@ -161,7 +161,7 @@ export function Sidebar(): JSX.Element {
                 <span className="block truncate text-[12px] font-[500] text-[#F4F4F5]">
                   {user ? user.name : 'Sign in'}
                 </span>
-                <span className="block truncate text-[11px] text-[#66666C]">
+                <span className="block truncate text-[12px] text-[#A1A1A6]">
                   {user
                     ? `+91 ••••• ${user.phone.slice(-5)}`
                     : status === 'authenticating'

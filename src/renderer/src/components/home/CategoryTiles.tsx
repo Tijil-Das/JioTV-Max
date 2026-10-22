@@ -40,7 +40,7 @@ export function CategoryTiles({ channels }: { channels: Channel[] }): JSX.Elemen
             )}
           >
             {meta.label}
-            <span className="text-[11px] font-[450] text-[#66666C]">{count}</span>
+            <span className="text-[12px] font-[450] text-[#A1A1A6]">{count}</span>
           </button>
         )
       })}

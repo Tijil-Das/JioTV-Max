@@ -29,6 +29,12 @@ export interface Channel {
   isPremium: boolean
   source: 'demo' | 'jio'
   description?: string
+  /** Optional popularity signals supplied by the channel API. */
+  isFeatured?: boolean
+  trending?: boolean
+  rank?: number
+  viewers?: number
+  popularity?: number
 }
 
 export interface Program {
@@ -120,6 +126,26 @@ export interface PlayerActivity {
   active: boolean
 }
 
+export interface AssetFetchPayload {
+  bytes: Uint8Array
+  mimeType: string
+  /** True when the bytes came from the on-disk logo cache. */
+  cached: boolean
+}
+
+export interface StreamProbeStage1 {
+  ok: boolean
+  reason?: string
+  /** Number of media segments found in the playlist. */
+  segments?: number
+  /** Final media-playlist URL after following a master playlist. */
+  playlistUrl?: string
+  /** First segment URL that was range-fetched. */
+  segmentUrl?: string
+  status?: number
+  bytes?: number
+}
+
 /** Channels available on the preload bridge. */
 export interface StreamDeckApi {
   isElectron: true
@@ -133,6 +159,13 @@ export interface StreamDeckApi {
   onMaximizedChange(callback: (maximized: boolean) => void): () => void
   setAlwaysOnTop(value: boolean): Promise<boolean>
   setPlayerActive(active: boolean): Promise<void>
+  assets: {
+    fetch(url: string): Promise<Result<AssetFetchPayload>>
+  }
+  streams: {
+    /** Main-process playlist/segment verification used by the live hero. */
+    probeStage1(url: string): Promise<StreamProbeStage1>
+  }
   auth: {
     requestOtp(phone: string): Promise<Result<OtpChallenge>>
     verifyOtp(phone: string, otp: string): Promise<Result<AuthSession>>

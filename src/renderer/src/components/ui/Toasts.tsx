@@ -54,7 +54,7 @@ export function ToastViewport(): JSX.Element {
               type="button"
               aria-label="Dismiss notification"
               onClick={() => dismissToast(toast.id)}
-              className="rounded-md p-1 text-text-muted transition-colors hover:text-text-primary"
+              className="rounded-md p-1 text-text-secondary transition-colors hover:text-text-primary"
             >
               <X className="h-3.5 w-3.5" />
             </button>

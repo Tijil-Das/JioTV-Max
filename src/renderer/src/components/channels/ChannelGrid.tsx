@@ -56,7 +56,7 @@ export function ChannelGrid({
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+        <span className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
           <ListFilter className="h-3.5 w-3.5" />
           Filter
         </span>
@@ -86,7 +86,7 @@ export function ChannelGrid({
               aria-pressed={quality === option}
               className={cn(
                 'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                quality === option ? 'bg-white/[0.1] text-white' : 'text-text-muted hover:text-text-secondary'
+                quality === option ? 'bg-white/[0.1] text-white' : 'text-text-secondary hover:text-text-secondary'
               )}
             >
               {option === 'all' ? 'Any quality' : option}
@@ -108,7 +108,7 @@ export function ChannelGrid({
           <option value="language">Language</option>
         </select>
 
-        <span className="ml-auto flex items-center gap-2 text-[12px] text-text-muted">
+        <span className="ml-auto flex items-center gap-2 text-[12px] text-text-secondary">
           <LayoutGrid className="h-3.5 w-3.5" />
           {visible.length} of {channels.length}
         </span>
@@ -120,7 +120,7 @@ export function ChannelGrid({
           description="Clear a filter or two and the wall will fill up again."
         />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(144px,1fr))] gap-4">
           {visible.map((channel) => (
             <ChannelCard key={channel.id} channel={channel} programs={epg[channel.id]} fluid />
           ))}

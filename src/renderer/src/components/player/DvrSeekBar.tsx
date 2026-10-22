@@ -95,7 +95,7 @@ export function DvrSeekBar({
           <LiveBadge />
         ) : (
           <span
-            className="shrink-0 rounded-pill bg-white/15 px-2.5 py-1 text-[10px] font-semibold tabular-nums tracking-[0.08em] text-white/75 backdrop-blur-md"
+            className="shrink-0 rounded-pill bg-white/15 px-2.5 py-1 text-[12px] font-semibold tabular-nums tracking-[0.08em] text-white/75 backdrop-blur-md"
             title={`${formatBehindLive(behind)} behind live`}
           >
             {formatBehindLive(behind)}
@@ -107,7 +107,7 @@ export function DvrSeekBar({
         <button
           type="button"
           onClick={handleGoLive}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-white/15 bg-white/10 px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/90 backdrop-blur-md transition-colors hover:border-white/25 hover:bg-white/20"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-white/15 bg-white/10 px-2.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-white/90 backdrop-blur-md transition-colors hover:border-white/25 hover:bg-white/20"
         >
           <Radio className="h-3 w-3 text-live" />
           Go Live

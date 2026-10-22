@@ -101,7 +101,7 @@ export function PinDialog({
           <h2 id="pin-title" className="font-display text-[16px] font-semibold text-white">
             {title}
           </h2>
-          <p className="mt-0.5 text-[11.5px] text-text-muted">{description}</p>
+          <p className="mt-0.5 text-[12px] text-text-secondary">{description}</p>
         </div>
       </div>
 

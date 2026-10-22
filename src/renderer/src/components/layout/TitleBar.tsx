@@ -41,7 +41,7 @@ export function TitleBar(): JSX.Element {
         <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
         <span className="text-[12px] font-[600] tracking-wide text-[#F4F4F5]">JioTv Max</span>
         <span className="mx-1 h-3.5 w-px bg-white/[0.07]" aria-hidden />
-        <span className="text-[11px] font-[400] text-[#66666C]">Live television</span>
+        <span className="text-[12px] font-[450] text-[#A1A1A6]">Live television</span>
       </div>
 
       {/* Right: status, clock, window controls */}
@@ -52,7 +52,7 @@ export function TitleBar(): JSX.Element {
         )}
       >
         {!online ? (
-          <span className="flex items-center gap-1 text-[10px] font-[500] text-[#FBBF24]">
+          <span className="flex items-center gap-1 text-[12px] font-[500] text-[#FBBF24]">
             <WifiOff className="h-3 w-3" />
             Offline
           </span>
@@ -60,14 +60,14 @@ export function TitleBar(): JSX.Element {
 
         <span
           className={cn(
-            'text-[10px] font-[500] uppercase tracking-[0.1em]',
-            mode === 'demo' ? 'text-[#66666C]' : 'text-[#A1A1A6]'
+            'text-[12px] font-[500] uppercase tracking-[0.1em]',
+            mode === 'demo' ? 'text-[#A1A1A6]' : 'text-[#A1A1A6]'
           )}
         >
           {mode === 'demo' ? 'Demo' : 'JioTV'}
         </span>
 
-        <span className="text-[11px] font-[500] tabular-nums text-[#66666C]">
+        <span className="text-[12px] font-[500] tabular-nums text-[#A1A1A6]">
           {clockFormatter.format(now)}
         </span>
 

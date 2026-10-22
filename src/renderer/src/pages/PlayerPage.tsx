@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
@@ -27,6 +27,7 @@ import { sha256Hex } from '@/lib/hash'
 import { formatRange, formatTimeLeft, getNowNext } from '@/lib/time'
 import { ApiError, getBridge } from '@/services/api'
 import { channelService } from '@/services/channelService'
+import { streamProbe } from '@/services/streamProbe'
 import { useMediaPlayer } from '@/hooks/useMediaPlayer'
 import { useLiveEdge } from '@/hooks/useLiveEdge'
 import { useHotkeys } from '@/hooks/useDebounce'
@@ -60,6 +61,7 @@ interface StreamFailure {
 export function PlayerPage(): JSX.Element {
   const { channelId = '' } = useParams<{ channelId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const bridge = getBridge()
   const now = useNow()
 
@@ -95,12 +97,18 @@ export function PlayerPage(): JSX.Element {
     () => channels.find((item) => item.id === channelId),
     [channelId, channels]
   )
+  /** Stream handed off by the Home hero — same resolved URL the probe used. */
+  const handoffStream = useMemo(() => {
+    const state = location.state as { stream?: StreamInfo } | null
+    return state?.stream ?? null
+  }, [location.state])
   const programs = epg[channelId] ?? []
   const { current, next } = useMemo(() => getNowNext(programs, now), [programs, now])
 
   const [stream, setStream] = useState<StreamInfo | null>(null)
   const [streamLoading, setStreamLoading] = useState(true)
   const [streamError, setStreamError] = useState<StreamFailure | null>(null)
+  const handoffConsumedRef = useRef(false)
   const [attempt, setAttempt] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [qualityOpen, setQualityOpen] = useState(false)
@@ -151,6 +159,13 @@ export function PlayerPage(): JSX.Element {
     ready: engine.ready
   })
 
+  // ---- Hero handoff -------------------------------------------------------
+  // The hero destroys its players before navigating; make sure any hidden
+  // probe player is also gone the moment the player route mounts.
+  useEffect(() => {
+    streamProbe.destroyProbePlayers()
+  }, [])
+
   // ---- Stream resolution -------------------------------------------------
   useEffect(() => {
     if (!channel || locked) {
@@ -160,8 +175,27 @@ export function PlayerPage(): JSX.Element {
     }
     let cancelled = false
     setStream(null)
-    setStreamLoading(true)
     setStreamError(null)
+
+    // First attempt: reuse the hero's verified stream (identical relay URL).
+    const handoff =
+      !handoffConsumedRef.current &&
+      attempt === 0 &&
+      handoffStream?.channelId === channel.id
+        ? handoffStream
+        : null
+    if (handoff) {
+      handoffConsumedRef.current = true
+      console.log(`[PlayerPage] Using hero handoff stream for ${channel.id}`)
+      setStream(handoff)
+      setStreamLoading(false)
+      recordRecent(channel.id, 0)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setStreamLoading(true)
     console.log(`[PlayerPage] Fetching stream for ${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
     channelService
       .getStream(channel, mode, quality)
@@ -185,7 +219,7 @@ export function PlayerPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [channel?.id, mode, attempt, locked])
+  }, [channel?.id, mode, attempt, locked, handoffStream])
 
   // ---- Store/player synchronisation -------------------------------------
   useEffect(() => {
@@ -458,14 +492,16 @@ export function PlayerPage(): JSX.Element {
             </span>
             <div className="relative flex flex-col items-center text-center">
               <span className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-black/30 backdrop-blur-md">
-                <ChannelLogo channel={channel} size="lg" glow />
+                <ChannelLogo channel={channel} size="lg" />
               </span>
               <h2 className="mt-5 font-display text-[20px] font-semibold text-white">{channel.name}</h2>
               <p className="mt-1 text-[12px] text-text-secondary">
-                {current?.title ?? 'Live programming'} · {channel.language}
+                {current
+                  ? `${current.title}${channel.language ? ` · ${channel.language}` : ''}`
+                  : channel.language}
               </p>
               {!fatalError ? (
-                <div className="mt-6 flex items-center gap-3 text-[12px] text-text-muted">
+                <div className="mt-6 flex items-center gap-3 text-[12px] text-text-secondary">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent-glow" />
                   {streamLoading
                     ? 'Resolving stream…'
@@ -482,12 +518,12 @@ export function PlayerPage(): JSX.Element {
       {/* Top overlay */}
       <div
         className={cn(
-          'absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 via-black/35 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
+          'absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/65 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
           controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
         <div className="flex items-start justify-between gap-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <IconButton
               label="Back"
               variant="glass"
@@ -502,20 +538,21 @@ export function PlayerPage(): JSX.Element {
                 <span className="truncate">{channel.name}</span>
                 <LiveBadge />
               </p>
-              <p className="mt-0.5 truncate text-[11.5px] text-white/60">
-                {channel.number} · {current ? current.title : 'Live programming'}
+              <p className="mt-0.5 truncate text-[12px] text-white/70">
+                {channel.number}
+                {current ? ` · ${current.title}` : ''}
                 {current ? ` · ${formatRange(current.start, current.end)}` : ''}
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {stream?.isDrm ? (
-              <span className="rounded-pill border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+              <span className="rounded-pill border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-amber-200">
                 Widevine
               </span>
             ) : null}
             {stream ? (
-              <span className="rounded-pill border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70 backdrop-blur-md">
+              <span className="rounded-pill border border-white/10 bg-black/35 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-md">
                 {stream.type === 'dash' ? 'DASH' : 'HLS'} · {qualityLabel}
               </span>
             ) : null}
@@ -574,7 +611,7 @@ export function PlayerPage(): JSX.Element {
               </h2>
               <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">{fatalError.message}</p>
               {stream?.note ? (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-text-muted">{stream.note}</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-text-secondary">{stream.note}</p>
               ) : null}
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 {fatalError.code === 'AUTH_REQUIRED' ? (
@@ -677,14 +714,14 @@ export function PlayerPage(): JSX.Element {
             <p className="truncate text-[13px] font-medium text-white">
               {current?.title ?? channel.name}
             </p>
-            <p className="mt-0.5 truncate text-[11.5px] text-white/55">
+            <p className="mt-0.5 truncate text-[12px] text-white/70">
               {current ? formatRange(current.start, current.end) : 'Live'}
               {current ? ` · ${formatTimeLeft(current.end, now)}` : ''}
             </p>
           </div>
           {next ? (
-            <p className="hidden shrink-0 text-right text-[11.5px] text-white/50 md:block">
-              Next · <span className="text-white/75">{next.title}</span> at {formatRange(next.start, next.end)}
+            <p className="hidden shrink-0 text-right text-[12px] text-white/65 md:block">
+              Next · <span className="text-white/90">{next.title}</span> at {formatRange(next.start, next.end)}
             </p>
           ) : null}
         </div>
@@ -749,7 +786,7 @@ export function PlayerPage(): JSX.Element {
               aria-haspopup="menu"
               aria-label="Stream quality"
               aria-expanded={qualityOpen}
-              className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-[11.5px] font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-white/[0.12]"
+              className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-[12px] font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-white/[0.12]"
             >
               {qualityLabel}
             </button>

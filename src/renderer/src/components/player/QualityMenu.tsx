@@ -37,7 +37,7 @@ export function QualityMenu({
     >
       <div className="flex items-center gap-2 px-3 py-2">
         <Gauge className="h-3.5 w-3.5 text-accent-alt" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
           Stream quality
         </span>
       </div>
@@ -57,7 +57,7 @@ export function QualityMenu({
       >
         <span>
           <span className="block text-[13px] font-medium text-white">Auto</span>
-          <span className="block text-[11px] text-text-muted">Adapt to bandwidth and window size</span>
+          <span className="block text-[12px] text-text-secondary">Adapt to bandwidth and window size</span>
         </span>
         {activeLevel === 'auto' ? <Check className="h-4 w-4 text-accent-glow" /> : null}
       </button>
@@ -65,7 +65,7 @@ export function QualityMenu({
       <div className="my-1 h-px bg-white/[0.06]" />
 
       {levels.length === 0 ? (
-        <p className="px-3 py-3 text-[12px] leading-relaxed text-text-muted">
+        <p className="px-3 py-3 text-[12px] leading-relaxed text-text-secondary">
           The stream has not advertised its levels yet. Auto keeps playing while it loads.
         </p>
       ) : (
@@ -94,7 +94,7 @@ export function QualityMenu({
                       <span className="block text-[13px] font-medium text-white">
                         {level.height > 0 ? `${level.height}p` : level.label}
                       </span>
-                      <span className="block text-[11px] text-text-muted">{formatBitrate(level.bitrate)}</span>
+                      <span className="block text-[12px] text-text-secondary">{formatBitrate(level.bitrate)}</span>
                     </span>
                     {active ? <Check className="h-4 w-4 text-accent-glow" /> : null}
                   </button>
@@ -104,7 +104,7 @@ export function QualityMenu({
         </ul>
       )}
 
-      <p className="px-3 pb-1 pt-2 text-[10.5px] leading-relaxed text-text-muted">
+      <p className="px-3 pb-1 pt-2 text-[12px] leading-relaxed text-text-secondary">
         Pinning a level disables adaptive switching until you choose Auto again.
       </p>
     </motion.div>

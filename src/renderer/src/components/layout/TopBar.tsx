@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
-import { CATEGORY_META, PAGE_TITLES } from '@/lib/constants'
+import { APP_NAME, CATEGORY_META, PAGE_TITLES } from '@/lib/constants'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useOnline } from '@/hooks/useOnline'
 import { SearchBox } from './SearchBox'
@@ -44,7 +44,7 @@ export function TopBar(): JSX.Element {
     if (path.startsWith('/guide')) return 'TV Guide'
     if (path.startsWith('/favorites')) return 'My List'
     if (path.startsWith('/settings')) return 'Settings'
-    return PAGE_TITLES[path] ?? 'StreamDeck TV'
+    return PAGE_TITLES[path] ?? APP_NAME
   }, [location.pathname])
 
   const isHome = location.pathname === '/'

@@ -46,7 +46,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
           >
             Reload JioTv Max
           </Button>
-          <p className="mt-4 break-words text-[11px] text-text-muted">{this.state.error.message}</p>
+          <p className="mt-4 break-words text-[12px] text-text-secondary">{this.state.error.message}</p>
         </div>
       </div>
     )

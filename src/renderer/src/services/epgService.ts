@@ -1,5 +1,5 @@
 import type { Channel, Program } from '@shared/types'
-import { buildFallbackEpg, buildMockEpg, localDayKey } from '@/mocks/epg'
+import { buildMockEpg, localDayKey } from '@/mocks/epg'
 import { getMockPrograms } from '@/mocks/epg'
 import { channelService } from './channelService'
 import type { AuthMode } from '@shared/types'
@@ -20,7 +20,7 @@ export const epgService = {
   },
 
   initialEpg(channels: Channel[], mode: AuthMode): Record<string, Program[]> {
-    const map = mode === 'demo' ? buildMockEpg(channels) : buildFallbackEpg(channels)
+    const map = mode === 'demo' ? buildMockEpg(channels) : {}
     for (const [channelId, programs] of Object.entries(map)) {
       epgService.setCached(channelId, programs)
     }

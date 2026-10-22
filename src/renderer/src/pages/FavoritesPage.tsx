@@ -27,7 +27,7 @@ export function FavoritesPage(): JSX.Element {
           </span>
           <div>
             <h2 className="font-display text-[24px] font-bold tracking-tight text-white">My List</h2>
-            <p className="mt-1 text-[13px] text-text-muted">
+            <p className="mt-1 text-[13px] text-text-secondary">
               {favoriteChannels.length > 0
                 ? `${favoriteChannels.length} channels you keep coming back to.`
                 : 'Save channels here for one-tap access.'}

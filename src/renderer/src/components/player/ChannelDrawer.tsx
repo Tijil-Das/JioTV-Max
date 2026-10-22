@@ -4,6 +4,7 @@ import { Search, X } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { easePremium } from '@/lib/motion'
 import { ChannelListRow } from '@/components/channels/ChannelListRow'
+import { smartSearchChannels } from '@/lib/search/smartSearch'
 
 interface ChannelDrawerProps {
   open: boolean
@@ -26,15 +27,10 @@ export function ChannelDrawer({
   const [query, setQuery] = useState('')
 
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase()
+    const term = query.trim()
     if (!term) return channels
-    return channels.filter(
-      (channel) =>
-        channel.name.toLowerCase().includes(term) ||
-        channel.number.toString().includes(term) ||
-        channel.language.toLowerCase().includes(term)
-    )
-  }, [channels, query])
+    return smartSearchChannels(term, channels, epg, new Date(), 50)
+  }, [channels, query, epg])
 
   return (
     <AnimatePresence>

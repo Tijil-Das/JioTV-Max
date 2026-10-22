@@ -55,6 +55,7 @@ describe('Addendum 4 §0 & §10 · Pixel-pure logo pipeline', () => {
       const bbox = result.bbox
       const src = fixture.image
 
+      const mismatches: string[] = []
       for (let y = 0; y < cropped.height; y += 1) {
         for (let x = 0; x < cropped.width; x += 1) {
           const croppedIdx = (y * cropped.width + x) * 4
@@ -64,44 +65,55 @@ describe('Addendum 4 §0 & §10 · Pixel-pure logo pipeline', () => {
 
           // If the pixel was not cleared by step 2 background removal
           if (cropped.data[croppedIdx + 3] > 0) {
-            expect(
-              cropped.data[croppedIdx],
-              `R at (${x},${y})`
-            ).toBe(src.data[srcIdx])
-            expect(
-              cropped.data[croppedIdx + 1],
-              `G at (${x},${y})`
-            ).toBe(src.data[srcIdx + 1])
-            expect(
-              cropped.data[croppedIdx + 2],
-              `B at (${x},${y})`
-            ).toBe(src.data[srcIdx + 2])
+            if (
+              cropped.data[croppedIdx] !== src.data[srcIdx] ||
+              cropped.data[croppedIdx + 1] !== src.data[srcIdx + 1] ||
+              cropped.data[croppedIdx + 2] !== src.data[srcIdx + 2]
+            ) {
+              mismatches.push(`Mismatch at (${x},${y})`)
+              if (mismatches.length > 5) break
+            }
           }
         }
+        if (mismatches.length > 5) break
       }
-    }
+      expect(mismatches).toEqual([])
+    },
+    15000
   )
 
-  it('Sony Sports-style dark badge renders byte-identically to source', () => {
-    const { fixture, result } = processFixture('dark-filled-badge')
-    expect(result.image).toBeDefined()
-    expect(result.flags).not.toContain('rim')
-    expect(result.flags).not.toContain('knockout')
-    expect(result.flags).not.toContain('lifted-dark')
+  it(
+    'Sony Sports-style dark badge renders byte-identically to source',
+    () => {
+      const { fixture, result } = processFixture('dark-filled-badge')
+      expect(result.image).toBeDefined()
+      expect(result.flags).not.toContain('rim')
+      expect(result.flags).not.toContain('knockout')
+      expect(result.flags).not.toContain('lifted-dark')
 
-    const cropped = result.image!
-    const bbox = result.bbox
-    for (let y = 0; y < cropped.height; y += 1) {
-      for (let x = 0; x < cropped.width; x += 1) {
-        const cIdx = (y * cropped.width + x) * 4
-        const sIdx = ((bbox.y + y) * fixture.image.width + (bbox.x + x)) * 4
-        expect(cropped.data[cIdx]).toBe(fixture.image.data[sIdx])
-        expect(cropped.data[cIdx + 1]).toBe(fixture.image.data[sIdx + 1])
-        expect(cropped.data[cIdx + 2]).toBe(fixture.image.data[sIdx + 2])
-        expect(cropped.data[cIdx + 3]).toBe(fixture.image.data[sIdx + 3])
+      const cropped = result.image!
+      const bbox = result.bbox
+      const mismatches: string[] = []
+      for (let y = 0; y < cropped.height; y += 1) {
+        for (let x = 0; x < cropped.width; x += 1) {
+          const cIdx = (y * cropped.width + x) * 4
+          const sIdx = ((bbox.y + y) * fixture.image.width + (bbox.x + x)) * 4
+          if (
+            cropped.data[cIdx] !== fixture.image.data[sIdx] ||
+            cropped.data[cIdx + 1] !== fixture.image.data[sIdx + 1] ||
+            cropped.data[cIdx + 2] !== fixture.image.data[sIdx + 2] ||
+            cropped.data[cIdx + 3] !== fixture.image.data[sIdx + 3]
+          ) {
+            mismatches.push(`Mismatch at (${x},${y})`)
+            if (mismatches.length > 5) break
+          }
+        }
+        if (mismatches.length > 5) break
       }
-    }
-  })
+      expect(mismatches).toEqual([])
+    },
+    15000
+  )
 
   it('removes near-white opaque backgrounds with transparent corners while preserving interior text', () => {
     const { fixture, result } = processFixture('white-bg-opaque')

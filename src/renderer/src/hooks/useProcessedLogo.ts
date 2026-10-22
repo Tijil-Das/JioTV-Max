@@ -8,13 +8,18 @@ import { getProcessedLogo, type ProcessedLogo } from '@/lib/logo/logoService'
  * are processed first.
  */
 export function useProcessedLogo(
-  channel: Pick<Channel, 'id' | 'logoUrl'>,
+  channel?: Pick<Channel, 'id' | 'logoUrl'> | null,
   priority: 'visible' | 'idle' = 'idle'
 ): { logo: ProcessedLogo | null; loading: boolean } {
   const [logo, setLogo] = useState<ProcessedLogo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!channel) {
+      setLogo(null)
+      setLoading(false)
+      return
+    }
     let alive = true
     void getProcessedLogo(channel, priority).then((result) => {
       if (!alive) return
@@ -24,7 +29,7 @@ export function useProcessedLogo(
     return () => {
       alive = false
     }
-  }, [channel.id, channel.logoUrl, priority])
+  }, [channel?.id, channel?.logoUrl, priority])
 
   return { logo, loading }
 }

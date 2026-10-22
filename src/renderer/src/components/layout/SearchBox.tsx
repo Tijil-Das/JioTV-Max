@@ -10,6 +10,7 @@ import { getNowNext } from '@/lib/time'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { ChannelListRow } from '@/components/channels/ChannelListRow'
+import { smartSearchChannels } from '@/lib/search/smartSearch'
 import type { Channel } from '@shared/types'
 
 /**
@@ -32,20 +33,7 @@ export function SearchBox(): JSX.Element {
   const now = useNow()
 
   const results = useMemo(() => {
-    const term = debouncedQuery.trim().toLowerCase()
-    if (!term) return []
-    return channels
-      .filter((channel) => {
-        const current = getNowNext(epg[channel.id] ?? [], now).current
-        return (
-          channel.name.toLowerCase().includes(term) ||
-          channel.language.toLowerCase().includes(term) ||
-          channel.category.includes(term) ||
-          channel.number.toString().includes(term) ||
-          current?.title.toLowerCase().includes(term)
-        )
-      })
-      .slice(0, 6)
+    return smartSearchChannels(debouncedQuery, channels, epg, now, 10)
   }, [channels, debouncedQuery, epg, now])
 
   useEffect(() => {

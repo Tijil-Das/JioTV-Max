@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { Readable } from 'node:stream'
 import sharp from 'sharp'
 import { PLAYER_UA, withHdneaCookie } from './jio-headers'
 
@@ -157,8 +158,12 @@ function rewriteMpd(
   // 2. Remove any original <BaseURL> tags (root or nested)
   output = output.replace(/<BaseURL[^>]*>[\s\S]*?<\/BaseURL>/gi, '')
 
-  // 3. Inject local relay BaseURL right after <MPD>
-  output = output.replace(/(<MPD\b[^>]*>)/i, `$1\n  <BaseURL>${localBase}</BaseURL>`)
+  // 3. Inject local relay BaseURL and synchronized UTCTiming right after <MPD>
+  const hostName = request.headers.host || '127.0.0.1'
+  const utcTiming = !output.includes('<UTCTiming')
+    ? `\n  <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="http://${hostName}/dashtime"/>`
+    : ''
+  output = output.replace(/(<MPD\b[^>]*>)/i, `$1${utcTiming}\n  <BaseURL>${localBase}</BaseURL>`)
 
   // 4. Rewrite any absolute URLs matching baseClean (including templated $Number$ segments)
   if (baseClean) {
@@ -375,6 +380,35 @@ export class MediaRelay {
   private readonly channelLogos = new Map<string, string>()
   private readonly normalizedLogoCache = new Map<string, Buffer>()
   private channelFetchingPromise: Promise<void> | null = null
+  private cdnPublishTime: Date | null = null
+  private cdnPublishFetchedAt = 0
+
+  /**
+   * Caches upstream CDN clock from MPD publishTime so /dashtime serves the exact
+   * broadcaster time rather than local machine clock (matching jiotv_go).
+   */
+  recordCdnPublishTime(publishTimeStr: string): void {
+    try {
+      const parsed = new Date(publishTimeStr)
+      if (!isNaN(parsed.getTime())) {
+        this.cdnPublishTime = parsed
+        this.cdnPublishFetchedAt = Date.now()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Returns the CDN's extrapolated current time based on observed publishTime.
+   */
+  getCdnNow(): Date {
+    if (!this.cdnPublishTime || this.cdnPublishFetchedAt === 0) {
+      return new Date()
+    }
+    const elapsed = Math.max(0, Date.now() - this.cdnPublishFetchedAt)
+    return new Date(this.cdnPublishTime.getTime() + elapsed)
+  }
 
   get running(): boolean {
     return this.server !== null
@@ -869,18 +903,41 @@ export class MediaRelay {
           return
         }
 
-        const body = Buffer.from(await upstream.arrayBuffer())
-        if (!range && upstream.status === 200) {
-          this.rememberSegment(
-            cacheKey,
-            body,
-            contentType,
-            upstream.headers.get('accept-ranges') ?? undefined
-          )
-        }
-
         copyHeaders(upstream.headers, res)
         res.writeHead(upstream.status, CORS_HEADERS)
+
+        if (upstream.body) {
+          const nodeStream = Readable.fromWeb(upstream.body as import('stream/web').ReadableStream)
+          const chunks: Buffer[] = []
+          const acceptRanges = upstream.headers.get('accept-ranges') ?? undefined
+
+          nodeStream.on('data', (chunk: Buffer) => {
+            if (!range && upstream.status === 200 && chunks.length < 300) {
+              chunks.push(Buffer.from(chunk))
+            }
+          })
+
+          nodeStream.on('end', () => {
+            if (!range && upstream.status === 200 && chunks.length > 0) {
+              this.rememberSegment(
+                cacheKey,
+                Buffer.concat(chunks),
+                contentType,
+                acceptRanges
+              )
+            }
+          })
+
+          nodeStream.on('error', (err) => {
+            console.warn('[MediaRelay] /raw stream error:', err)
+            if (!res.writableEnded) res.end()
+          })
+
+          nodeStream.pipe(res)
+          return
+        }
+
+        const body = Buffer.from(await upstream.arrayBuffer())
         res.end(body)
         return
       } catch (error) {
@@ -990,18 +1047,42 @@ export class MediaRelay {
           return
         }
 
-        const body = Buffer.from(await upstream.arrayBuffer())
-        if (!range && upstream.status === 200) {
-          this.rememberSegment(
-            cacheKey,
-            body,
-            upstream.headers.get('content-type') ?? '',
-            upstream.headers.get('accept-ranges') ?? undefined
-          )
-        }
-
         copyHeaders(upstream.headers, res)
         res.writeHead(upstream.status, CORS_HEADERS)
+
+        if (upstream.body) {
+          const nodeStream = Readable.fromWeb(upstream.body as import('stream/web').ReadableStream)
+          const chunks: Buffer[] = []
+          const contentType = upstream.headers.get('content-type') ?? ''
+          const acceptRanges = upstream.headers.get('accept-ranges') ?? undefined
+
+          nodeStream.on('data', (chunk: Buffer) => {
+            if (!range && upstream.status === 200 && chunks.length < 300) {
+              chunks.push(Buffer.from(chunk))
+            }
+          })
+
+          nodeStream.on('end', () => {
+            if (!range && upstream.status === 200 && chunks.length > 0) {
+              this.rememberSegment(
+                cacheKey,
+                Buffer.concat(chunks),
+                contentType,
+                acceptRanges
+              )
+            }
+          })
+
+          nodeStream.on('error', (err) => {
+            console.warn('[MediaRelay] /seg stream error:', err)
+            if (!res.writableEnded) res.end()
+          })
+
+          nodeStream.pipe(res)
+          return
+        }
+
+        const body = Buffer.from(await upstream.arrayBuffer())
         res.end(body)
         return
       } catch (error) {
@@ -1016,14 +1097,14 @@ export class MediaRelay {
     // server time rather than the (potentially skewed) client clock.
     // Mirrors jiotv_go's /dashtime endpoint exactly.
     if (url.pathname === '/dashtime') {
-      const now = new Date().toISOString()
+      const now = this.getCdnNow()
       res.writeHead(200, {
         ...CORS_HEADERS,
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
         'Cache-Control': 'no-store, no-cache',
-        'Date': new Date().toUTCString()
+        'Date': now.toUTCString()
       })
-      res.end(JSON.stringify({ time: now }))
+      res.end(now.toISOString())
       return
     }
 
@@ -1168,6 +1249,10 @@ export class MediaRelay {
         contentType.includes('dash') || text.trimStart().startsWith('<?xml') || text.includes('<MPD')
       let rewritten: string
       if (isMpd) {
+        const ptMatch = text.match(/publishTime="([^"]+)"/i)
+        if (ptMatch && ptMatch[1]) {
+          this.recordCdnPublishTime(ptMatch[1])
+        }
         const localBase = `http://${req.headers.host}/proxy-segment/${id}/`
         const result = rewriteMpd(text, session.manifestUrl, localBase, req, id)
         session.segmentBase = result.segmentBase

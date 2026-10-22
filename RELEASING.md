@@ -43,10 +43,16 @@ git push --follow-tags
 ### 4. CI Automated Build (Windows x64)
 The GitHub Actions workflow in `.github/workflows/release.yml` triggers on the `v*` tag:
 - Runs on `windows-latest` using `pnpm`.
-- `pnpm install` verifies the castLabs Widevine runtime and signature (`electron.exe.sig`).
-- `extraFiles` bundles `JioTv Max.exe.sig` alongside the binary before installer generation.
+- `pnpm install` verifies the castLabs Widevine runtime.
+- `afterPack` hook (`scripts/after-pack.cjs`) runs CastLabs VMP signing (`evs-vmp sign` or `python -m castlabs_evs.vmp sign-pkg`) on the final `release/win-unpacked` directory, generating the valid `JioTv Max.exe.sig` for the final renamed executable before NSIS packaging.
 - Produces the NSIS installer (`JioTv-Max-<version>-setup.exe`), differential `.blockmap` file, and `latest.yml`.
 - Uploads the artifacts to a new **Draft** GitHub Release.
+
+#### Required CI Secrets for CastLabs EVS:
+Add these in **GitHub Settings → Secrets and variables → Actions**:
+- `EVS_ACCESS_TOKEN` (or `CASTLABS_EVS_TOKEN`): Token/API key issued by CastLabs for VMP signing.
+- `EVS_ORGANIZATION`: The EVS organization identifier associated with the signing certificate.
+- `GH_TOKEN`: Automatically provided by GitHub Actions (`${{ secrets.GITHUB_TOKEN }}`).
 
 ### 5. Review & Publish
 1. Open GitHub: **Releases** → find the newly drafted release corresponding to `vX.Y.Z`.

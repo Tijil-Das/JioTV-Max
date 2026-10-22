@@ -455,8 +455,13 @@ export function useMediaPlayer({
             useNativeHlsForFairPlay: false,
             lowLatencyMode: false,
             inaccurateManifestTolerance: 0,
+            bufferBehind: 15,
+            bufferingGoal: 25,
             rebufferingGoal: 2,
-            bufferingGoal: 10
+            stallEnabled: true,
+            stallThreshold: 1,
+            stallSkip: 0.1,
+            safeSeekEndOffset: 0.5
           }
         })
         await player.load(fresh.url, resumeAt, 'application/dash+xml')
@@ -570,6 +575,9 @@ export function useMediaPlayer({
       fail('The video could not be decoded. Try another quality or channel.', false)
     }
 
+    // Ensure micro-catchup speed adjustments sound natural without pitch distortion
+    video.preservesPitch = true
+
     video.addEventListener('playing', onPlaying)
     video.addEventListener('play', onPlay)
     video.addEventListener('waiting', onWaiting)
@@ -622,6 +630,14 @@ export function useMediaPlayer({
           // to immediately re-fetch everything from the CDN.
           backBufferLength: 90,
           maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          highBufferWatchdogPeriod: 2,
+          nudgeOffset: 0.1,
+          nudgeMaxRetry: 5,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 6,
+          liveDurationInfinity: true,
           capLevelToPlayerSize: false,
           startLevel: -1,
           abrEwmaDefaultEstimate: 20_000_000,
@@ -964,9 +980,12 @@ export function useMediaPlayer({
             // buffering goal multiplies segment requests needed before playback
             // starts. Keep DRM buffer lean; HLS fallback uses original values.
             // Mirrors jiotv_go: bufferBehind: isDRM ? 2 : 5
-            bufferBehind: activeStream.isDrm ? 2 : 5,
-            bufferingGoal: activeStream.isDrm ? 6 : 30,
+            bufferBehind: 15,
+            bufferingGoal: 25,
             rebufferingGoal: 2,
+            stallEnabled: true,
+            stallThreshold: 1,
+            stallSkip: 0.1,
             // Leave a half-second guard at the absolute live edge.
             safeSeekEndOffset: 0.5,
             // Cap retries: each failed segment would otherwise multiply into

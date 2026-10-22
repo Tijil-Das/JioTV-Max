@@ -347,6 +347,41 @@ export function PlayerPage(): JSX.Element {
     setPlaying(!isPlaying)
   }, [isPlaying, setPlaying, wake])
 
+  // Tracks whether the viewer deliberately seeked backward into DVR history
+  const userRewoundRef = useRef(false)
+
+  // Reset rewind state when changing channels
+  useEffect(() => {
+    userRewoundRef.current = false
+  }, [channelId])
+
+  const handleSeek = useCallback(
+    (target: number) => {
+      wake()
+      const range = engine.seekRange
+      if (range && target >= range.end - 2) {
+        userRewoundRef.current = false
+        const media = videoRef.current
+        if (media && media.playbackRate !== 1.0) media.playbackRate = 1.0
+        engine.goLive()
+      } else {
+        userRewoundRef.current = true
+        engine.seekTo(target)
+      }
+    },
+    [engine, videoRef, wake]
+  )
+
+  const handleGoLive = useCallback(() => {
+    wake()
+    userRewoundRef.current = false
+    const media = videoRef.current
+    if (media && media.playbackRate !== 1.0) {
+      media.playbackRate = 1.0
+    }
+    engine.goLive()
+  }, [engine, videoRef, wake])
+
   const rewind5 = useCallback(() => {
     wake()
     const media = videoRef.current
@@ -360,6 +395,7 @@ export function PlayerPage(): JSX.Element {
       console.log('[PlayerPage] Cannot rewind 5s: reached earliest live buffer boundary')
       return
     }
+    userRewoundRef.current = true
     engine.seekTo(target)
   }, [engine, videoRef, wake])
 
@@ -371,11 +407,87 @@ export function PlayerPage(): JSX.Element {
     const maxTime = range ? range.end - 0.5 : media.duration
     const target = media.currentTime + 5
     if (range && target >= maxTime) {
+      userRewoundRef.current = false
+      if (media.playbackRate !== 1.0) media.playbackRate = 1.0
       engine.goLive()
       return
     }
+    if (range && target >= range.end - 2) {
+      userRewoundRef.current = false
+      if (media.playbackRate !== 1.0) media.playbackRate = 1.0
+    }
     engine.seekTo(Math.min(target, maxTime))
   }, [engine, videoRef, wake])
+
+  // Continuous live synchronization and anti-lag guard.
+  // When the window is minimized or off-screen, or playing in background,
+  // prevents the live stream from lagging behind.
+  useEffect(() => {
+    const isLive = Boolean(stream?.isLive)
+    if (!isLive) return
+
+    const syncTick = () => {
+      const media = videoRef.current
+      const range = engine.seekRange
+      if (!media || !range || !isPlaying || userRewoundRef.current) return
+
+      const behind = Math.max(0, range.end - media.currentTime)
+
+      // If playing live and slight drift occurred (between 2.5s and 8s behind):
+      // Gently ramp playbackRate to 1.05x to smoothly eliminate drift without buffering
+      if (behind > 2.5 && behind <= 8) {
+        if (media.playbackRate !== 1.05) {
+          media.playbackRate = 1.05
+        }
+      } else if (behind <= 1.2) {
+        // Successfully caught up to real-time live edge
+        if (media.playbackRate !== 1.0) {
+          media.playbackRate = 1.0
+        }
+      } else if (behind > 12) {
+        // Significant drift accumulated (e.g. system wake / heavy occlusion)
+        // Hard snap right back to live edge
+        if (media.playbackRate !== 1.0) media.playbackRate = 1.0
+        engine.goLive()
+      }
+    }
+
+    const timer = window.setInterval(syncTick, 1000)
+
+    // Visibility / un-minimize handler:
+    // If the window is restored from minimized or brought back into focus,
+    // immediately ensure playback is active and catch up if behind.
+    const onVisibility = () => {
+      const media = videoRef.current
+      if (!media) return
+      if (document.visibilityState === 'visible') {
+        if (isPlaying && media.paused) {
+          void media.play().catch(() => undefined)
+        }
+        if (!userRewoundRef.current) {
+          const range = engine.seekRange
+          const behind = range ? Math.max(0, range.end - media.currentTime) : 0
+          if (behind > 3) {
+            if (media.playbackRate !== 1.0) media.playbackRate = 1.0
+            engine.goLive()
+          }
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onVisibility)
+
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onVisibility)
+      const media = videoRef.current
+      if (media && media.playbackRate !== 1.0) {
+        media.playbackRate = 1.0
+      }
+    }
+  }, [engine, isPlaying, stream?.isLive, videoRef])
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -789,8 +901,8 @@ export function PlayerPage(): JSX.Element {
             behindLive={liveEdge.behindLive}
             atLiveEdge={liveEdge.atLiveEdge}
             isLive={Boolean(stream?.isLive)}
-            onSeek={engine.seekTo}
-            onGoLive={engine.goLive}
+            onSeek={handleSeek}
+            onGoLive={handleGoLive}
           />
         </div>
 

@@ -43,7 +43,8 @@ if (!app.isPackaged) {
 }
 
 let mainWindow: BrowserWindow | null = null
-let powerBlockerId: number | null = null
+let appSuspensionBlockerId: number | null = null
+let displaySleepBlockerId: number | null = null
 let quitting = false
 
 const relay = new MediaRelay()
@@ -207,9 +208,18 @@ if (hasCastLabsComponents) {
 }
 
 
-// Hardware video decode / autoplay are essential for a TV-like experience.
+// Hardware video decode, autoplay, and uninterrupted full-power background streaming.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
+// Prevent Chromium from throttling DOM timers, suspending media pipelines, or lowering OS thread priority when minimized or occluded
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-media-suspend')
+app.commandLine.appendSwitch(
+  'disable-features',
+  'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes'
+)
 app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://127.0.0.1,http://localhost')
 
 const gotLock = app.requestSingleInstanceLock()
@@ -253,7 +263,8 @@ async function createWindow(): Promise<void> {
       sandbox: false,
       webSecurity: true,
       spellcheck: false,
-      autoplayPolicy: 'no-user-gesture-required'
+      autoplayPolicy: 'no-user-gesture-required',
+      backgroundThrottling: false
     }
   })
 
@@ -531,11 +542,23 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.setPlayerActive, (_event, active: boolean): void => {
-    if (active && powerBlockerId === null) {
-      powerBlockerId = powerSaveBlocker.start('prevent-display-sleep')
-    } else if (!active && powerBlockerId !== null) {
-      if (powerSaveBlocker.isStarted(powerBlockerId)) powerSaveBlocker.stop(powerBlockerId)
-      powerBlockerId = null
+    if (active) {
+      if (appSuspensionBlockerId === null) {
+        // Prevent Windows OS from suspending network, timer threads or process execution when minimized
+        appSuspensionBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+      }
+      if (displaySleepBlockerId === null) {
+        displaySleepBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+      }
+    } else {
+      if (appSuspensionBlockerId !== null) {
+        if (powerSaveBlocker.isStarted(appSuspensionBlockerId)) powerSaveBlocker.stop(appSuspensionBlockerId)
+        appSuspensionBlockerId = null
+      }
+      if (displaySleepBlockerId !== null) {
+        if (powerSaveBlocker.isStarted(displaySleepBlockerId)) powerSaveBlocker.stop(displaySleepBlockerId)
+        displaySleepBlockerId = null
+      }
     }
   })
 
@@ -632,6 +655,14 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   if (isInstallingUpdate()) return
   quitting = true
+  if (appSuspensionBlockerId !== null && powerSaveBlocker.isStarted(appSuspensionBlockerId)) {
+    powerSaveBlocker.stop(appSuspensionBlockerId)
+    appSuspensionBlockerId = null
+  }
+  if (displaySleepBlockerId !== null && powerSaveBlocker.isStarted(displaySleepBlockerId)) {
+    powerSaveBlocker.stop(displaySleepBlockerId)
+    displaySleepBlockerId = null
+  }
   void relay.stop()
 })
 

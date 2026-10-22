@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process')
+const childProcess = require('node:child_process')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -10,7 +10,7 @@ const fs = require('node:fs')
  * application executable (e.g. "JioTv Max.exe.sig") BEFORE electron-builder
  * packages the NSIS installer and generates the .blockmap differential file.
  */
-module.exports = async function afterPack(context) {
+module.exports = async function afterPack(context, cp = childProcess) {
   if (context.electronPlatformName !== 'win32') {
     return
   }
@@ -19,31 +19,30 @@ module.exports = async function afterPack(context) {
   console.log(`\n[afterPack] Running castLabs EVS VMP signing on: ${appOutDir}`)
 
   // 1. Try 'evs-vmp' CLI
-  let signResult = spawnSync('evs-vmp', ['sign', appOutDir], {
+  let signResult = cp.spawnSync('evs-vmp', ['sign', appOutDir], {
     stdio: 'inherit',
     shell: true
   })
 
   // 2. Fallback to python castlabs_evs module: python -m castlabs_evs.vmp sign-pkg
   if (signResult.status !== 0) {
-    signResult = spawnSync('python', ['-m', 'castlabs_evs.vmp', 'sign-pkg', appOutDir], {
+    signResult = cp.spawnSync('python', ['-m', 'castlabs_evs.vmp', 'sign-pkg', appOutDir], {
       stdio: 'inherit',
       shell: true
     })
   }
 
-  if (signResult.status !== 0) {
-    if (process.env.CI || process.env.REQUIRE_VMP) {
-      throw new Error(
-        `[afterPack] CastLabs VMP signing failed (exit code ${signResult.status}). Ensure EVS credentials and evs-vmp are configured.`
-      )
+  if (signResult.status !== 0 || signResult.error) {
+    if (process.env.SKIP_VMP_SIGN === 'true') {
+      console.warn('\n[afterPack] [WARNING] SKIP_VMP_SIGN=true; VMP signature generation was skipped.\n')
+      return
     }
 
-    console.warn('\n[afterPack] [WARNING] evs-vmp CLI was not found or failed.')
-    console.warn(
-      '[afterPack] VMP signature generation was skipped. (Production releases must run in CI with EVS configured).\n'
+    const errDetail = signResult.error ? signResult.error.message : `exit code ${signResult.status}`
+    throw new Error(
+      `[afterPack] CastLabs VMP signing failed (${errDetail}). Ensure EVS credentials and python -m castlabs_evs.vmp are configured.`
     )
-  } else {
-    console.log('[afterPack] CastLabs VMP signing completed successfully.')
   }
+
+  console.log('[afterPack] CastLabs VMP signing completed successfully.')
 }

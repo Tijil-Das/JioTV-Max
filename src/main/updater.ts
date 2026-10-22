@@ -33,12 +33,27 @@ const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
 
 const pendingPath = (): string => path.join(app.getPath('userData'), 'pending-update.json')
 
-function readPending(): { version: string } | null {
+function isStrictSemVer(v: unknown): v is string {
+  if (typeof v !== 'string') return false
+  if (v.startsWith('v') || v.startsWith('V')) return false
+  return semver.valid(v) !== null && semver.clean(v) === v
+}
+
+function checkAndReadPending(): { version: string } | null {
+  const p = pendingPath()
+  if (!fs.existsSync(p)) return null
   try {
-    return JSON.parse(fs.readFileSync(pendingPath(), 'utf8'))
+    const raw = fs.readFileSync(p, 'utf8')
+    const parsed = JSON.parse(raw)
+    return parsed
   } catch {
+    clearPending()
     return null
   }
+}
+
+function readPending(): { version: string } | null {
+  return checkAndReadPending()
 }
 
 function writePending(version: string): void {
@@ -149,7 +164,12 @@ async function applyPendingUpdateOnLaunch(): Promise<boolean> {
   if (!app.isPackaged) return false
   const pending = readPending()
   if (!pending) return false
-  if (!semver.valid(pending.version) || semver.lte(pending.version, app.getVersion())) {
+  if (
+    !pending ||
+    typeof pending !== 'object' ||
+    !isStrictSemVer(pending.version) ||
+    semver.lte(pending.version, app.getVersion())
+  ) {
     clearPending()
     return false
   }
@@ -164,9 +184,18 @@ async function applyPendingUpdateOnLaunch(): Promise<boolean> {
       return false
     }
     await withTimeout(autoUpdater.downloadUpdate(), DOWNLOAD_TIMEOUT_MS, 'download')
+    if (result.updateInfo?.version && result.updateInfo.version !== pending.version) {
+      writePending(result.updateInfo.version)
+    }
     await sleep(PANEL_PAINT_DELAY_MS)
     installing = true
-    autoUpdater.quitAndInstall(false, true)
+    try {
+      autoUpdater.quitAndInstall(false, true)
+    } catch (quitErr) {
+      installing = false
+      autoUpdater.autoDownload = true
+      throw quitErr
+    }
     return true
   } catch (err) {
     log.error('Install-on-launch failed, starting app normally:', err)
@@ -238,10 +267,29 @@ function isInstallingUpdate(): boolean {
   return installing
 }
 
+function _resetStateForTests(): void {
+  busy = false
+  downloaded = false
+  readyVersion = null
+  installing = false
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  if (panel && !panel.isDestroyed()) {
+    panel.close()
+  }
+  panel = null
+  getMainWindow = () => null
+  configured = false
+}
+
 export {
   initUpdater,
   applyPendingUpdateOnLaunch,
   closeInstallingPanel,
   isInstallingUpdate,
-  installNow
+  installNow,
+  checkNow,
+  _resetStateForTests
 }

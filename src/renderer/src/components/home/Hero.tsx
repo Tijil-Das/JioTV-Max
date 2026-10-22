@@ -428,7 +428,7 @@ export function Hero(): JSX.Element {
             onMouseEnter={() => setMouseActive(true)}
             onMouseLeave={() => setMouseActive(false)}
             onClick={() => activeChannel && watch(activeChannel.id)}
-            className="group/hero relative h-[clamp(480px,65vh,700px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
+            className="group/hero relative h-[clamp(520px,70vh,760px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
           >
             {/* Cinema Stage — full width & height */}
             <div className="relative h-full w-full overflow-hidden">
@@ -728,7 +728,7 @@ export function Hero(): JSX.Element {
                             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
                             selected
                               ? 'opacity-100 scale-105 after:absolute after:inset-[-2px] after:rounded-[16px] after:border-2 after:border-[var(--red-line)] after:content-[""]'
-                              : 'opacity-55 hover:opacity-100 hover:scale-105'
+                              : 'opacity-75 hover:opacity-100 hover:scale-105'
                           )}
                         >
                           <ChannelLogo channelId={channel.id} channel={channel} context="switcher" priority="visible" />

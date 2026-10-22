@@ -474,6 +474,11 @@ const KNOWN_WORDS: string[] = [
 
 const KNOWN_WORDS_SET = new Set(KNOWN_WORDS)
 
+// Persistent caches to eliminate repeated string parsing across keystrokes
+const compoundWordsCache = new Map<string, string[]>()
+const tokenizeCache = new Map<string, string[]>()
+const phoneticCache = new Map<string, string>()
+
 /**
  * Splits glued compound words like "sonythree" -> ["sony", "three"],
  * "starsports" -> ["star", "sports"], "aajtak" -> ["aaj", "tak"].
@@ -482,11 +487,13 @@ export function splitCompoundWords(token: string): string[] {
   if (token.length <= 3) return [token]
   if (KNOWN_WORDS_SET.has(token)) return [token]
 
-  const memo = new Map<string, string[] | null>()
+  const cached = compoundWordsCache.get(token)
+  if (cached) return cached
 
   function segment(s: string): string[] | null {
     if (!s) return []
-    if (memo.has(s)) return memo.get(s)!
+    const fromCache = compoundWordsCache.get(s)
+    if (fromCache) return fromCache
 
     if (KNOWN_WORDS_SET.has(s) || /^\d+$/.test(s)) {
       return [s]
@@ -499,18 +506,21 @@ export function splitCompoundWords(token: string): string[] {
         const restSegments = segment(rest)
         if (restSegments !== null) {
           const result = [prefix, ...restSegments]
-          memo.set(s, result)
+          compoundWordsCache.set(s, result)
           return result
         }
       }
     }
 
-    memo.set(s, null)
     return null
   }
 
   const segments = segment(token)
-  return segments && segments.length > 1 ? segments : [token]
+  const finalResult = segments && segments.length > 1 ? segments : [token]
+  if (compoundWordsCache.size < 5000) {
+    compoundWordsCache.set(token, finalResult)
+  }
+  return finalResult
 }
 
 /**
@@ -539,6 +549,9 @@ export function isSubsequence(needle: string, haystack: string): boolean {
  */
 export function tokenize(text: string): string[] {
   if (!text) return []
+  const cached = tokenizeCache.get(text)
+  if (cached) return cached
+
   let s = text.toLowerCase().trim()
   s = s.replace(/\+/g, ' plus ')
   s = s.replace(/24\s*[x*]\s*7/gi, ' 24 7 ')
@@ -553,51 +566,67 @@ export function tokenize(text: string): string[] {
     const segments = splitCompoundWords(token)
     tokens.push(...segments)
   }
+
+  if (tokenizeCache.size > 5000) tokenizeCache.clear()
+  tokenizeCache.set(text, tokens)
   return tokens
 }
+
+// Reusable static matrix for Damerau-Levenshtein calculation (zero heap allocations)
+const DL_MAX = 36
+const dlMatrix: number[][] = Array.from({ length: DL_MAX }, () => new Array(DL_MAX).fill(0))
+for (let i = 0; i < DL_MAX; i++) dlMatrix[i][0] = i
+for (let j = 0; j < DL_MAX; j++) dlMatrix[0][j] = j
 
 /**
  * Damerau-Levenshtein distance for fuzzy typo matching with transposition support.
  * Treats swapped adjacent characters (e.g. "snoy" -> "sony", "stra" -> "star") as 1 operation.
+ * Utilizes pre-allocated static matrix to eliminate GC allocations and pauses.
  */
 export function damerauLevenshtein(a: string, b: string): number {
   if (a === b) return 0
   if (!a) return b.length
   if (!b) return a.length
-  if (Math.abs(a.length - b.length) > 3) return 99
-
   const m = a.length
   const n = b.length
-  const d: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  if (Math.abs(m - n) > 3) return 99
+  if (m >= DL_MAX || n >= DL_MAX) return 99
 
-  for (let i = 0; i <= m; i++) d[i][0] = i
-  for (let j = 0; j <= n; j++) d[0][j] = j
+  for (let i = 1; i <= m; i++) dlMatrix[i][0] = i
+  for (let j = 1; j <= n; j++) dlMatrix[0][j] = j
 
   for (let i = 1; i <= m; i++) {
+    const aChar = a[i - 1]
     for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      d[i][j] = Math.min(
-        d[i - 1][j] + 1, // deletion
-        d[i][j - 1] + 1, // insertion
-        d[i - 1][j - 1] + cost // substitution
+      const bChar = b[j - 1]
+      const cost = aChar === bChar ? 0 : 1
+      let minVal = Math.min(
+        dlMatrix[i - 1][j] + 1, // deletion
+        dlMatrix[i][j - 1] + 1, // insertion
+        dlMatrix[i - 1][j - 1] + cost // substitution
       )
       // Transposition
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + cost)
+      if (i > 1 && j > 1 && aChar === b[j - 2] && a[i - 2] === bChar) {
+        const transVal = dlMatrix[i - 2][j - 2] + cost
+        if (transVal < minVal) minVal = transVal
       }
+      dlMatrix[i][j] = minVal
     }
   }
 
-  return d[m][n]
+  return dlMatrix[m][n]
 }
 
 /**
  * Generates a phonetic sound-alike representation for Indian TV queries.
  * Normalizes common vowel elongations, consonant variations, and suffixes.
- * (e.g. "soni" -> "sn", "sony" -> "sn", "staar" -> "str", "zeee" -> "s", "kalars" -> "klrs").
+ * Results are cached globally in-memory for sub-microsecond retrieval.
  */
 export function phoneticKey(word: string): string {
   if (!word) return ''
+  const cached = phoneticCache.get(word)
+  if (cached !== undefined) return cached
+
   let s = word.toLowerCase().trim()
   s = s.replace(/ph/g, 'f')
   s = s.replace(/kh/g, 'k')
@@ -626,6 +655,10 @@ export function phoneticKey(word: string): string {
     const rest = s.slice(1).replace(/[aeiou]/g, '')
     s = first + rest
   }
+
+  if (phoneticCache.size < 5000) {
+    phoneticCache.set(word, s)
+  }
   return s
 }
 
@@ -651,8 +684,8 @@ export function matchToken(
     qNum === cNum &&
     (qToken in NUMBER_WORD_MAP ||
       cToken in NUMBER_WORD_MAP ||
-      DIGIT_TO_WORDS[qToken] ||
-      DIGIT_TO_WORDS[cToken])
+      DIGIT_TO_WORDS[qToken] !== undefined ||
+      DIGIT_TO_WORDS[cToken] !== undefined)
   ) {
     return { matched: true, score: 95 }
   }
@@ -674,10 +707,12 @@ export function matchToken(
 
   // 5. Typo tolerance with Damerau-Levenshtein (transposition support)
   if (qToken.length >= 3 && cToken.length >= 3) {
-    const dist = damerauLevenshtein(qToken, cToken)
     const maxAllowed = qToken.length >= 7 ? 2 : 1
-    if (dist <= maxAllowed) {
-      return { matched: true, score: 65 - dist * 15 }
+    if (Math.abs(qToken.length - cToken.length) <= maxAllowed) {
+      const dist = damerauLevenshtein(qToken, cToken)
+      if (dist <= maxAllowed) {
+        return { matched: true, score: 65 - dist * 15 }
+      }
     }
   }
 
@@ -797,6 +832,9 @@ export interface PreparedQuery {
   wantsHD: boolean
   wantsSD: boolean
   targetNum?: string
+  targetBroadcasters: Set<string>
+  targetLanguages: Set<string>
+  targetCategories: Set<string>
 }
 
 export function prepareQuery(rawQuery: string): PreparedQuery {
@@ -820,6 +858,42 @@ export function prepareQuery(rawQuery: string): PreparedQuery {
     filters.quality === 'SD' || queryTokens.includes('sd') || cleanQuery.includes('standard definition')
   const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : undefined)
 
+  // Pre-resolve matched broadcaster networks once per query
+  const targetBroadcasters = new Set<string>()
+  const broadcasterTarget = filters.broadcaster
+  for (const [netKey, netData] of Object.entries(BROADCASTER_NETWORKS)) {
+    if (
+      broadcasterTarget === netKey ||
+      queryTokens.some((t) => netData.aliases.some((a) => a === t || matchToken(t, a).matched))
+    ) {
+      targetBroadcasters.add(netKey)
+    }
+  }
+
+  // Pre-resolve matched languages once per query
+  const targetLanguages = new Set<string>()
+  const filterLang = filters.language?.toLowerCase()
+  if (filterLang) targetLanguages.add(filterLang)
+  for (const qToken of queryTokens) {
+    for (const [lang, aliases] of Object.entries(LANGUAGE_ALIASES)) {
+      if (qToken === lang || aliases.includes(qToken)) {
+        targetLanguages.add(lang)
+      }
+    }
+  }
+
+  // Pre-resolve matched categories once per query
+  const targetCategories = new Set<string>()
+  const filterCat = filters.category?.toLowerCase()
+  if (filterCat) targetCategories.add(filterCat)
+  for (const qToken of queryTokens) {
+    for (const [cat, syns] of Object.entries(CATEGORY_SYNONYMS)) {
+      if (qToken === cat || syns.includes(qToken)) {
+        targetCategories.add(cat)
+      }
+    }
+  }
+
   return {
     query,
     cleanQuery,
@@ -830,7 +904,10 @@ export function prepareQuery(rawQuery: string): PreparedQuery {
     collapsedQuery,
     wantsHD,
     wantsSD,
-    targetNum
+    targetNum,
+    targetBroadcasters,
+    targetLanguages,
+    targetCategories
   }
 }
 
@@ -839,12 +916,15 @@ export interface CachedChannelIndex {
   rawCleanName: string
   nameTokens: string[]
   namePhoneticKeys: string[]
+  namePhoneticSet: Set<string>
   descTokens: string[]
   langTokens: string[]
   catTokens: string[]
   collapsedChannel: string
   isHD: boolean
   popularityBonus: number
+  broadcasterKey?: string
+  quickTokenSet: Set<string>
 }
 
 const channelIndexCache = new WeakMap<Channel, CachedChannelIndex>()
@@ -856,6 +936,7 @@ export function getCachedChannelIndex(channel: Channel): CachedChannelIndex {
     const rawCleanName = channel.name.toLowerCase().trim()
     const nameTokens = tokenize(channel.name)
     const namePhoneticKeys = nameTokens.map((t) => (t.length >= 3 ? phoneticKey(t) : ''))
+    const namePhoneticSet = new Set(namePhoneticKeys.filter(Boolean))
     const descTokens = channel.description ? tokenize(channel.description) : []
     const langTokens = tokenize(channel.language || '')
     const catTokens = tokenize(channel.category || '')
@@ -868,26 +949,83 @@ export function getCachedChannelIndex(channel: Channel): CachedChannelIndex {
       20
     )
 
+    // Pre-determine broadcaster membership
+    let broadcasterKey: string | undefined
+    for (const [netKey, netData] of Object.entries(BROADCASTER_NETWORKS)) {
+      const matchesNetwork = netData.channelKeywords.some((kw) => {
+        const kwTokens = kw.split(/\s+/)
+        return kwTokens.every((k) => nameTokens.some((ct) => ct === k || matchToken(k, ct).matched))
+      })
+      if (matchesNetwork) {
+        broadcasterKey = netKey
+        break
+      }
+    }
+
+    // Quick set for sub-microsecond candidate pruning
+    const quickTokenSet = new Set<string>()
+    for (const t of nameTokens) {
+      quickTokenSet.add(t)
+      const numEquiv = NUMBER_WORD_MAP[t]
+      if (numEquiv) quickTokenSet.add(numEquiv)
+      const words = DIGIT_TO_WORDS[t]
+      if (words) {
+        for (const w of words) quickTokenSet.add(w)
+      }
+    }
+    for (const t of catTokens) quickTokenSet.add(t)
+    for (const t of langTokens) quickTokenSet.add(t)
+    for (const t of descTokens) quickTokenSet.add(t)
+    if (broadcasterKey) quickTokenSet.add(broadcasterKey)
+    quickTokenSet.add(channelNumberStr)
+
     cached = {
       channelNumberStr,
       rawCleanName,
       nameTokens,
       namePhoneticKeys,
+      namePhoneticSet,
       descTokens,
       langTokens,
       catTokens,
       collapsedChannel,
       isHD,
-      popularityBonus
+      popularityBonus,
+      broadcasterKey,
+      quickTokenSet
     }
     channelIndexCache.set(channel, cached)
   }
   return cached
 }
 
+interface CachedProgramInfo {
+  titleTokens: string[]
+  descTokens: string[]
+  startMs: number
+  endMs: number
+}
+
+const programCache = new WeakMap<Program, CachedProgramInfo>()
+
+function getCachedProgramInfo(p: Program): CachedProgramInfo {
+  let cached = programCache.get(p)
+  if (!cached) {
+    cached = {
+      titleTokens: tokenize(p.title),
+      descTokens: p.description ? tokenize(p.description) : [],
+      startMs: Date.parse(p.start),
+      endMs: Date.parse(p.end)
+    }
+    programCache.set(p, cached)
+  }
+  return cached
+}
+
 export interface ChannelScoreContext {
   epgProgram?: Program
-  upcomingPrograms?: Program[]
+  epgProgramInfo?: CachedProgramInfo
+  upcomingPrograms?: { program: Program; info: CachedProgramInfo }[]
   now?: Date
   options?: SmartSearchOptions
   preparedQuery?: PreparedQuery
@@ -919,7 +1057,8 @@ export function scoreChannel(
 
   // Normalize context
   let currentProgram: Program | undefined
-  let upcomingPrograms: Program[] | undefined
+  let currentProgInfo: CachedProgramInfo | undefined
+  let upcomingPrograms: { program: Program; info: CachedProgramInfo }[] | undefined
   let now = new Date()
   let options: SmartSearchOptions | undefined
   let preparedQuery: PreparedQuery | undefined
@@ -927,9 +1066,11 @@ export function scoreChannel(
   if (contextOrEpg) {
     if ('title' in contextOrEpg && typeof contextOrEpg.title === 'string') {
       currentProgram = contextOrEpg as Program
+      currentProgInfo = getCachedProgramInfo(currentProgram)
     } else {
       const ctx = contextOrEpg as ChannelScoreContext
       currentProgram = ctx.epgProgram
+      currentProgInfo = ctx.epgProgramInfo ?? (currentProgram ? getCachedProgramInfo(currentProgram) : undefined)
       upcomingPrograms = ctx.upcomingPrograms
       if (ctx.now) now = ctx.now
       options = ctx.options
@@ -956,7 +1097,7 @@ export function scoreChannel(
   }
 
   const prep = preparedQuery ?? prepareQuery(query)
-  const { cleanQuery, filters, queryTokens, effectiveQueryTokens, collapsedQuery, wantsHD, wantsSD, targetNum } = prep
+  const { cleanQuery, queryTokens, effectiveQueryTokens, collapsedQuery, wantsHD, wantsSD, targetNum } = prep
 
   if (queryTokens.length === 0 && !targetNum) {
     return { channel, score: 0 }
@@ -968,18 +1109,17 @@ export function scoreChannel(
     rawCleanName,
     nameTokens: channelNameTokens,
     descTokens: channelDescTokens,
-    langTokens: channelLangTokens,
-    catTokens: channelCatTokens,
     collapsedChannel,
     isHD,
-    popularityBonus
+    popularityBonus,
+    broadcasterKey
   } = idx
 
   let score = 0
   let matchedReason: string | undefined
 
-  const currentProgTokens = currentProgram ? tokenize(currentProgram.title) : []
-  const currentDescTokens = currentProgram?.description ? tokenize(currentProgram.description) : []
+  const currentProgTokens = currentProgInfo ? currentProgInfo.titleTokens : []
+  const currentDescTokens = currentProgInfo ? currentProgInfo.descTokens : []
 
   // Track multi-parameter matched dimensions for synergy scoring
   const matchedDimensions = new Set<'number' | 'name' | 'language' | 'category' | 'quality' | 'broadcaster' | 'epg'>()
@@ -1069,55 +1209,51 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 5. Broadcaster Network Intent
   // -------------------------------------------------------------------------
-  const broadcasterTarget = filters.broadcaster
-  for (const [netKey, netData] of Object.entries(BROADCASTER_NETWORKS)) {
-    const isTarget =
-      broadcasterTarget === netKey ||
-      queryTokens.some((t) => netData.aliases.some((a) => a === t || matchToken(t, a).matched))
-    if (isTarget) {
-      const matchesNetwork = netData.channelKeywords.some((kw) => {
-        const kwTokens = kw.split(/\s+/)
-        return kwTokens.every((k) => channelNameTokens.some((ct) => ct === k || matchToken(k, ct).matched))
-      })
-      if (matchesNetwork) {
-        score += 260
-        matchedDimensions.add('broadcaster')
-        if (!matchedReason) matchedReason = `${netKey.toUpperCase()} Network`
-      }
-    }
+  if (broadcasterKey && prep.targetBroadcasters.has(broadcasterKey)) {
+    score += 260
+    matchedDimensions.add('broadcaster')
+    if (!matchedReason) matchedReason = `${broadcasterKey.toUpperCase()} Network`
   }
 
   // -------------------------------------------------------------------------
   // 6. Language Matching
   // -------------------------------------------------------------------------
-  const targetLang = filters.language
-  for (const qToken of queryTokens) {
-    for (const [lang, aliases] of Object.entries(LANGUAGE_ALIASES)) {
-      const isLangQuery = qToken === lang || aliases.includes(qToken) || targetLang === lang
-      if (isLangQuery) {
-        if (channelLangTokens.some((t) => t === lang || aliases.includes(t))) {
-          score += 200
-          matchedDimensions.add('language')
-          if (!matchedReason) matchedReason = channel.language
+  if (prep.targetLanguages.size > 0) {
+    const normLang = channel.language?.toLowerCase()
+    let matchedLang = normLang ? prep.targetLanguages.has(normLang) : false
+    if (!matchedLang) {
+      for (const t of idx.langTokens) {
+        if (prep.targetLanguages.has(t)) {
+          matchedLang = true
+          break
         }
       }
+    }
+    if (matchedLang) {
+      score += 200
+      matchedDimensions.add('language')
+      if (!matchedReason) matchedReason = channel.language
     }
   }
 
   // -------------------------------------------------------------------------
   // 7. Category and Genre Synonyms
   // -------------------------------------------------------------------------
-  const targetCat = filters.category
-  for (const qToken of queryTokens) {
-    for (const [cat, syns] of Object.entries(CATEGORY_SYNONYMS)) {
-      const isCatQuery = qToken === cat || syns.includes(qToken) || targetCat === cat
-      if (isCatQuery) {
-        if (channelCatTokens.some((t) => t === cat || syns.includes(t))) {
-          score += 180
-          matchedDimensions.add('category')
-          if (!matchedReason) matchedReason = channel.category
+  if (prep.targetCategories.size > 0) {
+    const normCat = channel.category?.toLowerCase()
+    let matchedCat = normCat ? prep.targetCategories.has(normCat) : false
+    if (!matchedCat) {
+      for (const t of idx.catTokens) {
+        if (prep.targetCategories.has(t)) {
+          matchedCat = true
+          break
         }
       }
+    }
+    if (matchedCat) {
+      score += 180
+      matchedDimensions.add('category')
+      if (!matchedReason) matchedReason = channel.category
     }
   }
 
@@ -1195,10 +1331,10 @@ export function scoreChannel(
   // Search upcoming EPG programs (up to 4 hours ahead)
   if (upcomingPrograms && upcomingPrograms.length > 0 && queryTokens.length > 0) {
     const nowMs = now.getTime()
-    for (const prog of upcomingPrograms) {
-      const startMs = Date.parse(prog.start)
-      if (startMs > nowMs && startMs - nowMs <= 4 * 3600 * 1000) {
-        const pTokens = tokenize(prog.title)
+    for (const item of upcomingPrograms) {
+      const { program: prog, info: progInfo } = item
+      if (progInfo.startMs > nowMs && progInfo.startMs - nowMs <= 4 * 3600 * 1000) {
+        const pTokens = progInfo.titleTokens
         let matches = 0
         for (const qToken of queryTokens) {
           if (pTokens.some((pt) => pt === qToken || matchToken(qToken, pt).matched)) {
@@ -1206,7 +1342,7 @@ export function scoreChannel(
           }
         }
         if (matches === queryTokens.length) {
-          const minutesUntil = Math.max(0, (startMs - nowMs) / 60000)
+          const minutesUntil = Math.max(0, (progInfo.startMs - nowMs) / 60000)
           const timeBonus = Math.max(80, 260 - Math.round(minutesUntil * 0.7))
           score += timeBonus
           if (!matchedReason) {
@@ -1316,24 +1452,67 @@ export function smartSearchWithDetails(
       continue
     }
 
+    const idx = getCachedChannelIndex(channel)
     const programs = epg[channel.id]
+    const hasAnyEpg = Boolean(programs && programs.length > 0)
+
+    // Sub-microsecond candidate filter: check if the channel has any match on number, name, tokens, or network
+    const hasNumMatch = Boolean(prep.targetNum && idx.channelNumberStr.startsWith(prep.targetNum))
+    const hasNamePrefix = idx.rawCleanName.startsWith(prep.cleanQuery) || idx.rawCleanName === prep.cleanQuery
+    const hasBroadcasterMatch = Boolean(idx.broadcasterKey && prep.targetBroadcasters.has(idx.broadcasterKey))
+    const hasCategoryMatch = prep.targetCategories.size > 0 && (
+      prep.targetCategories.has(channel.category?.toLowerCase()) ||
+      idx.catTokens.some((t) => prep.targetCategories.has(t))
+    )
+    const hasLanguageMatch = prep.targetLanguages.size > 0 && (
+      prep.targetLanguages.has(channel.language?.toLowerCase()) ||
+      idx.langTokens.some((t) => prep.targetLanguages.has(t))
+    )
+    const hasTokenMatch = prep.queryTokens.some((qt) => {
+      if (idx.quickTokenSet.has(qt)) return true
+      if (qt.length >= 2 && idx.nameTokens.some((nt) => nt.startsWith(qt))) return true
+      const qk = qt.length >= 3 ? phoneticKey(qt) : ''
+      if (qk && idx.namePhoneticSet.has(qk)) return true
+      return false
+    })
+    const hasCollapsedMatch = prep.collapsedQuery.length >= 3 && (
+      idx.collapsedChannel.includes(prep.collapsedQuery) ||
+      isSubsequence(prep.collapsedQuery, idx.collapsedChannel)
+    )
+
+    // Skip channel if there is no possibility of matching
+    if (
+      !hasNumMatch &&
+      !hasNamePrefix &&
+      !hasTokenMatch &&
+      !hasBroadcasterMatch &&
+      !hasCategoryMatch &&
+      !hasLanguageMatch &&
+      !hasCollapsedMatch &&
+      !hasAnyEpg
+    ) {
+      continue
+    }
+
     let currentProgram: Program | undefined
-    const upcomingPrograms: Program[] = []
+    let currentProgInfo: CachedProgramInfo | undefined
+    const upcomingPrograms: { program: Program; info: CachedProgramInfo }[] = []
 
     if (programs && programs.length > 0) {
       for (const p of programs) {
-        const start = Date.parse(p.start)
-        const end = Date.parse(p.end)
-        if (nowMs >= start && nowMs <= end) {
+        const info = getCachedProgramInfo(p)
+        if (nowMs >= info.startMs && nowMs <= info.endMs) {
           currentProgram = p
-        } else if (start > nowMs) {
-          upcomingPrograms.push(p)
+          currentProgInfo = info
+        } else if (info.startMs > nowMs) {
+          upcomingPrograms.push({ program: p, info })
         }
       }
     }
 
     const context: ChannelScoreContext = {
       epgProgram: currentProgram,
+      epgProgramInfo: currentProgInfo,
       upcomingPrograms,
       now,
       options,
@@ -1356,4 +1535,5 @@ export function smartSearchWithDetails(
 
   return scored
 }
+
 

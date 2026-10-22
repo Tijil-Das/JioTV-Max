@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, Clock3, Search, X } from 'lucide-react'
+import { ArrowRight, Clock3, Loader2, Search, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tween } from '@/lib/motion'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useNow } from '@/hooks/useNow'
-import { getNowNext } from '@/lib/time'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { ChannelListRow } from '@/components/channels/ChannelListRow'
@@ -25,16 +24,20 @@ export function SearchBox(): JSX.Element {
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
-  const debouncedQuery = useDebounce(query, 160)
+  const debouncedQuery = useDebounce(query, 75)
   const channels = useChannelStore((state) => state.channels)
   const epg = useChannelStore((state) => state.epg)
   const recentSearches = useSettingsStore((state) => state.recentSearches)
   const addRecentSearch = useSettingsStore((state) => state.addRecentSearch)
   const now = useNow()
+  const nowMinute = Math.floor(now.getTime() / 60000)
+
+  // Search is in progress when user has typed input that is pending debounce/execution
+  const isSearching = query.trim().length > 0 && query !== debouncedQuery
 
   const results = useMemo(() => {
     return smartSearchChannels(debouncedQuery, channels, epg, now, 10)
-  }, [channels, debouncedQuery, epg, now])
+  }, [channels, debouncedQuery, epg, nowMinute])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -86,7 +89,7 @@ export function SearchBox(): JSX.Element {
     }
   }
 
-  const open = focused && (results.length > 0 || query.length === 0)
+  const open = focused && (results.length > 0 || query.length === 0 || isSearching || query.trim().length > 0)
 
   return (
     <div ref={containerRef} className="relative no-drag">
@@ -100,7 +103,11 @@ export function SearchBox(): JSX.Element {
             : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)]'
         )}
       >
-        <Search className="h-4 w-4 shrink-0 text-[#A1A1A6]" />
+        {isSearching ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--red-line)]" />
+        ) : (
+          <Search className="h-4 w-4 shrink-0 text-[#A1A1A6]" />
+        )}
         <input
           ref={inputRef}
           value={query}
@@ -119,17 +126,22 @@ export function SearchBox(): JSX.Element {
           className="h-full flex-1 bg-transparent text-[13px] text-[#F4F4F5] outline-none placeholder:text-[#A1A1A6]"
         />
         {query ? (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => {
-              setQuery('')
-              inputRef.current?.focus()
-            }}
-            className="rounded-[6px] p-1 text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {isSearching && (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--red-line)]" />
+            )}
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => {
+                setQuery('')
+                inputRef.current?.focus()
+              }}
+              className="rounded-[6px] p-1 text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         ) : (
           <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[11px] font-[500] text-[#A1A1A6] lg:flex">
             Ctrl+K
@@ -190,6 +202,14 @@ export function SearchBox(): JSX.Element {
                   ))}
                 </div>
               </div>
+            ) : isSearching && results.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
+                <Loader2 className="h-6 w-6 animate-spin text-[var(--red-line)] mb-2.5" />
+                <p className="text-[13px] font-medium text-text-primary">Searching channels and shows…</p>
+                <p className="mt-1 text-[12px] text-text-secondary">
+                  Finding best matches for “{query}”
+                </p>
+              </div>
             ) : results.length === 0 ? (
               <div className="px-5 py-8 text-center">
                 <p className="text-[13px] font-medium text-text-primary">No matches for “{query}”</p>
@@ -198,23 +218,34 @@ export function SearchBox(): JSX.Element {
                 </p>
               </div>
             ) : (
-              <ul ref={listRef} className="max-h-[420px] overflow-y-auto p-2 flex flex-col gap-2">
-                {results.map((channel, index) => (
-                  <li
-                    key={channel.id}
-                    role="option"
-                    aria-selected={index === activeIndex}
-                    onMouseEnter={() => setActiveIndex(index)}
-                  >
-                    <ChannelListRow
-                      channel={channel}
-                      programs={epg[channel.id]}
-                      selected={index === activeIndex}
-                      onClick={() => openChannel(channel, query.trim())}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <>
+                {isSearching && (
+                  <div className="flex items-center justify-between px-3 py-1.5 text-[11px] font-medium text-[#A1A1A6] border-b border-white/[0.06] bg-white/[0.02]">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin text-[var(--red-line)]" />
+                      Searching…
+                    </span>
+                    <span className="text-[10px] text-white/40">Updating</span>
+                  </div>
+                )}
+                <ul ref={listRef} className="max-h-[420px] overflow-y-auto p-2 flex flex-col gap-2">
+                  {results.map((channel, index) => (
+                    <li
+                      key={channel.id}
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      onMouseEnter={() => setActiveIndex(index)}
+                    >
+                      <ChannelListRow
+                        channel={channel}
+                        programs={epg[channel.id]}
+                        selected={index === activeIndex}
+                        onClick={() => openChannel(channel, query.trim())}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </motion.div>
         ) : null}
@@ -222,3 +253,4 @@ export function SearchBox(): JSX.Element {
     </div>
   )
 }
+

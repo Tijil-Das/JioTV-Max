@@ -36,11 +36,13 @@ async function run() {
   }
 
   // 3. Build electron-builder arguments
+  const extraArgs = process.argv.slice(3)
   const builderArgs = [
     'electron-builder',
     '--win',
     target,
-    `--config.electronDist=${castlabsDir}`
+    `--config.electronDist=${castlabsDir}`,
+    ...extraArgs
   ]
 
   console.log(`\n[pack] Running ${builderArgs.join(' ')}...\n`)

@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: JioTV-Max-Windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: JioTV-Max-Windows/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          [ "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}" ] || { echo "Tag does not match package.json version"; exit 1; }
+
+      - name: Run test suite
+        run: pnpm test
+
+      - name: Build and publish release
+        run: pnpm dist --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_VMP_SIGN: ${{ secrets.EVS_ACCESS_TOKEN == '' && 'true' || 'false' }}

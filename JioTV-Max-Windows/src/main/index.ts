@@ -245,6 +245,26 @@ function isWindows11OrNewer(): boolean {
   return Number(process.getSystemVersion().split('.')[0]) >= 10 && Number(process.getSystemVersion().split('.')[2] ?? 0) >= 22000
 }
 
+function getAppIconPath(): string {
+  const isWin = process.platform === 'win32'
+  const primary = isWin ? 'icon.ico' : 'icon.png'
+  const fallback = isWin ? 'icon.png' : 'icon.ico'
+
+  const candidates = [
+    path.join(app.getAppPath(), 'build', primary),
+    path.join(__dirname, '../../build', primary),
+    path.join(process.resourcesPath, 'build', primary),
+    path.join(process.resourcesPath, primary),
+    path.join(app.getAppPath(), 'build', fallback),
+    path.join(__dirname, '../../build', fallback)
+  ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return path.join(__dirname, '../../build', primary)
+}
+
 async function createWindow(): Promise<void> {
   const state = await windowStateStore.load()
   const supportsMaterial = process.platform === 'win32' && isWindows11OrNewer()
@@ -258,10 +278,7 @@ async function createWindow(): Promise<void> {
     minHeight: 680,
     show: false,
     title: 'JioTv Max',
-    icon:
-      process.platform === 'win32' && existsSync(path.join(__dirname, '../../build/icon.ico'))
-        ? path.join(__dirname, '../../build/icon.ico')
-        : path.join(__dirname, '../../build/icon.png'),
+    icon: getAppIconPath(),
     backgroundColor: supportsMaterial ? '#00000000' : '#050507',
     ...(supportsMaterial ? { backgroundMaterial: 'acrylic' as const } : {}),
     titleBarStyle: 'hidden',
@@ -538,7 +555,7 @@ app.whenReady().then(async () => {
     // app://bundle/index.html  → pathname = /bundle/index.html → strip to index.html
     // app://bundle/assets/foo  → strip to assets/foo
     const withoutBundle = pathname.replace(/^\/+bundle\/+/, '').replace(/^\/+/, '')
-    if (withoutBundle.startsWith('logo/')) {
+    if (withoutBundle === 'logo' || withoutBundle.startsWith('logo/') || withoutBundle.startsWith('logo?')) {
       const search = new URL(request.url).search
       return net.fetch(`http://127.0.0.1:${relay.port}/${withoutBundle}${search}`)
     }
@@ -546,7 +563,7 @@ app.whenReady().then(async () => {
     const targetFile = path.normalize(path.join(__dirname, '../renderer', relative))
     return net.fetch(pathToFileURL(targetFile).toString())
   })
-  app.setAppUserModelId('tv.streamdeck.app')
+  app.setAppUserModelId('tv.jiotvmax.app')
   await relay.start()
   jio = new JioService(relay)
   jio.setSessionExpiredHandler((reason) => {

@@ -74,6 +74,7 @@
     },
     "files": [
       "out/**/*",
+      "build/**/*",
       "src/main/installing.html",
       "package.json"
     ],

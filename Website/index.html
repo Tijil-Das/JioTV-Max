@@ -3,38 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JioTv Max — Cinematic Desktop Live-TV Experience for Windows</title>
-  <meta name="description" content="A premium, ultra-responsive Windows desktop application for JioTV live television. Featuring a black screening room design system, dual HLS/Widevine engines, and an imperative 24h EPG." />
+  <title>JioTv Max — Watch JioTV Live on Windows</title>
+  <meta name="description" content="Stream 1,000+ JioTV live channels on Windows. Native desktop client supporting standard mobile plans with zero extra cost." />
   <meta name="theme-color" content="#000000" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="JioTv Max — Cinematic Desktop Live-TV Experience" />
-  <meta property="og:description" content="Experience 1,000+ live television channels with zero-latency zapping, 1080p stream quality, and a 24-hour virtualized EPG on Windows." />
+  <meta property="og:title" content="JioTv Max — Watch JioTV Live on Windows" />
+  <meta property="og:description" content="Native desktop application for JioTV. Watch live TV on your PC with any standard Jio mobile plan." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="assets/app-icon-256.png" />
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="assets/favicon.png" />
 
-  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Main Stylesheet -->
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- Ambient lighting backdrops -->
-  <div class="ambient-glow-top" aria-hidden="true"></div>
-  <div class="ambient-glow-middle" aria-hidden="true"></div>
-
   <!-- Header -->
-  <header class="site-header" id="site-header">
+  <header class="site-header">
     <div class="container nav-wrap">
       <a href="#" class="brand-link" aria-label="JioTv Max Home">
-        <img src="assets/app-icon-128.png" alt="JioTv Max Logo" class="brand-logo-img" />
+        <img src="assets/app-icon-128.png" alt="JioTv Max" class="brand-logo-img" />
         <span class="brand-title">JioTv <span>Max</span></span>
       </a>
 
@@ -42,20 +37,11 @@
         <ul class="nav-links">
           <li><a href="#why">Why JioTv Max</a></li>
           <li><a href="#features">Features</a></li>
-          <li><a href="#interface">Interface</a></li>
-          <li><a href="#architecture">Architecture</a></li>
-          <li><a href="#shortcuts">Shortcuts</a></li>
-          <li><a href="#quickstart">Quick Start</a></li>
+          <li><a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer">GitHub</a></li>
         </ul>
       </nav>
 
       <div class="nav-actions">
-        <a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer" class="btn-ghost" id="nav-github-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          <span>GitHub</span>
-        </a>
         <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest" class="btn-primary download-trigger" id="nav-download-btn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -68,29 +54,24 @@
     </div>
   </header>
 
-  <!-- Hero Section -->
   <main>
+    <!-- Hero Section -->
     <section class="hero-section">
       <div class="container">
-        <!-- Live Pill -->
-        <div class="hero-pill">
-          <span class="live-dot" aria-hidden="true"></span>
-          <span>JIOTV DESKTOP CLIENT</span>
-          <span class="hero-pill-badge">v1.0.0 RELEASE</span>
+        <div class="hero-badge">
+          <span>WINDOWS 10 & 11</span>
+          <span class="hero-badge-tag hero-pill-badge">v1.0.0 RELEASE</span>
         </div>
 
-        <!-- Headline -->
         <h1 class="hero-title">
-          Live television.<br />
-          <span class="gradient-text">Beautifully staged.</span>
+          Watch JioTV on Windows.<br />
+          <span class="hero-title-accent">No emulators. No extra cost.</span>
         </h1>
 
-        <!-- Subheadline -->
         <p class="hero-description">
-          A bespoke desktop front end for JioTV built for Windows 10 & 11. Frameless screening room aesthetic, zero-CORS loopback streaming relay, instant channel zapping, and a virtualized 24-hour guide.
+          Stream 1,000+ live TV channels in native 1080p on your PC or laptop. Works with your existing Jio mobile plan — no Smart TV add-on or set-top box required.
         </p>
 
-        <!-- CTA Buttons -->
         <div class="hero-cta-group">
           <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest" class="btn-hero-primary download-trigger" id="hero-download-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -102,497 +83,130 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
             </svg>
-            <span>Source Code (GitHub)</span>
+            <span>Source Code</span>
           </a>
         </div>
 
         <div class="hero-badge-note">
-          <span>v1.0.0</span> • <span>Windows 10/11 64-bit</span> • <span>Open Source (MIT)</span>
+          <span>v1.0.0</span> · <span>Windows 10 / 11 (64-bit)</span> · <span>Open Source (MIT)</span>
         </div>
-
-        <!-- Interactive Screen Mockup -->
-        <div class="mockup-wrapper" id="interface">
-          <div class="mockup-frame">
-            <!-- Window Titlebar -->
-            <div class="mockup-titlebar">
-              <div class="mockup-titlebar-left">
-                <img src="assets/app-icon-128.png" alt="" class="mockup-icon" />
-                <span class="mockup-title">JioTv Max</span>
-                <span class="mockup-subtitle">Live television</span>
-              </div>
-              <div class="mockup-controls">
-                <span class="win-btn" aria-hidden="true"></span>
-                <span class="win-btn" aria-hidden="true"></span>
-                <span class="win-btn" style="background: rgba(225, 29, 46, 0.6);" aria-hidden="true"></span>
-              </div>
-            </div>
-
-            <!-- Interactive Viewport -->
-            <div class="mockup-viewport">
-              <!-- Sidebar rail -->
-              <aside class="mockup-sidebar" aria-label="App Navigation Preview">
-                <div class="mockup-sidebar-icon active" title="Home">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                </div>
-                <div class="mockup-sidebar-icon" title="Sports">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path><path d="M14 14.66V17c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-2.34"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
-                </div>
-                <div class="mockup-sidebar-icon" title="TV Guide">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg>
-                </div>
-                <div class="mockup-sidebar-icon" title="My List">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
-                </div>
-                <div class="mockup-sidebar-icon" title="Settings">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </div>
-              </aside>
-
-              <!-- Main Stage with Tabs -->
-              <div class="mockup-content">
-                <!-- Demo Screen Switcher Tabs -->
-                <div class="mockup-tabs">
-                  <button class="mockup-tab-btn active" data-scene="scene-player">Live Cinema Player</button>
-                  <button class="mockup-tab-btn" data-scene="scene-guide">24-Hour EPG Guide</button>
-                  <button class="mockup-tab-btn" data-scene="scene-drawer">Quick Channel Drawer</button>
-                </div>
-
-                <!-- Scene 1: Player / Hero -->
-                <div class="mockup-scene scene-player active" id="scene-player">
-                  <div class="scene-overlay-badge">
-                    <span class="badge-live-red">LIVE</span>
-                    <span class="badge-quality">1080p · 60fps</span>
-                    <span class="badge-quality">5.1 Audio</span>
-                  </div>
-
-                  <h2 class="scene-channel-title">Star Sports 1 HD</h2>
-                  <p class="scene-program-info">Live Cricket Match • ICC Champions Trophy Final • Over 42.4 • High-bitrate HLS Stream</p>
-
-                  <!-- Player Scrubbar & Controls -->
-                  <div class="mockup-player-bar">
-                    <div class="mockup-scrub-track">
-                      <div class="mockup-scrub-progress"></div>
-                    </div>
-                    <div class="mockup-controls-row">
-                      <div class="mockup-btn-group">
-                        <span class="mockup-btn-icon" title="Play / Pause">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                        </span>
-                        <span class="mockup-btn-icon" title="Jump to Live">
-                          <span style="font-size: 11px; font-weight: 700; color: var(--red);">LIVE</span>
-                        </span>
-                        <span class="mockup-btn-icon" title="Volume">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                        </span>
-                      </div>
-                      <div class="mockup-btn-group">
-                        <span style="font-size: 12px; font-family: monospace; color: var(--text-2);">02:14:50 / Live</span>
-                        <span class="mockup-btn-icon" title="Quality Settings">
-                          <span style="font-size: 11px; font-weight: 600; border: 1px solid var(--hairline); padding: 2px 6px; border-radius: 4px;">1080p</span>
-                        </span>
-                        <span class="mockup-btn-icon" title="Picture in Picture">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5v5H3m0 0 5-5m10 15v-5h5m0 0-5 5"></path><rect width="20" height="15" x="2" y="4.5" rx="2"></rect></svg>
-                        </span>
-                        <span class="mockup-btn-icon" title="Fullscreen">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Scene 2: EPG Guide View -->
-                <div class="mockup-scene scene-guide" id="scene-guide">
-                  <div class="guide-mock-grid">
-                    <div class="guide-mock-ruler">
-                      <span>07:00 PM</span>
-                      <span>07:30 PM</span>
-                      <span>08:00 PM</span>
-                      <span>08:30 PM</span>
-                    </div>
-
-                    <div class="guide-mock-row">
-                      <div class="guide-channel-cell">
-                        <span>101</span>
-                        <span>Star Sports 1</span>
-                      </div>
-                      <div class="guide-program-pill live-now">
-                        <strong>Match Centre Live</strong>
-                        <span style="font-size: 10.5px; opacity: 0.8;">07:00 - 08:00 PM · Cricket</span>
-                      </div>
-                      <div class="guide-program-pill">
-                        <strong>Match Analysis</strong>
-                        <span style="font-size: 10.5px; opacity: 0.8;">08:00 - 09:00 PM</span>
-                      </div>
-                    </div>
-
-                    <div class="guide-mock-row">
-                      <div class="guide-channel-cell">
-                        <span>142</span>
-                        <span>NDTV 24x7</span>
-                      </div>
-                      <div class="guide-program-pill live-now">
-                        <strong>Prime Time News</strong>
-                        <span style="font-size: 10.5px; opacity: 0.8;">07:00 - 07:30 PM · News</span>
-                      </div>
-                      <div class="guide-program-pill">
-                        <strong>Left, Right & Centre</strong>
-                        <span style="font-size: 10.5px; opacity: 0.8;">07:30 - 08:30 PM</span>
-                      </div>
-                    </div>
-
-                    <div class="guide-mock-row">
-                      <div class="guide-channel-cell">
-                        <span>204</span>
-                        <span>Sony PIX HD</span>
-                      </div>
-                      <div class="guide-program-pill">
-                        <strong>Inception (2010)</strong>
-                        <span style="font-size: 10.5px; opacity: 0.8;">06:30 - 09:00 PM · Sci-Fi</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Scene 3: Channel Drawer -->
-                <div class="mockup-scene scene-drawer" id="scene-drawer">
-                  <div class="drawer-grid">
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">101</span>
-                      <span style="font-size: 24px;">🏏</span>
-                      <span class="drawer-tile-name">Star Sports 1</span>
-                      <span class="drawer-tile-cat">Sports</span>
-                    </div>
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">108</span>
-                      <span style="font-size: 24px;">⚽</span>
-                      <span class="drawer-tile-name">Sports18 1 HD</span>
-                      <span class="drawer-tile-cat">Sports</span>
-                    </div>
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">201</span>
-                      <span style="font-size: 24px;">🎬</span>
-                      <span class="drawer-tile-name">Star Gold HD</span>
-                      <span class="drawer-tile-cat">Movies</span>
-                    </div>
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">315</span>
-                      <span style="font-size: 24px;">🌍</span>
-                      <span class="drawer-tile-name">Nat Geo HD</span>
-                      <span class="drawer-tile-cat">Infotainment</span>
-                    </div>
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">402</span>
-                      <span style="font-size: 24px;">📰</span>
-                      <span class="drawer-tile-name">Aaj Tak HD</span>
-                      <span class="drawer-tile-cat">News</span>
-                    </div>
-                    <div class="drawer-tile">
-                      <span class="drawer-tile-num">510</span>
-                      <span style="font-size: 24px;">🎵</span>
-                      <span class="drawer-tile-name">MTV Beats</span>
-                      <span class="drawer-tile-cat">Music</span>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          </div>
-        </div>
-
       </div>
     </section>
 
-    <!-- Why JioTv Max Section -->
-    <section class="why-section" id="why">
+    <!-- Why Section: The Core Value Proposition -->
+    <section class="section" id="why">
       <div class="container">
         <div class="section-head">
-          <span class="section-tag">THE BIG SCREEN ADVANTAGE</span>
-          <h2 class="section-title">Why JioTv Max? Live TV unlocked for your PC.</h2>
-          <p class="section-desc">
-            JioTV has no official Windows desktop client, and its website doesn't support live playback. JioTv Max bridges this divide — with zero extra subscription fees.
-          </p>
+          <span class="section-tag">WHY JIOTV MAX</span>
+          <h2 class="section-title">Live television unlocked for big screens.</h2>
+          <p class="section-desc">JioTV has no official desktop client, and its web portal blocks live TV streaming. JioTv Max bridges the gap.</p>
         </div>
 
-        <div class="why-grid">
-          <!-- Card 1: The Problem -->
-          <div class="why-card">
-            <div class="why-card-icon red">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-                <line x1="2" y1="3" x2="22" y2="17"></line>
-              </svg>
+        <div class="grid-3">
+          <!-- Card 1 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-num">01</span>
+              <span class="card-badge">THE GAP</span>
             </div>
-            <span class="why-card-badge">THE PROBLEM</span>
-            <h3>No Official Windows Support</h3>
-            <p>JioTV is strictly confined to mobile devices. Its official web portal doesn't stream live television, leaving Windows PC, laptop, and multi-monitor setups completely in the dark.</p>
+            <h3 class="card-title">No Official Windows Support</h3>
+            <p class="card-text">
+              JioTV is locked to mobile devices. Its web portal does not stream live broadcasts, leaving PC, laptop, and monitor setups unable to watch live TV natively.
+            </p>
           </div>
 
-          <!-- Card 2: The Solution / Mobile Plan -->
-          <div class="why-card highlight">
-            <div class="why-card-icon green">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
+          <!-- Card 2 -->
+          <div class="card card-featured">
+            <div class="card-header">
+              <span class="card-num">02</span>
+              <span class="card-badge badge-red">ZERO EXTRA COST</span>
             </div>
-            <span class="why-card-badge featured">ZERO EXTRA COST</span>
-            <h3>Works With Standard Mobile Plans</h3>
-            <p>You don't need a costly Smart TV subscription or JioFiber TV box. Any regular prepaid or postpaid Jio mobile recharge with bundled JioTV access works right out of the box.</p>
+            <h3 class="card-title">Works With Standard Mobile Plans</h3>
+            <p class="card-text">
+              You do not need an expensive Smart TV subscription or JioFiber Set-Top Box. Any regular Jio mobile recharge bundled with basic JioTV access works out of the box.
+            </p>
           </div>
 
-          <!-- Card 3: The Setup -->
-          <div class="why-card">
-            <div class="why-card-icon purple">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <polyline points="16 11 18 13 22 9"></polyline>
-              </svg>
+          <!-- Card 3 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-num">03</span>
+              <span class="card-badge">ONE-STEP SETUP</span>
             </div>
-            <span class="why-card-badge">ONE-STEP SETUP</span>
-            <h3>Just Log In & Enjoy</h3>
-            <p>Simply sign in with your Jio mobile number via OTP. You instantly unlock full live access to 1,000+ channels and all programming your plan covers on your big screen.</p>
-          </div>
-        </div>
-
-        <!-- Banner Callout Box -->
-        <div class="why-callout">
-          <div class="why-callout-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/>
-            </svg>
-          </div>
-          <div class="why-callout-text">
-            <h4>From 6-inch smartphones to 4K desktop monitors.</h4>
-            <p>Experience your favorite live sports, breaking news, regional television, and entertainment in native 1080p, with zero emulator lag and hardware GPU decoding.</p>
+            <h3 class="card-title">Simple OTP Login</h3>
+            <p class="card-text">
+              Sign in with your Jio mobile number via OTP. Whatever live channels your current plan supports on mobile are immediately available on your PC.
+            </p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- Key Features Section -->
-    <section class="features-section" id="features">
+    <section class="section" id="features">
       <div class="container">
         <div class="section-head">
-          <span class="section-tag">ENGINEERED FOR TELEVISION</span>
-          <h2 class="section-title">A desktop application built with cinema sensibilities.</h2>
-          <p class="section-desc">Every layer is customized to eliminate lag, light bleed, and streaming friction.</p>
+          <span class="section-tag">FEATURES</span>
+          <h2 class="section-title">Engineered for a clean desktop experience.</h2>
+          <p class="section-desc">Fast, responsive, and resource-friendly without the bloat of Android emulators.</p>
         </div>
 
-        <div class="feature-grid">
-          <!-- Card 1 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-            </div>
-            <h3 class="feature-card-title">Dual Playback Pipeline</h3>
-            <p class="feature-card-text">HLS via hls.js for instant channel zapping, paired with shaka-player and castLabs Electron for hardware-accelerated Widevine DRM channels.</p>
-            <span class="feature-card-tag">HLS.js + Shaka Player</span>
+        <div class="grid-3">
+          <div class="card">
+            <h3 class="card-title">1,000+ Live Channels</h3>
+            <p class="card-text">Instant access to national and regional sports, entertainment, news, movies, and music channels with low-latency zapping.</p>
           </div>
 
-          <!-- Card 2 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"></path><path d="M20 7H4"></path><path d="m8 21-4-4 4-4"></path><path d="M4 17h16"></path></svg>
-            </div>
-            <h3 class="feature-card-title">Zero-CORS Loopback Relay</h3>
-            <p class="feature-card-text">Local 127.0.0.1 media relay in the main process rewrites manifests on-the-fly, injects Akamai __hdnea__ cookies, and buffers DVR chunks without disabling web security.</p>
-            <span class="feature-card-tag">127.0.0.1 MediaRelay</span>
+          <div class="card">
+            <h3 class="card-title">Full HD 1080p Playback</h3>
+            <p class="card-text">Crisp 1080p and 720p streams with hardware GPU decoding. Clear broadcast quality on monitors and high-resolution displays.</p>
           </div>
 
-          <!-- Card 3 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg>
-            </div>
-            <h3 class="feature-card-title">Multi-Tier Logo Engine</h3>
-            <p class="feature-card-text">Dedicated OffscreenCanvas Web Worker normalizes broadcaster logos, repairs backgrounds, boosts ink contrast, and caches results in IndexedDB.</p>
-            <span class="feature-card-tag">OffscreenCanvas Worker</span>
+          <div class="card">
+            <h3 class="card-title">Live DVR Timeline</h3>
+            <p class="card-text">Pause live television and rewind within the stream's rolling timeshift buffer. Jump back to the live edge with one click.</p>
           </div>
 
-          <!-- Card 4 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            </div>
-            <h3 class="feature-card-title">Virtualized 24-Hour EPG</h3>
-            <p class="feature-card-text">TanStack Virtual powers buttery 60fps scrolling across 1,000+ schedules. Imperative CSS --guide-x ruler synchronization bypasses background rAF throttling.</p>
-            <span class="feature-card-tag">@tanstack/react-virtual</span>
+          <div class="card">
+            <h3 class="card-title">24-Hour EPG Guide</h3>
+            <p class="card-text">Smooth virtualized electronic program guide with current and upcoming schedule listings across all channels.</p>
           </div>
 
-          <!-- Card 5 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            </div>
-            <h3 class="feature-card-title">Windows DPAPI Token Vault</h3>
-            <p class="feature-card-text">Tokens never touch the renderer or localStorage. Sessions are encrypted using Electron safeStorage backed by Windows DPAPI hardware encryption.</p>
-            <span class="feature-card-tag">safeStorage Encryption</span>
+          <div class="card">
+            <h3 class="card-title">Picture-in-Picture (PiP)</h3>
+            <p class="card-text">Pop out the stream into a floating, resizable overlay window to watch sports or news while working in other applications.</p>
           </div>
 
-          <!-- Card 6 -->
-          <div class="feature-card">
-            <div class="feature-icon-box">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            </div>
-            <h3 class="feature-card-title">Command Palette Search</h3>
-            <p class="feature-card-text">Hit Ctrl+K anywhere to open an instantaneous channel palette with fuzzy search across names, channel numbers, genres, and recent queries.</p>
-            <span class="feature-card-tag">Ctrl + K Quick Search</span>
+          <div class="card">
+            <h3 class="card-title">Zero Emulators</h3>
+            <p class="card-text">A lightweight native Windows application. Starts in seconds, uses minimal CPU and RAM, and keeps your system quiet.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Architecture & Code Deep Dive -->
-    <section class="arch-section" id="architecture">
+    <!-- Bottom CTA -->
+    <section class="section-cta">
       <div class="container">
-        <div class="arch-layout">
-          <!-- Text and Flow Steps -->
-          <div>
-            <span class="section-tag">BEHIND THE CURTAIN</span>
-            <h2 class="section-title">Zero CORS, strict CSP, and bulletproof token relaying.</h2>
-            <p class="section-desc" style="margin-bottom: 32px;">
-              By running an internal HTTP loopback relay inside the Electron main process, JioTv Max maintains Chromium's strictest security policies while talking directly to Jio's live CDNs.
-            </p>
+        <div class="cta-box">
+          <h2 class="cta-title">Get JioTv Max for Windows</h2>
+          <p class="cta-desc">Download the installer package for Windows 10 & 11 or view the project source on GitHub.</p>
 
-            <div class="arch-card-stack">
-              <div class="arch-step-card">
-                <span class="arch-step-num">01</span>
-                <div class="arch-step-body">
-                  <h4>Loopback Stream Rewriting</h4>
-                  <p>Upstream HLS and DASH manifests are parsed and rewritten to point media chunks to ephemeral 127.0.0.1 URLs with session signatures.</p>
-                </div>
-              </div>
-
-              <div class="arch-step-card">
-                <span class="arch-step-num">02</span>
-                <div class="arch-step-body">
-                  <h4>Transparent Akamai Cookie Injection</h4>
-                  <p>Every chunk request forwards authentic Android client User-Agents and dynamic Akamai __hdnea__ tokens so CDN requests succeed without 403 blocks.</p>
-                </div>
-              </div>
-
-              <div class="arch-step-card">
-                <span class="arch-step-num">03</span>
-                <div class="arch-step-body">
-                  <h4>In-Memory DVR Segment Cache</h4>
-                  <p>A 64MB LRU cache retains recently watched segments, guaranteeing instant pause/resume and micro-rewinds even when upstream CDN tokens refresh.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Code Window Mockup -->
-          <div class="code-preview-window">
-            <div class="code-window-header">
-              <span>JioTV-Max-Windows/src/main/media-relay.ts</span>
-              <span>TypeScript</span>
-            </div>
-            <pre class="code-window-body"><code><span class="code-cm">// MediaRelay: Zero-CORS Loopback Stream Engine</span>
-<span class="code-kw">export class</span> <span class="code-fn">MediaRelay</span> {
-  <span class="code-kw">private</span> server = <span class="code-fn">createServer</span>(<span class="code-kw">async</span> (req, res) => {
-    <span class="code-kw">const</span> { pathname, searchParams } = <span class="code-kw">new</span> URL(req.url!, <span class="code-str">'http://127.0.0.1'</span>)
-
-    <span class="code-kw">if</span> (pathname === <span class="code-str">'/raw'</span>) {
-      <span class="code-kw">const</span> rawUrl = searchParams.<span class="code-fn">get</span>(<span class="code-str">'u'</span>)!
-      <span class="code-kw">const</span> session = <span class="code-kw">this</span>.<span class="code-fn">getSession</span>(searchParams.<span class="code-fn">get</span>(<span class="code-str">'s'</span>))
-
-      <span class="code-cm">// Forward authentic Akamai cookies & player agent</span>
-      <span class="code-kw">const</span> upstream = <span class="code-kw">await</span> <span class="code-fn">fetch</span>(rawUrl, {
-        headers: session.headers,
-        signal: AbortSignal.<span class="code-fn">timeout</span>(<span class="code-str">12000</span>)
-      })
-
-      <span class="code-cm">// Rewrite nested manifests to keep session alive</span>
-      <span class="code-kw">return this</span>.<span class="code-fn">relayStreamResponse</span>(upstream, res)
-    }
-  })
-}</code></pre>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Keyboard Shortcuts -->
-    <section class="shortcuts-section" id="shortcuts">
-      <div class="container">
-        <div class="section-head">
-          <span class="section-tag">LEAN BACK EXPERIENCE</span>
-          <h2 class="section-title">Controllable entirely from your keyboard.</h2>
-          <p class="section-desc">Stream Deck, media remote, or keyboard — every core action has a designated hotkey.</p>
-        </div>
-
-        <div class="shortcuts-grid">
-          <div class="shortcut-item">
-            <span class="shortcut-label">Play / Pause Live Stream</span>
-            <span class="shortcut-keys"><kbd>Space</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Instant Channel Zapping (Next / Prev)</span>
-            <span class="shortcut-keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Volume Adjustment (5% steps)</span>
-            <span class="shortcut-keys"><kbd>←</kbd> <kbd>→</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Toggle Fullscreen Mode</span>
-            <span class="shortcut-keys"><kbd>F</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Mute / Unmute Audio</span>
-            <span class="shortcut-keys"><kbd>M</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Open Channel Drawer</span>
-            <span class="shortcut-keys"><kbd>C</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Stream Quality Selection (1080p, Auto)</span>
-            <span class="shortcut-keys"><kbd>Q</kbd></span>
-          </div>
-          <div class="shortcut-item">
-            <span class="shortcut-label">Picture-in-Picture (PiP) Window</span>
-            <span class="shortcut-keys"><kbd>P</kbd></span>
-          </div>
-        </div>
-
-        <!-- Terminal Clone Box -->
-        <div class="clone-box" id="quickstart">
-          <div class="clone-box-left">
-            <h3>Ready to run locally?</h3>
-            <p>Clone the repository and launch development mode in seconds.</p>
-          </div>
-          <div class="terminal-pill">
-            <code id="clone-cmd-text">git clone https://github.com/Tijil-Das/JioTV-Max.git</code>
-            <button class="btn-copy" id="copy-cmd-btn" aria-label="Copy clone command">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
-              <span>Copy</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Download CTA Banner -->
-    <section class="download-section" id="download">
-      <div class="container">
-        <div class="download-card">
-          <h2>Experience live television as it was meant to be.</h2>
-          <p>Download JioTv Max for Windows 10/11 or inspect the open-source TypeScript codebase on GitHub.</p>
-
-          <div class="download-btn-wrap">
-            <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest" class="btn-download-main download-trigger" id="cta-download-btn">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <div class="hero-cta-group" style="justify-content: center;">
+            <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest" class="btn-hero-primary download-trigger" id="cta-download-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
               </svg>
-              <span>Download JioTv Max for Windows</span>
+              <span>Download for Windows</span>
             </a>
-            <span class="download-note">v1.0.0 installer package · 64-bit Windows</span>
+            <a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer" class="btn-hero-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+              <span>GitHub</span>
+            </a>
           </div>
+          <span class="download-note">v1.0.0 installer package · 64-bit Windows</span>
         </div>
       </div>
     </section>
@@ -600,30 +214,20 @@
 
   <!-- Footer -->
   <footer class="site-footer">
-    <div class="container">
-      <div class="footer-top">
-        <div class="footer-brand">
-          <img src="assets/app-icon-128.png" alt="JioTv Max logo" width="24" height="24" style="border-radius: 6px;" />
-          <span>JioTv Max</span>
-        </div>
-
-        <ul class="footer-nav">
-          <li><a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
-          <li><a href="https://github.com/Tijil-Das/JioTV-Max/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></li>
-          <li><a href="#why">Why JioTv Max</a></li>
-          <li><a href="#features">Features</a></li>
-          <li><a href="#architecture">Architecture</a></li>
-        </ul>
+    <div class="container footer-content">
+      <div class="footer-left">
+        <span class="footer-title">JioTv Max</span>
+        <p class="footer-disclaimer">
+          An independent, open-source personal project. Not affiliated with, endorsed by, or supported by Jio or Reliance Industries. Live stream playback requires an active Jio mobile subscription.
+        </p>
       </div>
-
-      <div class="footer-disclaimer">
-        <p>JioTv Max is an independent, open-source personal project. It is not affiliated with, endorsed by, or supported by Jio or Reliance Industries. Channel availability, streams, and playback rights are subject to an active JioTV subscription and Jio's terms of service.</p>
-        <p style="margin-top: 8px;">Crafted for Windows with Electron, React 18 & TypeScript.</p>
+      <div class="footer-links">
+        <a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/Tijil-Das/JioTV-Max/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
       </div>
     </div>
   </footer>
 
-  <!-- Script -->
   <script src="script.js"></script>
 </body>
 </html>

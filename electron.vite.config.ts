@@ -65,6 +65,9 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      sourcemap: false
     }
   },
   preload: {
@@ -73,6 +76,9 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      sourcemap: false
     }
   },
   renderer: {
@@ -89,6 +95,13 @@ export default defineConfig({
     // makes the optimiser build it before the window opens.
     optimizeDeps: {
       include: ['hls.js', 'shaka-player']
+    },
+    build: {
+      sourcemap: false,
+      minify: 'esbuild'
+    },
+    esbuild: {
+      drop: ['debugger']
     },
     plugins: [react(), contentSecurityPolicy()]
   }

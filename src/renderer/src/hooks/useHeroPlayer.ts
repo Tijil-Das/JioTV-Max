@@ -5,9 +5,10 @@ import shaka from 'shaka-player'
 import type { StreamInfo } from '@shared/types'
 import { applyHeroLevelCaps, createHeroHls } from '@/services/streamProbe'
 
-// Polyfill browser features for Shaka Player once at module load
-if (typeof window !== 'undefined' && shaka?.polyfill) {
-  shaka.polyfill.installAll()
+// Polyfill browser features and suppress internal log overhead for Shaka Player
+if (typeof window !== 'undefined' && shaka) {
+  if (shaka.polyfill) shaka.polyfill.installAll()
+  if (shaka.log) shaka.log.setLevel(shaka.log.Level.NONE)
 }
 
 /**

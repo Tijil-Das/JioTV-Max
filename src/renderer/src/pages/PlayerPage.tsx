@@ -443,8 +443,8 @@ export function PlayerPage(): JSX.Element {
       }
 
       const behind = Math.max(0, range.end - media.currentTime)
-      // Only snap if viewer was live but somehow fell severely behind the rolling DVR window (> 30s)
-      if (behind > 30) {
+      // Only snap if viewer was live but somehow fell severely behind the rolling DVR window (> 120s)
+      if (behind > 120) {
         engine.goLive()
       }
     }
@@ -463,7 +463,7 @@ export function PlayerPage(): JSX.Element {
         if (!userRewoundRef.current) {
           const range = engine.seekRange
           const behind = range ? Math.max(0, range.end - media.currentTime) : 0
-          if (behind > 25) {
+          if (behind > 120) {
             engine.goLive()
           }
         }

@@ -101,7 +101,6 @@ export function Hero(): JSX.Element {
     () => new Map(channels.map((channel) => [channel.id, channel])),
     [channels]
   )
-  const debugHero = new URLSearchParams(location.search).get('debug') === 'hero'
 
   // ---- PopularityEngine ranking, reranked on boundaries and every 15 minutes ---
   useEffect(() => {
@@ -796,28 +795,6 @@ export function Hero(): JSX.Element {
               ) : null}
             </div>
 
-            {/* ?debug=hero — candidate scores and verification verdicts */}
-            {debugHero ? (
-              <div className="absolute left-[var(--gutter)] top-[76px] z-30 max-h-[70%] w-[380px] overflow-auto rounded-[12px] border border-[rgba(255,255,255,0.14)] bg-black/85 p-3 font-mono text-[12px] leading-relaxed text-[#A1A1A6]">
-                <p className="mb-2 text-[12px] font-[600] text-[#F4F4F5]">
-                  hero debug · candidates {candidates.length} · switcher {verifiedOrdered.length}
-                </p>
-                {candidates.slice(0, MAX_SWITCHER).map((candidate) => {
-                  const id = candidate.channel.id
-                  const cached = streamProbe.cached(id)
-                  const state = cached === true ? 'ok' : cached === false ? 'fail' : '…'
-                  const sources = Object.entries(candidate.sources)
-                    .map(([key, value]) => `${key}:${value.toFixed(2)}`)
-                    .join(' ')
-                  return (
-                    <p key={id}>
-                      {String(candidate.channel.number).padStart(3, '0')} {candidate.channel.name} ·{' '}
-                      {candidate.score.toFixed(3)} · {sources || 'fallback'} · {state}
-                    </p>
-                  )
-                })}
-              </div>
-            ) : null}
             </section>
 
           {/* Right Channel Skip Arrow (in free space to the right of the video container) */}

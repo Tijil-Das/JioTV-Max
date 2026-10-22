@@ -6,9 +6,10 @@ import type { StreamInfo } from '@shared/types'
 import type { QualityPreference } from '@/store/useSettingsStore'
 import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
 
-// Polyfill browser features for Shaka Player once at module load
-if (typeof window !== 'undefined' && shaka?.polyfill) {
-  shaka.polyfill.installAll()
+// Polyfill browser features and suppress internal log overhead for Shaka Player
+if (typeof window !== 'undefined' && shaka) {
+  if (shaka.polyfill) shaka.polyfill.installAll()
+  if (shaka.log) shaka.log.setLevel(shaka.log.Level.NONE)
 }
 
 export interface EngineLevel {
@@ -504,13 +505,13 @@ export function useMediaPlayer({
             useNativeHlsForFairPlay: false,
             lowLatencyMode: false,
             inaccurateManifestTolerance: 0,
-            bufferBehind: 2,
-            bufferingGoal: 6,
-            rebufferingGoal: 2,
+            bufferBehind: 5,
+            bufferingGoal: 15,
+            rebufferingGoal: 3,
             stallEnabled: true,
-            stallThreshold: 1,
-            stallSkip: 0.1,
-            safeSeekEndOffset: 0.5
+            stallThreshold: 4,
+            stallSkip: 0,
+            safeSeekEndOffset: 1.5
           }
         })
         await player.load(fresh.url, resumeAt, 'application/dash+xml')
@@ -804,18 +805,19 @@ export function useMediaPlayer({
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Keep a longer back buffer so pausing then rewinding does not have
-          // to immediately re-fetch everything from the CDN.
+          // Keep an ample forward and back buffer so background/off-screen timer
+          // throttling does not exhaust the buffer.
           backBufferLength: 90,
-          maxBufferLength: 15,
-          maxMaxBufferLength: 30,
-          maxBufferSize: 30 * 1000 * 1000,
-          highBufferWatchdogPeriod: 1,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.8,
+          highBufferWatchdogPeriod: 3,
           nudgeOffset: 0.15,
           nudgeMaxRetry: 10,
-          maxStarvationDelay: 2,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 6,
+          maxStarvationDelay: 4,
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 15,
           liveDurationInfinity: true,
           capLevelToPlayerSize: false,
           minAutoBitrate: 1_800_000,
@@ -1211,15 +1213,14 @@ export function useMediaPlayer({
             // JioTV premium streams use very short segments, so a large
             // buffering goal multiplies segment requests needed before playback
             // starts. Keep DRM buffer lean; HLS fallback uses original values.
-            // Mirrors jiotv_go: bufferBehind: isDRM ? 2 : 5
-            bufferBehind: activeStream.isDrm ? 2 : 5,
-            bufferingGoal: activeStream.isDrm ? 6 : 15,
-            rebufferingGoal: 2,
+            bufferBehind: activeStream.isDrm ? 5 : 10,
+            bufferingGoal: activeStream.isDrm ? 15 : 20,
+            rebufferingGoal: 3,
             stallEnabled: true,
-            stallThreshold: 1,
-            stallSkip: 0.1,
-            // Leave a half-second guard at the absolute live edge.
-            safeSeekEndOffset: 0.5,
+            stallThreshold: 4,
+            stallSkip: 0,
+            // Leave a 1.5-second guard at the absolute live edge.
+            safeSeekEndOffset: 1.5,
             // Cap retries: each failed segment would otherwise multiply into
             // several requests with long backoff — turns a few expired HDNEA
             // tokens into hundreds of slow segment requests.

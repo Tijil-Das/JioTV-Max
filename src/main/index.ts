@@ -35,6 +35,13 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+// Prevent Chromium from throttling rendering, background timers, or network when the window
+// is minimized, occluded, covered by other windows, or placed off-screen.
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+
 // Dev-only: the renderer receives its content from the Vite dev server, so the
 // production CSP in the built index.html cannot apply. The warning is noise in
 // that mode; packaged builds keep the strict policy.
@@ -218,7 +225,7 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding')
 app.commandLine.appendSwitch('disable-background-media-suspend')
 app.commandLine.appendSwitch(
   'disable-features',
-  'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes'
+  'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes,BackgroundVideoTrackOptimization,BackgroundVideoPauseOptimization'
 )
 app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://127.0.0.1,http://localhost')
 
@@ -267,12 +274,22 @@ async function createWindow(): Promise<void> {
       webSecurity: true,
       spellcheck: false,
       autoplayPolicy: 'no-user-gesture-required',
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      devTools: false
     }
   })
 
   if (state.maximized) mainWindow.maximize()
+  mainWindow.webContents.setBackgroundThrottling(false)
   Menu.setApplicationMenu(null)
+
+  mainWindow.webContents.on('devtools-opened', () => {
+    mainWindow?.webContents.closeDevTools()
+  })
+
+  mainWindow.webContents.on('context-menu', (event) => {
+    event.preventDefault()
+  })
 
   // Route any relative /logo/* requests directly to local MediaRelay
   mainWindow.webContents.session.webRequest.onBeforeRequest(
@@ -293,36 +310,6 @@ async function createWindow(): Promise<void> {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
-  })
-
-  // Mirror renderer console → main process terminal so Shaka DRM logs are visible
-  // without needing DevTools open. Remove once DRM is confirmed working.
-  //
-  // Electron ≤34 uses positional args: (event, level, message, line, sourceId)
-  // Electron 35+  passes a single params object: { level, message, line, sourceId }
-  // We handle both by checking whether the first arg has a .message property.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mainWindow.webContents.on('console-message', (...args: any[]) => {
-    let level: number, message: string, line: number, sourceId: string
-    const first = args[0] as Record<string, unknown>
-    if (first && typeof first.message === 'string') {
-      // Electron 35+ single-object API
-      level = (first.level as number) ?? 0
-      message = first.message as string
-      line = (first.line as number) ?? 0
-      sourceId = (first.sourceId as string) ?? ''
-    } else {
-      // Electron ≤34 positional API: args = [event, level, message, line, sourceId]
-      level = typeof args[1] === 'number' ? args[1] : 0
-      message = typeof args[2] === 'string' ? args[2] : ''
-      line = typeof args[3] === 'number' ? args[3] : 0
-      sourceId = typeof args[4] === 'string' ? args[4] : ''
-    }
-    const source = sourceId ? sourceId.split('/').pop() : 'renderer'
-    const prefix = level === 3 ? '[renderer:error]' : level === 2 ? '[renderer:warn]' : '[renderer]'
-    if (/shaka|drm|widevine|eme|license|mediaplayer|6001|6007|1001|1002|cdm|probe/i.test(message)) {
-      // console.log(`${prefix} (${source}:${line}) ${message}`)
-    }
   })
 
   const persist = () => {
@@ -376,8 +363,18 @@ async function createWindow(): Promise<void> {
     event.preventDefault()
   })
 
-  // F11 is handled natively even when a child video element has focus.
+  // Suppress DevTools, inspection shortcuts, and native reload; handle F11 fullscreen.
   mainWindow.webContents.on('before-input-event', (event, input) => {
+    const key = input.key.toLowerCase()
+    const ctrlOrMeta = input.control || input.meta
+    if (
+      key === 'f12' ||
+      (ctrlOrMeta && input.shift && (key === 'i' || key === 'j' || key === 'c')) ||
+      (ctrlOrMeta && key === 'u')
+    ) {
+      event.preventDefault()
+      return
+    }
     if (input.key === 'F11' && input.type === 'keyDown') {
       event.preventDefault()
       const next = !mainWindow?.isFullScreen()
@@ -392,97 +389,9 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadURL('app://bundle/index.html')
   }
 
-  if (process.env.STREAMDECK_CAPTURE) {
-    // console.log('[capture] harness enabled')
-    void runCaptureHarness(mainWindow)
-  }
-
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-}
-
-/**
- * Development-only visual check.
- *
- * Set `STREAMDECK_CAPTURE` to a comma-separated list of routes (for example
- * `/ ,/guide,/settings,/watch/ch-101`). The harness walks each route, writes a
- * PNG into `STREAMDECK_CAPTURE_DIR` (defaults to the temp folder) and prints
- * every renderer console message to the terminal before quitting. It never
- * runs unless the variable is set, so packaged builds are unaffected.
- */
-async function runCaptureHarness(window: BrowserWindow): Promise<void> {
-  const routes = (process.env.STREAMDECK_CAPTURE ?? '/')
-    .split(',')
-    .map((route) => route.trim())
-    .filter(Boolean)
-  const outDir = process.env.STREAMDECK_CAPTURE_DIR ?? app.getPath('temp')
-  const logFile = path.join(outDir, 'streamdeck-capture.log')
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-  const log = (message: string) => {
-    // console.log(message)
-    void fs.appendFile(logFile, `${new Date().toISOString()} ${message}\n`).catch(() => undefined)
-  }
-
-  process.on('unhandledRejection', (reason) => {
-    log(`[capture:unhandledRejection] ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`)
-  })
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  window.webContents.on('console-message', (...args: any[]) => {
-    const msg = typeof args[2] === 'string' ? args[2] : args[0]?.message ?? ''
-    const lvl = typeof args[1] === 'number' ? args[1] : args[0]?.level ?? 0
-    log(`[renderer:${lvl}] ${msg}`)
-  })
-
-  // Keep animations and the compositor alive even if another window covers
-  // the app; otherwise route transitions stall in occluded windows.
-  window.webContents.setBackgroundThrottling(false)
-  window.setAlwaysOnTop(true)
-  window.show()
-  window.focus()
-
-  log(`[capture] starting; loading=${window.webContents.isLoading()}; routes=${routes.join(' ')}`)
-  await wait(4000)
-  log('[capture] warm-up complete')
-
-  for (const [index, entry] of routes.entries()) {
-    // Syntax: "route" or "route@<javascript>" to exercise an overlay.
-    const separator = entry.indexOf('@')
-    const route = separator === -1 ? entry : entry.slice(0, separator)
-    const action = separator === -1 ? null : entry.slice(separator + 1)
-    const base = route === '/' ? 'home' : route.replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '')
-    const name = action ? `${base}-${index}` : base
-    try {
-      log(`[capture] visiting ${route}`)
-      // A full load per route resets stores and overlays, so each screenshot
-      // reflects a cold start exactly like a user opening the app.
-      await window.loadURL(`app://bundle/index.html?capture=${Date.now()}#${route}`)
-      log(`[capture] navigated to ${route}`)
-      await wait(2600)
-      if (action) {
-        await window.webContents.executeJavaScript(action)
-        await wait(1400)
-      }
-      let image
-      try {
-        image = await window.webContents.capturePage()
-      } catch {
-        await wait(800)
-        image = await window.webContents.capturePage()
-      }
-      const file = path.join(outDir, `streamdeck-${name}.png`)
-      await fs.writeFile(file, image.toPNG())
-      log(`[capture] ${entry} -> ${file}`)
-    } catch (error) {
-      log(`[capture] ${entry} failed: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  log('[capture] finished')
-  app.quit()
-  // Safety net: never leave a headless capture run alive.
-  setTimeout(() => app.exit(0), 2500)
 }
 
 function registerIpc(): void {

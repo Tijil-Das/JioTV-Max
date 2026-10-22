@@ -109,8 +109,16 @@ function showInstallingPanel(): void {
     skipTaskbar: false,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      devTools: false
     }
+  })
+
+  panel.webContents?.on?.('devtools-opened', () => {
+    panel?.webContents?.closeDevTools?.()
+  })
+  panel.webContents?.on?.('context-menu', (e) => {
+    e.preventDefault()
   })
 
   const htmlPath = resolveInstallingHtml()

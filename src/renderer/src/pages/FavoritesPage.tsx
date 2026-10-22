@@ -28,8 +28,8 @@ export function FavoritesPage(): JSX.Element {
             <h2 className="font-display text-[24px] font-bold tracking-tight text-white">My List</h2>
             <p className="mt-1 text-[13px] text-text-secondary">
               {favoriteChannels.length > 0
-                ? `${favoriteChannels.length} channels you keep coming back to.`
-                : 'Save channels here for one-tap access.'}
+                ? `${favoriteChannels.length} ${favoriteChannels.length === 1 ? 'favorite channel' : 'favorite channels'} saved for quick access.`
+                : 'Save your favorite channels here for instant access.'}
             </p>
           </div>
         </div>

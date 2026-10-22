@@ -137,7 +137,9 @@ describe('static / config tests', () => {
   // 3. GitHub Actions Release Workflow
   // ──────────────────────────────────────────────────────────────────────────
   describe('release.yml workflow', () => {
-    const workflowPath = path.join(projectRoot, '.github/workflows/release.yml')
+    const workflowPath = fs.existsSync(path.join(projectRoot, '.github/workflows/release.yml'))
+      ? path.join(projectRoot, '.github/workflows/release.yml')
+      : path.join(projectRoot, '../.github/workflows/release.yml')
     const content = fs.readFileSync(workflowPath, 'utf8')
 
     it('triggers on v* tags', () => {
@@ -155,7 +157,7 @@ describe('static / config tests', () => {
 
     it('runs pnpm test BEFORE publishing', () => {
       const testIndex = content.indexOf('run: pnpm test')
-      const publishIndex = content.indexOf('electron-builder --publish always')
+      const publishIndex = content.indexOf('--publish always')
       expect(testIndex).toBeGreaterThan(-1)
       expect(publishIndex).toBeGreaterThan(-1)
       expect(testIndex).toBeLessThan(publishIndex)

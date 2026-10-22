@@ -33,13 +33,8 @@ module.exports = async function afterPack(context, cp = childProcess) {
   }
 
   if (signResult.status !== 0 || signResult.error) {
-    if (
-      process.env.SKIP_VMP_SIGN === 'true' ||
-      (!process.env.EVS_ACCESS_TOKEN && !process.env.CASTLABS_EVS_TOKEN)
-    ) {
-      console.warn(
-        '\n[afterPack] [NOTICE] CastLabs EVS credentials not detected or SKIP_VMP_SIGN=true; continuing package build.\n'
-      )
+    if (process.env.SKIP_VMP_SIGN === 'true') {
+      console.warn('\n[afterPack] [WARNING] SKIP_VMP_SIGN=true; VMP signature generation was skipped.\n')
       return
     }
 

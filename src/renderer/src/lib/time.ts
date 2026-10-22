@@ -75,6 +75,20 @@ export function formatTimeLeft(end: string | Date, now: Date = new Date()): stri
   return rest === 0 ? `${hours} hr left` : `${hours} hr ${rest} min left`
 }
 
+/**
+ * Formats how far behind the live edge the viewer is as "-MM:SS" (or
+ * "-H:MM:SS" for very deep time-shift windows).
+ */
+export function formatBehindLive(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const remainder = total % 60
+  const mm = String(minutes).padStart(2, '0')
+  const ss = String(remainder).padStart(2, '0')
+  return hours > 0 ? `-${hours}:${mm}:${ss}` : `-${mm}:${ss}`
+}
+
 export interface RulerTick {
   label: string
   minutes: number

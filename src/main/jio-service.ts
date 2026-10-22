@@ -65,6 +65,17 @@ interface StoredSession {
   issuedAt: string
 }
 
+interface ResolvedUpstream {
+  url: string
+  type: 'hls' | 'dash'
+  licenseUrl?: string
+  isDrm: boolean
+  headers: Record<string, string>
+  hdnea: string
+}
+
+type JioQuality = 'auto' | 'high' | 'medium' | 'low'
+
 interface PlaybackResponse {
   code?: number
   message?: string
@@ -216,6 +227,22 @@ export class JioService {
 
   constructor(private readonly relay: MediaRelay) {
     this.deviceFile = path.join(app.getPath('userData'), 'device-id.json')
+
+    // The relay calls this when a CDN request answers 401/403 because the
+    // short-lived `__hdnea__` token has expired. It must resolve a *raw*
+    // upstream URL — registering another relay session here would recurse.
+    this.relay.setStreamResolver(async (channelId, quality) => {
+      const resolved = await this.resolveUpstreamStream(channelId, quality)
+      if (!resolved.ok) {
+        console.warn(`[JioService] Relay token refresh failed for ${channelId}: ${resolved.error}`)
+        return null
+      }
+      return {
+        manifestUrl: resolved.data.url,
+        headers: resolved.data.headers,
+        licenseUrl: resolved.data.licenseUrl
+      }
+    })
   }
 
   async init(): Promise<void> {
@@ -727,11 +754,18 @@ export class JioService {
     return { url: '', type: 'hls', isDrm: false }
   }
 
-  async getStream(
+  /**
+   * Calls the Jio playback API and resolves the raw upstream stream.
+   *
+   * This deliberately does NOT create a relay session: it is shared by
+   * `getStream` (which registers one) and by the relay's 401/403 token-refresh
+   * callback, which must update an existing session in place.
+   */
+  private async resolveUpstreamStream(
     channelId: string,
-    quality: 'auto' | 'high' | 'medium' | 'low' = 'high'
-  ): Promise<Result<StreamInfo>> {
-    console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
+    quality: JioQuality
+  ): Promise<Result<ResolvedUpstream>> {
+    console.log(`[JioService] Resolving upstream stream for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
       console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
       return {
@@ -825,41 +859,19 @@ export class JioService {
         licenseUrl = withHlsToken(licenseUrl, hdnea)
       }
 
-      const relaySession = this.relay.register({
-        channelId,
-        manifestUrl: selected.url,
-        licenseUrl,
-        headers: manifestHeaders
-      })
-
       return {
         ok: true,
         data: {
-          channelId,
-          url: relaySession.manifestUrl,
+          url: selected.url,
           type: selected.type,
-          isLive: true,
+          licenseUrl,
           isDrm: selected.isDrm,
-          drm:
-            (selected.isDrm || selected.type === 'dash') && relaySession.licenseUrl
-              ? {
-                  licenseUrl: relaySession.licenseUrl,
-                  headers: {
-                    Authorization: `Bearer ${this.session.credentials.accessToken}`,
-                    ssotoken: this.session.credentials.ssoToken,
-                    channelId,
-                    srno: '230203144000'
-                  }
-                }
-              : undefined,
-          note: hdnea
-            ? 'Jio signed stream · relayed through StreamDeck'
-            : 'Jio stream · relayed through StreamDeck',
-          source: 'jio'
+          headers: manifestHeaders,
+          hdnea
         }
       }
     } catch (error) {
-      console.error('[JioService] getStream caught error:', error)
+      console.error('[JioService] resolveUpstreamStream caught error:', error)
       await sleep(150)
       return {
         ok: false,
@@ -869,6 +881,51 @@ export class JioService {
             : 'Could not start this channel. Please try again.',
         code: 'NETWORK',
         retryable: true
+      }
+    }
+  }
+
+  async getStream(
+    channelId: string,
+    quality: JioQuality = 'high'
+  ): Promise<Result<StreamInfo>> {
+    console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
+    const resolved = await this.resolveUpstreamStream(channelId, quality)
+    if (!resolved.ok) return resolved
+
+    const source = resolved.data
+    const relaySession = this.relay.register({
+      channelId,
+      manifestUrl: source.url,
+      licenseUrl: source.licenseUrl,
+      headers: source.headers,
+      quality
+    })
+
+    return {
+      ok: true,
+      data: {
+        channelId,
+        url: relaySession.manifestUrl,
+        type: source.type,
+        isLive: true,
+        isDrm: source.isDrm,
+        drm:
+          (source.isDrm || source.type === 'dash') && relaySession.licenseUrl
+            ? {
+                licenseUrl: relaySession.licenseUrl,
+                headers: {
+                  Authorization: `Bearer ${this.session!.credentials.accessToken}`,
+                  ssotoken: this.session!.credentials.ssoToken,
+                  channelId,
+                  srno: '230203144000'
+                }
+              }
+            : undefined,
+        note: source.hdnea
+          ? 'Jio signed stream · relayed through StreamDeck'
+          : 'Jio stream · relayed through StreamDeck',
+        source: 'jio'
       }
     }
   }

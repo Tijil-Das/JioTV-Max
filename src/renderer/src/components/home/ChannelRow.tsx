@@ -5,7 +5,6 @@ import { cn } from '@/lib/cn'
 import { useRowScroll } from '@/hooks/useRowScroll'
 import { ChannelCard } from './ChannelCard'
 import { ChannelCardSkeleton } from '@/components/ui/Skeleton'
-import { IconButton } from '@/components/ui/Button'
 
 interface ChannelRowProps {
   title: string
@@ -18,10 +17,9 @@ interface ChannelRowProps {
   progressByChannel?: Record<string, number>
 }
 
-/** Horizontally scrolling shelf with edge-aware controls and a soft mask. */
+/** Horizontally scrolling shelf. Title flush-left at 48px gutter. No subtitle. */
 export function ChannelRow({
   title,
-  subtitle,
   channels,
   epg,
   loading = false,
@@ -36,60 +34,66 @@ export function ChannelRow({
 
   return (
     <section className={cn('relative', className)} aria-labelledby={`row-${title.replace(/\s+/g, '-').toLowerCase()}`}>
-      <header className="mb-4 flex items-end justify-between gap-6 px-8">
-        <div>
-          <h2
-            id={`row-${title.replace(/\s+/g, '-').toLowerCase()}`}
-            className="font-display text-[17px] font-semibold tracking-tight text-text-primary"
-          >
-            {title}
-          </h2>
-          {subtitle ? <p className="mt-1 text-[12px] text-text-muted">{subtitle}</p> : null}
-        </div>
-        <div className="flex items-center gap-1.5">
+      {/* Header — flush left at 48px gutter, no subtitle */}
+      <header className="mb-4 flex items-center justify-between gap-6 px-12">
+        <h2
+          id={`row-${title.replace(/\s+/g, '-').toLowerCase()}`}
+          className="text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]"
+        >
+          {title}
+        </h2>
+        <div className="flex items-center gap-1">
           {viewAllTo ? (
             <button
               type="button"
               onClick={() => navigate(viewAllTo)}
-              className="mr-1 rounded-lg px-3 py-1.5 text-[12px] font-medium text-text-secondary transition-colors hover:bg-white/[0.06] hover:text-white"
+              className="mr-2 rounded-[8px] px-3 py-1.5 text-[13px] font-[500] text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.06] hover:text-[#F4F4F5]"
             >
               View all
             </button>
           ) : null}
-          <IconButton
-            label={`Scroll ${title} left`}
-            size="sm"
+          <button
+            aria-label={`Scroll ${title} left`}
+            type="button"
             onClick={() => scrollByPage(-1)}
             disabled={!canScrollLeft}
-            className={cn('transition-opacity', canScrollLeft ? 'opacity-100' : 'opacity-0')}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-[8px] text-[#66666C] transition-all duration-[120ms]',
+              'hover:bg-white/[0.06] hover:text-[#F4F4F5]',
+              !canScrollLeft && 'opacity-0 pointer-events-none'
+            )}
           >
             <ChevronLeft className="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            label={`Scroll ${title} right`}
-            size="sm"
+          </button>
+          <button
+            aria-label={`Scroll ${title} right`}
+            type="button"
             onClick={() => scrollByPage(1)}
             disabled={!canScrollRight}
-            className={cn('transition-opacity', canScrollRight ? 'opacity-100' : 'opacity-0')}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-[8px] text-[#66666C] transition-all duration-[120ms]',
+              'hover:bg-white/[0.06] hover:text-[#F4F4F5]',
+              !canScrollRight && 'opacity-0 pointer-events-none'
+            )}
           >
             <ChevronRight className="h-4 w-4" />
-          </IconButton>
+          </button>
         </div>
       </header>
 
       <div
         ref={ref}
         onWheel={onWheel}
-        className="no-scrollbar flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-8 pb-6 pt-1"
+        className="no-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-12 pb-6 pt-1"
       >
         {loading
-          ? Array.from({ length: 6 }).map((_, index) => <ChannelCardSkeleton key={index} />)
-          : channels.map((channel) => (
-              <div key={channel.id} className="snap-start">
+          ? Array.from({ length: 6 }).map((_, i) => <ChannelCardSkeleton key={i} />)
+          : channels.map((ch) => (
+              <div key={ch.id} className="snap-start">
                 <ChannelCard
-                  channel={channel}
-                  programs={epg[channel.id]}
-                  resumeProgress={progressByChannel?.[channel.id]}
+                  channel={ch}
+                  programs={epg[ch.id]}
+                  resumeProgress={progressByChannel?.[ch.id]}
                 />
               </div>
             ))}

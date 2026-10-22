@@ -1,8 +1,9 @@
 import type { Config } from 'tailwindcss'
 
 /**
- * Design tokens for the "Premium Cinema" language.
- * Keep every colour/spacing decision here so the UI stays consistent.
+ * Design tokens — "StreamDeck TV" black screening room.
+ * Background is true black. Brand accent is a single red.
+ * Everything else is neutral gray.
  */
 export default {
   content: ['./src/renderer/index.html', './src/renderer/src/**/*.{ts,tsx}'],
@@ -10,68 +11,80 @@ export default {
     extend: {
       colors: {
         bg: {
-          base: '#050507',
-          raised: '#0B0B10',
-          card: '#111118',
-          elevated: '#17171F'
+          base:     '#000000',
+          s1:       '#0A0A0B',
+          s2:       '#111113',
+          s3:       '#18181B'
         },
-        line: 'rgba(255,255,255,0.06)',
+        line: {
+          DEFAULT: 'rgba(255,255,255,0.07)',
+          strong:  'rgba(255,255,255,0.14)'
+        },
         text: {
-          primary: '#F5F5F7',
-          secondary: '#A1A1AA',
-          muted: '#62626D'
+          1: '#F4F4F5',
+          2: '#A1A1A6',
+          3: '#66666C',
+          // backward-compat aliases
+          primary:   '#F4F4F5',
+          secondary: '#A1A1A6',
+          muted:     '#66666C'
         },
+        red: {
+          DEFAULT: '#E11D2E',
+          hover:   '#EF3340',
+          press:   '#B8121F',
+          tint:    'rgba(225,29,46,0.12)',
+          line:    'rgba(225,29,46,0.55)'
+        },
+        // keep these aliases so we don't break imports
         accent: {
-          DEFAULT: '#7C5CFF',
-          glow: '#9D85FF',
-          alt: '#22D3EE'
+          DEFAULT: '#E11D2E',
+          glow:    '#EF3340',
+          alt:     '#E11D2E'
         },
-        live: '#FF3B4E',
-        success: '#34D399',
+        live:    '#E11D2E',
+        success: '#4ADE80',
         warning: '#FBBF24',
-        danger: '#F87171'
+        danger:  '#F87171'
       },
       borderRadius: {
-        card: '16px',
-        panel: '20px',
-        pill: '999px'
+        sm:    '8px',
+        card:  '12px',
+        panel: '16px',
+        pill:  '999px'
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(157,133,255,.5), 0 12px 40px -8px rgba(124,92,255,.55)',
-        card: '0 10px 30px -12px rgba(0,0,0,.8)',
-        glass: '0 8px 32px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06)'
+        // single canonical shadow — depth from layered near-black surfaces
+        card:   '0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 32px -12px rgba(0,0,0,0.9)',
+        glass:  '0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 32px -12px rgba(0,0,0,0.9)',
+        glow:   'none'
       },
       backgroundImage: {
-        'hero-fade': 'linear-gradient(to top, #050507 0%, rgba(5,5,7,.75) 22%, transparent 70%)',
-        'accent-gradient': 'linear-gradient(135deg, #7C5CFF 0%, #22D3EE 100%)'
+        // hero bottom scrim
+        'hero-fade': 'linear-gradient(to top, #000000 0%, rgba(0,0,0,0.6) 30%, transparent 70%)',
+        // NO gradient on buttons or accents — solid red only
+        'accent-gradient': 'none'
       },
       fontFamily: {
-        sans: ['"Inter Variable"', 'Inter', 'Segoe UI', 'sans-serif'],
-        display: ['"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', 'Inter', 'sans-serif']
+        sans:    ['"Inter Variable"', 'Inter', 'Segoe UI', 'sans-serif'],
+        display: ['"Inter Variable"', 'Inter', 'Segoe UI', 'sans-serif']
       },
       transitionTimingFunction: {
         premium: 'cubic-bezier(0.22, 1, 0.36, 1)'
       },
       keyframes: {
         livePulse: {
-          '0%': { transform: 'scale(1)', opacity: '0.9' },
-          '70%': { transform: 'scale(2.4)', opacity: '0' },
+          '0%':   { transform: 'scale(1)',   opacity: '0.9' },
+          '70%':  { transform: 'scale(2.4)', opacity: '0' },
           '100%': { transform: 'scale(2.4)', opacity: '0' }
         },
         shimmer: {
           '100%': { transform: 'translateX(100%)' }
-        },
-        grainShift: {
-          '0%, 100%': { transform: 'translate(0, 0)' },
-          '25%': { transform: 'translate(-2%, 1%)' },
-          '50%': { transform: 'translate(1%, -2%)' },
-          '75%': { transform: 'translate(2%, 2%)' }
         }
       },
       animation: {
-        livePulse: 'livePulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite',
-        shimmer: 'shimmer 1.4s linear infinite',
-        grain: 'grainShift 8s steps(4) infinite'
+        livePulse: 'livePulse 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite',
+        shimmer:   'shimmer 1.4s linear infinite'
       }
     }
   },

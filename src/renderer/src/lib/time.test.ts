@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Program } from '@shared/types'
 import {
   buildRuler,
+  formatBehindLive,
   formatRange,
   formatTimeLeft,
   getMinutesLeft,
@@ -73,5 +74,13 @@ describe('EPG helpers', () => {
 
   it('formats ranges in local time', () => {
     expect(formatRange(program('z', 20, 21).start, program('z', 20, 21).end)).toContain('–')
+  })
+
+  it('formats DVR offsets as negative timecodes', () => {
+    expect(formatBehindLive(0)).toBe('-00:00')
+    expect(formatBehindLive(45)).toBe('-00:45')
+    expect(formatBehindLive(125)).toBe('-02:05')
+    expect(formatBehindLive(3725)).toBe('-1:02:05')
+    expect(formatBehindLive(Number.NaN)).toBe('-00:00')
   })
 })

@@ -56,7 +56,7 @@ export function Modal({
       {open ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-[6px]"
+          className="absolute inset-0 bg-black/80 backdrop-blur-[4px]"
             variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
             initial="hidden"
             animate="visible"

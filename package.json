@@ -51,9 +51,17 @@
   "build": {
     "appId": "tv.streamdeck.app",
     "productName": "StreamDeck TV",
+    "electronDist": "T:\\DevLibs\\castlabs-electron-33",
+    "electronVersion": "33.3.2",
     "directories": {
       "output": "release"
     },
+    "extraFiles": [
+      {
+        "from": "T:/DevLibs/castlabs-electron-33/electron.exe.sig",
+        "to": "StreamDeck TV.exe.sig"
+      }
+    ],
     "files": [
       "out/**/*",
       "package.json"

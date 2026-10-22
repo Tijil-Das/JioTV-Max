@@ -39,7 +39,7 @@ export function Toggle({
         onClick={() => onChange(!checked)}
         className={cn(
           'relative h-6 w-11 shrink-0 rounded-pill border transition-colors duration-200',
-          checked ? 'border-accent/60 bg-accent/80' : 'border-white/10 bg-white/[0.06]',
+          checked ? 'border-[rgba(225,29,46,0.55)] bg-[#E11D2E]' : 'border-[rgba(255,255,255,0.07)] bg-[#18181B]',
           disabled && 'cursor-not-allowed opacity-40'
         )}
       >
@@ -86,11 +86,11 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             className={cn(
               'relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors duration-200',
-              active ? 'text-white' : 'text-text-muted hover:text-text-secondary'
+              active ? 'text-[#F4F4F5]' : 'text-[#66666C] hover:text-[#A1A1A6]'
             )}
           >
             {active ? (
-              <span className="absolute inset-0 rounded-lg bg-white/[0.1] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]" />
+              <span className="absolute inset-0 rounded-[6px] bg-[rgba(225,29,46,0.12)] ring-1 ring-[rgba(225,29,46,0.55)]" />
             ) : null}
             <span className="relative flex items-center gap-1.5">
               {option.icon}

@@ -4,28 +4,18 @@ interface LiveBadgeProps {
   label?: string
   size?: 'sm' | 'md'
   className?: string
-  tone?: 'live' | 'accent' | 'neutral'
 }
 
-/** Small pulsing badge used on cards, the hero and the player. */
-export function LiveBadge({
-  label = 'LIVE',
-  size = 'sm',
-  tone = 'live',
-  className
-}: LiveBadgeProps): JSX.Element {
-  const tones = {
-    live: 'bg-live text-white',
-    accent: 'bg-accent text-white',
-    neutral: 'bg-white/15 text-white backdrop-blur-md'
-  } as const
-
+/**
+ * LIVE badge: solid red, white dot that pulses.
+ * 20px height, 4px radius, 10px/700 uppercase with 0.08em tracking.
+ */
+export function LiveBadge({ label = 'LIVE', size = 'sm', className }: LiveBadgeProps): JSX.Element {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-pill font-semibold uppercase tracking-[0.12em]',
-        size === 'sm' ? 'px-2 py-[3px] text-[9px]' : 'px-2.5 py-1 text-[10px]',
-        tones[tone],
+        'inline-flex items-center gap-[5px] rounded-[4px] bg-[#E11D2E] font-[700] uppercase tracking-[0.08em] text-white',
+        size === 'sm' ? 'h-5 px-[6px] text-[10px]' : 'h-[22px] px-2 text-[11px]',
         className
       )}
     >
@@ -41,11 +31,13 @@ export function QualityBadge({
 }: {
   quality: string
   className?: string
-}): JSX.Element {
+}): JSX.Element | null {
+  if (!quality) return null
   return (
     <span
       className={cn(
-        'rounded-pill border border-white/15 bg-black/45 px-2 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-white/90 backdrop-blur-md',
+        'inline-flex items-center rounded-[4px] border border-white/[0.14] bg-black/60 ' +
+          'px-[6px] h-5 text-[10px] font-[600] uppercase tracking-[0.06em] text-[#F4F4F5]',
         className
       )}
     >

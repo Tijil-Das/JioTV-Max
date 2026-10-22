@@ -6,20 +6,32 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'glass' | 'dange
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 const variants: Record<ButtonVariant, string> = {
+  // Solid red, no gradient, no glow, inner 1px highlight
   primary:
-    'bg-accent-gradient text-white shadow-glow hover:brightness-110 active:brightness-95 disabled:shadow-none',
+    'bg-[#E11D2E] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ' +
+    'hover:bg-[#EF3340] active:bg-[#B8121F] disabled:shadow-none ' +
+    'transition-colors duration-[120ms]',
+  // Neutral fill, hairline border
   secondary:
-    'bg-white/[0.06] text-text-primary border border-white/10 hover:bg-white/[0.1] hover:border-white/20',
-  ghost: 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]',
-  glass: 'glass text-text-primary hover:border-white/20 hover:bg-white/[0.08]',
-  danger: 'bg-danger/15 text-danger border border-danger/30 hover:bg-danger/25'
+    'bg-white/[0.08] text-[#F4F4F5] border border-white/[0.07] ' +
+    'hover:bg-white/[0.12] hover:border-white/[0.14]',
+  // No fill at rest, subtle hover
+  ghost:
+    'text-[#A1A1A6] hover:text-[#F4F4F5] hover:bg-white/[0.08]',
+  // Glass — for overlays only
+  glass:
+    'bg-[rgba(10,10,11,0.72)] backdrop-blur-[28px] text-[#F4F4F5] ' +
+    'border border-white/[0.07] hover:border-white/[0.14] hover:bg-white/[0.08]',
+  danger:
+    'bg-[#F87171]/10 text-[#F87171] border border-[#F87171]/20 ' +
+    'hover:bg-[#F87171]/20'
 }
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-[12px] gap-1.5 rounded-lg',
-  md: 'h-10 px-4 text-[13px] gap-2 rounded-xl',
-  lg: 'h-12 px-6 text-[14px] gap-2.5 rounded-xl',
-  icon: 'h-10 w-10 rounded-xl justify-center'
+  sm:   'h-8 px-3 text-[12px] font-[500] gap-1.5 rounded-[8px]',
+  md:   'h-10 px-4 text-[13px] font-[550] gap-2 rounded-[8px]',
+  lg:   'h-11 px-5 text-[14px] font-[600] gap-2.5 rounded-[8px]',
+  icon: 'h-10 w-10 rounded-[8px] justify-center'
 }
 
 export function buttonClass(
@@ -28,8 +40,8 @@ export function buttonClass(
   className?: string
 ): string {
   return cn(
-    'no-drag inline-flex select-none items-center justify-center whitespace-nowrap font-medium',
-    'transition-all duration-200 ease-premium disabled:pointer-events-none disabled:opacity-40',
+    'no-drag inline-flex select-none items-center justify-center whitespace-nowrap',
+    'transition-colors duration-[120ms] disabled:pointer-events-none disabled:opacity-40',
     variants[variant],
     sizes[size],
     className
@@ -71,7 +83,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   { variant = 'ghost', label, size = 'md', className, children, ...rest },
   ref
 ) {
-  const dimensions = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-12 w-12' : 'h-10 w-10'
+  const dimensions = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-11 w-11' : 'h-10 w-10'
   return (
     <button
       ref={ref}

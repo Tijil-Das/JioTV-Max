@@ -7,16 +7,9 @@ import { useOnline } from '@/hooks/useOnline'
 import { SearchBox } from './SearchBox'
 import { ProfileMenu } from './ProfileMenu'
 
-function greeting(hour: number): string {
-  if (hour < 12) return 'Good morning'
-  if (hour < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
 /**
- * Sticky top bar. Transparent over the hero at rest, glass once the page
- * scrolls. It is pulled over the content with a negative margin so the home
- * hero can bleed underneath it.
+ * 64px top bar. Transparent over the hero; glass at 80% + hairline when scrolled.
+ * No subtitle text. No redundant provider pill.
  */
 export function TopBar(): JSX.Element {
   const location = useLocation()
@@ -40,43 +33,42 @@ export function TopBar(): JSX.Element {
     }
   }, [location.pathname])
 
-  const { title, subtitle } = useMemo(() => {
+  // Only show the page title — no subtitles under row titles
+  const title = useMemo(() => {
     const path = location.pathname
-    if (path === '/') {
-      return {
-        title: greeting(new Date().getHours()),
-        subtitle: online
-          ? `${channels.length} channels · live now`
-          : 'Offline · demo catalogue cached'
-      }
-    }
+    if (path === '/') return ''  // Home: no top bar title, hero speaks for itself
     if (path.startsWith('/category/')) {
       const category = path.replace('/category/', '') as keyof typeof CATEGORY_META
-      const meta = CATEGORY_META[category]
-      return { title: meta?.label ?? 'Channels', subtitle: meta?.description ?? 'Browse live channels' }
+      return CATEGORY_META[category]?.label ?? 'Channels'
     }
-    if (path.startsWith('/guide')) return { title: 'TV Guide', subtitle: 'Everything on air for the next 24 hours' }
-    if (path.startsWith('/favorites')) return { title: 'My List', subtitle: 'Channels you keep coming back to' }
-    if (path.startsWith('/settings')) return { title: 'Settings', subtitle: 'Playback, account and appearance' }
-    return { title: PAGE_TITLES[path] ?? 'StreamDeck TV', subtitle: 'Live television, beautifully staged.' }
-  }, [channels.length, location.pathname, online])
+    if (path.startsWith('/guide')) return 'TV Guide'
+    if (path.startsWith('/favorites')) return 'My List'
+    if (path.startsWith('/settings')) return 'Settings'
+    return PAGE_TITLES[path] ?? 'StreamDeck TV'
+  }, [location.pathname])
+
+  const isHome = location.pathname === '/'
 
   return (
-    <div className="sticky top-0 z-30 -mb-[72px] h-[72px]">
+    <div className="sticky top-0 z-30 -mb-[64px] h-[64px]">
       <div
         className={cn(
-          'flex h-full items-center justify-between gap-6 px-8 transition-all duration-300',
+          'flex h-full items-center justify-between gap-6 px-12 transition-all duration-300',
           scrolled
-            ? 'border-b border-white/[0.055] bg-[rgba(9,9,13,.72)] backdrop-blur-2xl'
+            ? 'border-b border-[rgba(255,255,255,0.07)] bg-[rgba(10,10,11,0.80)] backdrop-blur-[28px]'
             : 'border-b border-transparent bg-transparent'
         )}
       >
-        <div className="min-w-0">
-          <h1 className="truncate font-display text-[20px] font-semibold tracking-tight text-text-primary">
+        {/* Page title — flush left, no subtitle */}
+        {!isHome && title ? (
+          <h1 className="min-w-0 truncate text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]">
             {title}
           </h1>
-          <p className="mt-0.5 truncate text-[12px] text-text-muted">{subtitle}</p>
-        </div>
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
+
+        {/* Right: search + profile only — no provider pill */}
         <div className="flex shrink-0 items-center gap-3">
           <SearchBox />
           <ProfileMenu />

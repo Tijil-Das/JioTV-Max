@@ -24,10 +24,11 @@ import { cn } from '@/lib/cn'
 import { hexToRgba, initials } from '@/lib/color'
 import { QUALITY_OPTIONS } from '@/lib/constants'
 import { sha256Hex } from '@/lib/hash'
-import { formatRange, formatTimeLeft, getNowNext, getProgress } from '@/lib/time'
+import { formatRange, formatTimeLeft, getNowNext } from '@/lib/time'
 import { ApiError, getBridge } from '@/services/api'
 import { channelService } from '@/services/channelService'
 import { useMediaPlayer } from '@/hooks/useMediaPlayer'
+import { useLiveEdge } from '@/hooks/useLiveEdge'
 import { useHotkeys } from '@/hooks/useDebounce'
 import { useIdle } from '@/hooks/useIdle'
 import { useNow } from '@/hooks/useNow'
@@ -39,6 +40,7 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 import { LiveBadge } from '@/components/ui/LiveBadge'
 import { ChannelDrawer } from '@/components/player/ChannelDrawer'
+import { DvrSeekBar } from '@/components/player/DvrSeekBar'
 import { QualityMenu } from '@/components/player/QualityMenu'
 import { ShortcutsOverlay } from '@/components/player/ShortcutsOverlay'
 import { PinDialog } from '@/components/settings/PinDialog'
@@ -87,6 +89,7 @@ export function PlayerPage(): JSX.Element {
   const setEngine = usePlayerStore((state) => state.setEngine)
 
   const openLogin = useUIStore((state) => state.openLogin)
+  const pushToast = useUIStore((state) => state.pushToast)
 
   const channel = useMemo(
     () => channels.find((item) => item.id === channelId),
@@ -125,12 +128,28 @@ export function PlayerPage(): JSX.Element {
     }
   }, [channel, mode, quality])
 
+  const handleDvrGap = useCallback(() => {
+    pushToast({
+      title: 'This part of the broadcast is no longer available. Jumping to live.',
+      variant: 'info',
+      duration: 5000
+    })
+  }, [pushToast])
+
   const engine = useMediaPlayer({
     stream: locked ? null : stream,
     initialQuality: quality,
-    onReconnect: mode === 'jio' ? resolveStream : undefined
+    onReconnect: mode === 'jio' ? resolveStream : undefined,
+    onDvrGap: handleDvrGap
   })
   const { videoRef } = engine
+  const liveEdge = useLiveEdge({
+    videoRef,
+    seekRange: engine.seekRange,
+    goLive: engine.goLive,
+    enabled: Boolean(stream?.isLive),
+    ready: engine.ready
+  })
 
   // ---- Stream resolution -------------------------------------------------
   useEffect(() => {
@@ -376,8 +395,6 @@ export function PlayerPage(): JSX.Element {
       : engine.levels[engine.activeLevel]?.height
         ? `${engine.levels[engine.activeLevel].height}p`
         : QUALITY_OPTIONS.find((option) => option.value === quality)?.label ?? 'Auto'
-
-  const liveProgress = current ? getProgress(current, now) : 0
 
   const stageBackground = channel
     ? `radial-gradient(110% 120% at 70% 0%, ${hexToRgba(channel.brandColor, 0.42)} 0%, transparent 60%), linear-gradient(160deg, #0d0d14, #050507)`
@@ -672,21 +689,17 @@ export function PlayerPage(): JSX.Element {
           ) : null}
         </div>
 
-        {/* Live timeline */}
+        {/* DVR timeline: the thumbs maps to the manifest's seekable window. */}
         <div className="mb-5 flex items-center gap-3">
-          <div className="relative h-[5px] flex-1 rounded-pill bg-white/12">
-            <div
-              className="absolute inset-y-0 left-0 rounded-pill bg-accent-gradient transition-[width] duration-700 ease-premium"
-              style={{ width: `${liveProgress}%` }}
-            />
-            <div
-              className="absolute top-1/2 h-[13px] w-[13px] -translate-y-1/2 rounded-full border-2 border-white bg-accent shadow-[0_0_12px_rgba(124,92,255,.9)] transition-[left] duration-700 ease-premium"
-              style={{ left: `calc(${liveProgress}% - 6px)` }}
-            />
-          </div>
-          <span className="shrink-0 rounded-pill bg-live px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-            Live
-          </span>
+          <DvrSeekBar
+            seekRange={engine.seekRange}
+            currentTime={liveEdge.currentTime}
+            behindLive={liveEdge.behindLive}
+            atLiveEdge={liveEdge.atLiveEdge}
+            isLive={Boolean(stream?.isLive)}
+            onSeek={engine.seekTo}
+            onGoLive={engine.goLive}
+          />
         </div>
 
         <div className="flex items-center justify-between gap-6">

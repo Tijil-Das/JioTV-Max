@@ -5,17 +5,17 @@ import { cn } from '@/lib/cn'
 import { tween } from '@/lib/motion'
 
 const variantStyles: Record<ToastVariant, string> = {
-  default: 'border-white/10 bg-bg-elevated/95',
-  success: 'border-success/30 bg-[#0c1a15]/95',
-  error: 'border-danger/30 bg-[#1c0f11]/95',
-  info: 'border-accent-alt/30 bg-[#08161a]/95'
+  default: 'border-[rgba(255,255,255,0.07)] bg-[rgba(10,10,11,0.92)]',
+  success: 'border-[rgba(74,222,128,0.2)] bg-[rgba(10,10,11,0.92)]',
+  error:   'border-[rgba(248,113,113,0.2)] bg-[rgba(10,10,11,0.92)]',
+  info:    'border-[rgba(255,255,255,0.07)] bg-[rgba(10,10,11,0.92)]'
 }
 
 const icons: Record<ToastVariant, JSX.Element> = {
-  default: <Info className="h-4 w-4 text-accent-alt" />,
-  success: <CheckCircle2 className="h-4 w-4 text-success" />,
-  error: <AlertTriangle className="h-4 w-4 text-danger" />,
-  info: <Info className="h-4 w-4 text-accent-alt" />
+  default: <Info className="h-4 w-4 text-[#A1A1A6]" />,
+  success: <CheckCircle2 className="h-4 w-4 text-[#4ADE80]" />,
+  error:   <AlertTriangle className="h-4 w-4 text-[#F87171]" />,
+  info:    <Info className="h-4 w-4 text-[#A1A1A6]" />
 }
 
 /** Bottom-right toasts, below the title bar and above everything else. */
@@ -39,7 +39,7 @@ export function ToastViewport(): JSX.Element {
             exit={{ opacity: 0, x: 30, scale: 0.97 }}
             transition={tween(0.28)}
             className={cn(
-              'pointer-events-auto flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-glass backdrop-blur-xl',
+              'pointer-events-auto flex items-start gap-3 rounded-[12px] border px-4 py-3 backdrop-blur-[28px] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_12px_32px_-12px_rgba(0,0,0,0.9)]',
               variantStyles[toast.variant]
             )}
           >

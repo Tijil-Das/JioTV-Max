@@ -51,12 +51,12 @@ export function StateView({
     <div className={cn('flex flex-col items-center justify-center px-8 py-20 text-center', className)}>
       <div
         className={cn(
-          'mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border',
+          'mb-5 flex h-16 w-16 items-center justify-center rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113]',
           tone === 'error'
-            ? 'border-danger/25 bg-danger/10 text-danger'
+            ? 'text-[#F87171]'
             : tone === 'offline'
-              ? 'border-warning/25 bg-warning/10 text-warning'
-              : 'border-white/10 bg-white/[0.04] text-text-secondary'
+              ? 'text-[#FBBF24]'
+              : 'text-[#A1A1A6]'
         )}
       >
         {icon ?? <WifiOff className="h-7 w-7" />}

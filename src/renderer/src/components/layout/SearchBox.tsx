@@ -96,14 +96,15 @@ export function SearchBox(): JSX.Element {
     <div ref={containerRef} className="relative no-drag">
       <div
         className={cn(
-          'flex h-11 items-center gap-3 rounded-2xl border px-4 transition-all duration-300 ease-premium',
-          'w-[420px] focus-within:w-[560px]',
+          'flex h-10 items-center gap-2.5 rounded-[10px] border px-3.5',
+          'w-[380px] focus-within:w-[500px] transition-[width,border-color,background] duration-[200ms]',
+          'bg-[#111113]',
           focused
-            ? 'border-accent/40 bg-white/[0.07] shadow-[0_0_0_1px_rgba(124,92,255,.25),0_18px_50px_-24px_rgba(124,92,255,.7)]'
-            : 'border-white/[0.07] bg-white/[0.035] hover:border-white/15'
+            ? 'border-[rgba(225,29,46,0.55)]'
+            : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)]'
         )}
       >
-        <Search className={cn('h-4 w-4 shrink-0', focused ? 'text-accent-glow' : 'text-text-muted')} />
+        <Search className="h-4 w-4 shrink-0 text-[#66666C]" />
         <input
           ref={inputRef}
           value={query}
@@ -119,7 +120,7 @@ export function SearchBox(): JSX.Element {
           aria-controls="search-results"
           aria-label="Search channels and shows"
           placeholder="Search channels, shows, sport…"
-          className="h-full flex-1 bg-transparent text-[13px] text-text-primary outline-none placeholder:text-text-muted"
+          className="h-full flex-1 bg-transparent text-[13px] text-[#F4F4F5] outline-none placeholder:text-[#66666C]"
         />
         {query ? (
           <button
@@ -129,13 +130,13 @@ export function SearchBox(): JSX.Element {
               setQuery('')
               inputRef.current?.focus()
             }}
-            className="rounded-md p-1 text-text-muted hover:text-white"
+            className="rounded-[6px] p-1 text-[#66666C] transition-colors hover:text-[#F4F4F5]"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="hidden shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-text-muted lg:flex">
-            Ctrl K
+          <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[10px] font-[500] text-[#66666C] lg:flex">
+            ⌃K
           </span>
         )}
       </div>
@@ -145,17 +146,17 @@ export function SearchBox(): JSX.Element {
           <motion.div
             id="search-results"
             role="listbox"
-            initial={{ opacity: 0, y: 8, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.99 }}
-            transition={tween(0.18)}
-            className="glass-strong absolute left-0 right-0 top-[calc(100%+10px)] z-50 overflow-hidden rounded-panel"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={tween(0.16)}
+            className="glass absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[12px]"
           >
             {query.length === 0 ? (
               <div className="p-4">
                 {recentSearches.length > 0 ? (
                   <>
-                    <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                    <p className="px-2 pb-2 text-[11px] font-[600] uppercase tracking-[0.12em] text-[#66666C]">
                       Recent
                     </p>
                     <div className="flex flex-wrap gap-2 px-2 pb-3">
@@ -167,7 +168,7 @@ export function SearchBox(): JSX.Element {
                             setQuery(term)
                             setActiveIndex(0)
                           }}
-                          className="flex items-center gap-1.5 rounded-pill border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-text-secondary transition-colors hover:bg-white/[0.09] hover:text-white"
+                          className="flex items-center gap-1.5 rounded-[8px] border border-[rgba(255,255,255,0.07)] bg-[#18181B] px-2.5 py-1.5 text-[12px] text-[#A1A1A6] transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] hover:text-[#F4F4F5]"
                         >
                           <Clock3 className="h-3 w-3" />
                           {term}
@@ -176,7 +177,7 @@ export function SearchBox(): JSX.Element {
                     </div>
                   </>
                 ) : null}
-                <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                <p className="px-2 pb-2 text-[11px] font-[600] uppercase tracking-[0.12em] text-[#66666C]">
                   Browse
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -185,7 +186,7 @@ export function SearchBox(): JSX.Element {
                       key={term}
                       type="button"
                       onClick={() => setQuery(term)}
-                      className="flex items-center justify-between rounded-xl px-3 py-2 text-left text-[12px] text-text-secondary transition-colors hover:bg-white/[0.06] hover:text-white"
+                      className="flex items-center justify-between rounded-[8px] px-3 py-2 text-left text-[13px] text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.05] hover:text-[#F4F4F5]"
                     >
                       {term}
                       <ArrowRight className="h-3.5 w-3.5 opacity-40" />
@@ -212,21 +213,21 @@ export function SearchBox(): JSX.Element {
                         aria-selected={index === activeIndex}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => openChannel(channel, query.trim())}
-                        className={cn(
-                          'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
-                          index === activeIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+                          className={cn(
+                          'flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors duration-[120ms]',
+                          index === activeIndex ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
                         )}
                       >
                         <ChannelLogo channel={channel} size="sm" />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-medium text-text-primary">
+                          <span className="block truncate text-[13px] font-[500] text-[#F4F4F5]">
                             {channel.name}
                           </span>
-                          <span className="block truncate text-[11px] text-text-muted">
-                            {current ? `Now: ${current.title}` : `${channel.category} · ${channel.language}`}
+                          <span className="block truncate text-[12px] text-[#66666C]">
+                            {current ? `Now · ${current.title}` : `${channel.category} · ${channel.language}`}
                           </span>
                         </span>
-                        <span className="shrink-0 text-[10px] font-semibold tabular-nums text-text-muted">
+                        <span className="shrink-0 text-[11px] font-[500] tabular-nums text-[#66666C]">
                           {channel.number}
                         </span>
                       </button>

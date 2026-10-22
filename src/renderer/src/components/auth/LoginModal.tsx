@@ -208,55 +208,12 @@ export function LoginModal(): JSX.Element | null {
   const title = step === 'otp' ? 'Enter your code' : 'Sign in to StreamDeck'
 
   return (
-    <Modal open={open} onClose={closeLogin} bare className="w-[900px] max-w-[94vw]" labelledBy="login-title">
-      <div className="glass-strong grid grid-cols-1 overflow-hidden rounded-panel lg:grid-cols-[0.9fr_1.1fr]">
-        {/* Brand / trust panel */}
-        <div className="relative hidden flex-col justify-between overflow-hidden border-r border-white/[0.06] p-7 lg:flex">
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                'radial-gradient(120% 100% at 10% 0%, rgba(124,92,255,.3) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(34,211,238,.16) 0%, transparent 60%), linear-gradient(160deg, #12121c, #08080d)'
-            }}
-          />
-          <div className="relative">
-            <div className="flex items-center gap-2.5">
-              <BrandMark size={26} />
-              <span className="font-display text-[15px] font-semibold text-white">StreamDeck TV</span>
-            </div>
-            <h3 className="mt-8 font-display text-[26px] font-bold leading-tight text-white">
-              Live television,
-              <br />
-              beautifully staged.
-            </h3>
-            <p className="mt-3 max-w-[280px] text-[13px] leading-relaxed text-text-secondary">
-              Sign in with your JioTV number to unlock the full channel catalogue, guide and
-              Widevine-protected streams.
-            </p>
-          </div>
-          <ul className="relative mt-10 space-y-4">
-            {[
-              { icon: <Tv className="h-4 w-4" />, text: 'Hundreds of live channels and a real EPG' },
-              { icon: <ShieldCheck className="h-4 w-4" />, text: 'Tokens encrypted with your OS keystore' },
-              { icon: <Sparkles className="h-4 w-4" />, text: 'Adaptive quality up to 1080p and beyond' }
-            ].map((item) => (
-              <li key={item.text} className="flex items-start gap-3 text-[12.5px] text-text-secondary">
-                <span className="mt-[1px] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-accent-glow">
-                  {item.icon}
-                </span>
-                {item.text}
-              </li>
-            ))}
-          </ul>
-          <p className="relative flex items-center gap-2 text-[11px] text-text-muted">
-            <Lock className="h-3 w-3" />
-            OTPs and tokens are never written to logs.
-          </p>
-        </div>
+    <Modal open={open} onClose={closeLogin} bare className="w-[420px] max-w-[94vw]" labelledBy="login-title">
+      <div className="overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0A0A0B]">
+        {/* Brand mark at top of single-column form */}
 
         {/* Form panel */}
-        <div className="relative p-7 sm:p-9">
+        <div className="relative p-7">
           <IconButton
             label="Close sign-in"
             size="sm"
@@ -280,7 +237,7 @@ export function LoginModal(): JSX.Element | null {
                   initial={{ scale: 0.4, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={springBouncy}
-                  className="flex h-20 w-20 items-center justify-center rounded-full border border-success/30 bg-success/15 text-success"
+                  className="flex h-16 w-16 items-center justify-center rounded-full border border-[#4ADE80]/30 bg-[#4ADE80]/10 text-[#4ADE80]"
                 >
                   <CheckCircle2 className="h-9 w-9" />
                 </motion.span>
@@ -299,7 +256,7 @@ export function LoginModal(): JSX.Element | null {
                 exit={{ opacity: 0, x: step === 'otp' ? -24 : 24 }}
                 transition={tween(0.24)}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-alt">
+                <p className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
                   {step === 'otp' ? 'Step 2 of 2' : 'Step 1 of 2'}
                 </p>
                 <h2 id="login-title" className="mt-2 font-display text-[24px] font-bold tracking-tight text-white">
@@ -340,8 +297,8 @@ export function LoginModal(): JSX.Element | null {
                       </label>
                       <div
                         className={cn(
-                          'mt-2 flex h-12 items-center gap-2 rounded-xl border bg-black/25 px-3 transition-colors',
-                          error ? 'border-danger/50' : 'border-white/10 focus-within:border-accent/50'
+                          'mt-2 flex h-13 items-center gap-2 rounded-[8px] border bg-[#111113] px-3 transition-colors duration-[120ms]',
+                          error ? 'border-[rgba(225,29,46,0.5)]' : 'border-[rgba(255,255,255,0.07)] focus-within:border-[rgba(225,29,46,0.55)]'
                         )}
                       >
                         <span className="flex items-center gap-1.5 border-r border-white/10 pr-3 text-[13px] text-text-secondary">
@@ -368,7 +325,7 @@ export function LoginModal(): JSX.Element | null {
                           <button
                             type="button"
                             onClick={() => setPhone(DEMO_PHONE)}
-                            className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-text-secondary transition-colors hover:border-white/25 hover:text-white"
+                            className="rounded-[8px] border border-[rgba(255,255,255,0.07)] px-2.5 py-1 text-[11px] text-[#A1A1A6] transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] hover:text-[#F4F4F5]"
                           >
                             Use demo
                           </button>
@@ -404,10 +361,10 @@ export function LoginModal(): JSX.Element | null {
                           className={cn(
                             'h-14 w-full rounded-xl border bg-black/25 text-center font-display text-[20px] font-semibold text-white outline-none transition-all duration-200',
                             error
-                              ? 'border-danger/50'
-                              : digit
-                                ? 'border-accent/50 shadow-[0_0_0_1px_rgba(124,92,255,.25)]'
-                                : 'border-white/10 focus:border-accent/50'
+                              ? 'border-[rgba(225,29,46,0.5)]'
+                                : digit
+                                  ? 'border-[rgba(225,29,46,0.4)]'
+                                  : 'border-[rgba(255,255,255,0.07)] focus:border-[rgba(225,29,46,0.55)]'
                           )}
                         />
                       ))}
@@ -424,7 +381,7 @@ export function LoginModal(): JSX.Element | null {
                         onClick={() => void requestOtp()}
                         className={cn(
                           'font-medium transition-colors',
-                          secondsLeft > 0 ? 'cursor-not-allowed text-text-muted' : 'text-accent-alt hover:text-white'
+                          secondsLeft > 0 ? 'cursor-not-allowed text-[#66666C]' : 'text-[#E11D2E] hover:text-[#EF3340]'
                         )}
                       >
                         {sending ? 'Sending…' : 'Resend code'}
@@ -439,7 +396,7 @@ export function LoginModal(): JSX.Element | null {
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="mt-4 flex items-center gap-2 rounded-xl border border-danger/25 bg-danger/[0.08] px-3 py-2.5 text-[12px] text-danger"
+                      className="mt-4 flex items-start gap-2 rounded-[8px] border-l-2 border-[#E11D2E] bg-[#E11D2E]/[0.08] px-3 py-2.5 text-[12px] text-[#F87171]"
                     >
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       {error}

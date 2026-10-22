@@ -1,12 +1,11 @@
 import { memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Crown, Heart, Play } from 'lucide-react'
+import { Heart, Play } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
-import { hexToRgba } from '@/lib/color'
 import { highestQuality } from '@/lib/constants'
-import { formatRange, formatTimeLeft, getNowNext, getProgress } from '@/lib/time'
+import { getNowNext, getProgress, formatTimeLeft } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
 import { useChannelStore } from '@/store/useChannelStore'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
@@ -15,17 +14,17 @@ import { LiveBadge, QualityBadge } from '@/components/ui/LiveBadge'
 interface ChannelCardProps {
   channel: Channel
   programs?: Program[]
-  /** 0-1 override used by the Continue Watching row. */
   resumeProgress?: number
   className?: string
-  /** Stretch to the width of a CSS grid cell instead of the fixed row width. */
   fluid?: boolean
   onNavigate?: () => void
 }
 
 /**
- * The workhorse of the app. One 16:9 art tile with live signalling,
- * mini-EPG progress and a hover play state, plus a compact meta row.
+ * Channel card — 16:10 tile, surface-2 bg, hairline border, 12px radius.
+ * Neutral surface only — no brand-color tint, no gradient background.
+ * Logo centered at ~50% width on a dark neutral field.
+ * Hover: scale 1.03 spring, hairline-strong border, 35% black scrim, white circle play button.
  */
 export const ChannelCard = memo(function ChannelCard({
   channel,
@@ -45,7 +44,6 @@ export const ChannelCard = memo(function ChannelCard({
   const liveProgress = current ? getProgress(current, now) : 0
   const progress = resumeProgress != null ? resumeProgress * 100 : liveProgress
   const quality = highestQuality(channel)
-  const tint = channel.brandColor
 
   const open = () => {
     onNavigate?.()
@@ -55,12 +53,11 @@ export const ChannelCard = memo(function ChannelCard({
   return (
     <motion.article
       layout={false}
-      whileHover={{ y: -5 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      style={{ ['--tint' as string]: hexToRgba(tint, 0.5) }}
+      whileHover={{ scale: 1.03 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       className={cn(
         'group relative flex select-none flex-col',
-        fluid ? 'w-full' : 'w-[264px] shrink-0',
+        fluid ? 'w-full' : 'w-[256px] shrink-0',
         className
       )}
     >
@@ -69,106 +66,81 @@ export const ChannelCard = memo(function ChannelCard({
         onClick={open}
         aria-label={`Watch ${channel.name} live`}
         className={cn(
-          'relative block aspect-video w-full overflow-hidden rounded-2xl border border-white/[0.07] text-left',
-          'bg-bg-card outline-none transition-shadow duration-300',
-          'group-hover:border-white/15 group-hover:shadow-[0_22px_60px_-22px_var(--tint)]',
-          'focus-visible:ring-2 focus-visible:ring-accent-glow'
+          'relative block w-full overflow-hidden rounded-[12px] text-left outline-none',
+          'bg-[#111113] border border-[rgba(255,255,255,0.07)]',
+          'group-hover:border-[rgba(255,255,255,0.14)]',
+          'transition-[border-color] duration-[200ms]',
+          'aspect-[16/10]'
         )}
       >
-        {/* Layered brand artwork replaces missing logo art gracefully. */}
-        <span
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background: `radial-gradient(120% 120% at 15% 0%, ${hexToRgba(tint, 0.55)} 0%, rgba(9,9,13,.96) 58%), linear-gradient(150deg, rgba(255,255,255,.08), transparent 45%)`
-          }}
-        />
-        <span
-          aria-hidden
-          className="absolute -right-6 -top-10 font-display text-[110px] font-extrabold leading-none tracking-tighter text-white/[0.05]"
-        >
-          {channel.number}
+        {/* Channel logo — centered, contain, ~50% width, no tint behind it */}
+        <span className="absolute inset-0 flex items-center justify-center">
+          <ChannelLogo channel={channel} size="lg" />
         </span>
-        <span
-          aria-hidden
-          className="absolute bottom-[-18px] left-3 font-display text-[58px] font-extrabold uppercase leading-none tracking-tighter text-white/[0.07]"
-        >
-          {channel.name.replace(/\s*(HD|SD|4K)\+?$/i, '').slice(0, 10)}
-        </span>
-        <span
-          aria-hidden
-          className="absolute inset-0 opacity-[0.18] transition-opacity duration-500 group-hover:opacity-25"
-          style={{
-            background:
-              'repeating-linear-gradient(108deg, rgba(255,255,255,.12) 0 2px, transparent 2px 9px)'
-          }}
-        />
 
+        {/* Hover: 35% black scrim fades in */}
+        <span className="absolute inset-0 bg-black/0 transition-[background] duration-[200ms] group-hover:bg-black/35" />
+
+        {/* Top-left: LIVE badge */}
         <span className="absolute left-3 top-3 flex items-center gap-2">
           {channel.isLive ? <LiveBadge /> : null}
-          {channel.isPremium ? (
-            <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-amber-400/90 text-black">
-              <Crown className="h-2.5 w-2.5" />
-            </span>
-          ) : null}
         </span>
-        <span className="absolute right-3 top-3 flex items-center gap-2">
+
+        {/* Top-right: quality badge */}
+        <span className="absolute right-3 top-3">
           <QualityBadge quality={quality} />
         </span>
 
-        {/* Play affordance */}
+        {/* Play affordance — 44px white circle with black glyph, fades in on hover */}
         <span className="absolute inset-0 flex items-center justify-center">
-          <span className="flex h-14 w-14 translate-y-2 scale-90 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white opacity-0 backdrop-blur-md transition-all duration-300 ease-premium group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+          <span
+            className={cn(
+              'flex h-11 w-11 items-center justify-center rounded-full bg-white text-black',
+              'opacity-0 scale-90 transition-all duration-[200ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
+              'group-hover:opacity-100 group-hover:scale-100',
+              'group-focus-visible:opacity-100 group-focus-visible:scale-100'
+            )}
+          >
             <Play className="ml-0.5 h-5 w-5 fill-current" />
           </span>
         </span>
 
-        {/* Mini EPG footer */}
-        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pb-3 pt-10">
-          <span className="block truncate text-[12px] font-medium text-white">
-            {current?.title ?? 'Live now'}
+        {/* Progress bar — flush at bottom edge, 2px height */}
+        {progress > 0 ? (
+          <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white/10">
+            <span
+              className="block h-full bg-[#E11D2E] transition-[width] duration-700"
+              style={{ width: `${progress}%` }}
+            />
           </span>
-          <span className="mt-1.5 flex items-center gap-3">
-            <span className="h-[3px] flex-1 overflow-hidden rounded-pill bg-white/15">
-              <span
-                className="block h-full rounded-pill bg-accent-gradient transition-[width] duration-700 ease-premium"
-                style={{ width: `${progress}%` }}
-              />
-            </span>
-            <span className="shrink-0 text-[10px] tabular-nums text-white/70">
-              {resumeProgress != null
-                ? `${Math.round(resumeProgress * 100)}% watched`
-                : current
-                  ? formatTimeLeft(current.end, now)
-                  : ''}
-            </span>
-          </span>
-        </span>
+        ) : null}
       </button>
 
-      <div className="mt-3 flex items-center gap-3 px-0.5">
-        <ChannelLogo channel={channel} size="sm" />
+      {/* Meta row — below the tile, not on it */}
+      <div className="mt-3 flex items-start gap-2 px-0.5">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-text-primary">{channel.name}</p>
-          <p className="mt-0.5 truncate text-[11px] text-text-muted">
-            {channel.number} · {channel.language}
-            {current ? ` · ${formatRange(current.start, current.end)}` : ''}
-            {!current && next ? ` · ${next.title} next` : ''}
+          <p className="truncate text-[14px] font-[600] text-[#F4F4F5]">{channel.name}</p>
+          <p className="mt-0.5 truncate text-[12px] text-[#66666C]">
+            {current
+              ? `Now · ${current.title}`
+              : next
+                ? `Next · ${next.title}`
+                : channel.language}
           </p>
         </div>
         <button
           type="button"
           aria-label={isFavorite ? `Remove ${channel.name} from My List` : `Add ${channel.name} to My List`}
           aria-pressed={isFavorite}
-          onClick={(event) => {
-            event.stopPropagation()
+          onClick={(e) => {
+            e.stopPropagation()
             toggleFavorite(channel.id)
           }}
           className={cn(
-            'rounded-lg p-2 transition-all duration-200',
+            'shrink-0 rounded-[8px] p-1.5 transition-colors duration-[120ms]',
             isFavorite
-              ? 'text-live opacity-100'
-              : 'text-text-muted opacity-0 hover:text-white group-hover:opacity-100 focus-visible:opacity-100'
+              ? 'text-[#E11D2E]'
+              : 'text-[#66666C] opacity-0 hover:text-[#F4F4F5] group-hover:opacity-100 focus-visible:opacity-100'
           )}
         >
           <Heart className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />

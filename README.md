@@ -226,22 +226,22 @@ The application starts in **Demo mode** on its first run:
   ```
 - To switch to **Live JioTV mode**, toggle to **JioTV account** in the login dialog or via **Settings → Playback**, enter your registered Jio mobile number, and submit the 6-digit OTP received via SMS.
 
-### Widevine DRM Setup (castLabs Electron)
+### Widevine DRM Setup (Automated castLabs Electron)
 
-For channels requiring Widevine Content Decryption Modules (CDM) under DASH, stock Electron does not bundle proprietary CDMs. JioTv Max supports castLabs Electron out of the box:
+For live channels requiring Widevine DRM under DASH, JioTv Max integrates castLabs Electron with an automated setup:
 
-1. Download the castLabs Electron 33 release for Windows (`castlabs-electron-v33.x.x-win32-x64.zip`) from [castLabs Electron Releases](https://github.com/castlabs/electron-releases/releases).
-2. Extract the archive into your development directory (default path configured in `package.json` is `T:\DevLibs\castlabs-electron-33` or customize via the `CASTLABS_ELECTRON_DIR` environment variable).
-3. Start the app with Widevine support enabled:
-   ```powershell
-   pnpm dev:wv
-   ```
+- Simply run:
+  ```powershell
+  pnpm dev:wv
+  ```
+- If castLabs Electron is not found locally, the script automatically downloads the official `v33.3.2+wvcus` release from GitHub, extracts it into `.castlabs/castlabs-electron-33`, and launches the application with Widevine enabled. No manual installation is required on any machine.
+- You can optionally point to an existing install using the `CASTLABS_ELECTRON_DIR` environment variable.
 
 ---
 
 ## Packaging & Production Builds
 
-JioTv Max packages into a standalone unpacked directory or a production NSIS installer.
+JioTv Max packages into a standalone unpacked directory or a production NSIS installer. The packaging runner (`scripts/pack.mjs`) automatically configures the castLabs distribution on any machine:
 
 ```powershell
 # Typecheck both Node and Web TypeScript targets
@@ -259,9 +259,6 @@ pnpm run pack:dir
 # Create a full NSIS installer executable in release/
 pnpm dist
 ```
-
-> [!NOTE]
-> By default, `pack:dir` and `dist` specify cache directories on `T:\DevLibs`. If your machine does not use drive `T:`, adjust `.npmrc` and the script flags in `package.json` to your preferred cache paths.
 
 ---
 

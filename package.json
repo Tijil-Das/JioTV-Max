@@ -15,8 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:logos": "vitest run test/logos",
-    "pack:dir": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win dir",
-    "dist": "set ELECTRON_BUILDER_CACHE=T:\\DevLibs\\electron-builder-cache&& set ELECTRON_CACHE=T:\\DevLibs\\electron-cache&& pnpm build && electron-builder --win nsis",
+    "pack:dir": "node scripts/pack.mjs dir",
+    "dist": "node scripts/pack.mjs nsis",
     "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1"
   },
   "dependencies": {
@@ -52,17 +52,11 @@
   "build": {
     "appId": "tv.jiotvmax.app",
     "productName": "JioTv Max",
-    "electronDist": "T:\\DevLibs\\castlabs-electron-33",
+    "electronDist": ".castlabs/castlabs-electron-33",
     "electronVersion": "33.3.2",
     "directories": {
       "output": "release"
     },
-    "extraFiles": [
-      {
-        "from": "T:/DevLibs/castlabs-electron-33/electron.exe.sig",
-        "to": "JioTv Max.exe.sig"
-      }
-    ],
     "files": [
       "out/**/*",
       "package.json"

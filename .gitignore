@@ -9,3 +9,5 @@ Thumbs.db
 src/renderer/src/**/*.js.map
 
 *.tsbuildinfo
+.castlabs/
+*.zip

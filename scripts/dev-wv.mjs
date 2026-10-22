@@ -1,64 +1,58 @@
 /**
  * dev-wv.mjs — Launch electron-vite dev using the castLabs Electron binary.
  *
+ * Automatically downloads and configures castLabs Electron if missing.
  * Uses ELECTRON_EXEC_PATH and ELECTRON_OVERRIDE_DIST_PATH to route electron-vite
  * and require('electron') to castLabs Electron directly without fragile path.txt patching.
  */
 
 import { existsSync, writeFileSync, readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { spawn } from 'node:child_process'
+import { ensureCastlabsElectron, projectRoot } from './ensure-castlabs.mjs'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const projectRoot = join(__dirname, '..')
+async function run() {
+  // Automatically finds or downloads castLabs Electron
+  const castlabsDir = await ensureCastlabsElectron()
+  const castlabsExe = join(castlabsDir, 'electron.exe')
 
-// Locate the castLabs electron directory
-const castlabsDir =
-  process.argv[2] ||
-  process.env.CASTLABS_ELECTRON_DIR ||
-  'T:\\DevLibs\\castlabs-electron-33'
+  // Ensure node_modules/electron/path.txt has standard 'electron.exe'
+  // (in case any previous script modified it)
+  const pathTxt = join(projectRoot, 'node_modules', 'electron', 'path.txt')
+  if (existsSync(pathTxt)) {
+    const current = readFileSync(pathTxt, 'utf-8').trim()
+    if (current !== 'electron.exe') {
+      writeFileSync(pathTxt, 'electron.exe')
+    }
+  }
 
-const castlabsExe = join(castlabsDir, 'electron.exe')
+  console.log(`\n[dev-wv] Using castLabs Widevine electron:`)
+  console.log(`  Path : ${castlabsExe}`)
+  console.log(`\n[dev-wv] Starting electron-vite dev...\n`)
 
-if (!existsSync(castlabsExe)) {
-  console.error(`\n[dev-wv] castLabs electron.exe not found at:\n  ${castlabsExe}`)
-  console.error('\n  Extract the castLabs zip so electron.exe sits directly in that folder.')
-  console.error('  Download from: https://github.com/castlabs/electron-releases/releases\n')
-  process.exit(1)
+  const child = spawn(
+    'npx',
+    ['electron-vite', 'dev'],
+    {
+      stdio: 'inherit',
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        ELECTRON_EXEC_PATH: castlabsExe,
+        ELECTRON_OVERRIDE_DIST_PATH: castlabsDir
+      },
+      shell: true
+    }
+  )
+
+  child.on('close', (code) => process.exit(code ?? 0))
+  child.on('error', (err) => {
+    console.error('[dev-wv] Failed to start electron-vite:', err.message)
+    process.exit(1)
+  })
 }
 
-// Ensure node_modules/electron/path.txt has standard 'electron.exe'
-// (in case any previous script modified it)
-const pathTxt = join(projectRoot, 'node_modules', 'electron', 'path.txt')
-if (existsSync(pathTxt)) {
-  const current = readFileSync(pathTxt, 'utf-8').trim()
-  if (current !== 'electron.exe') {
-    writeFileSync(pathTxt, 'electron.exe')
-  }
-}
-
-console.log(`\n[dev-wv] Using castLabs Widevine electron:`)
-console.log(`  Path : ${castlabsExe}`)
-console.log(`\n[dev-wv] Starting electron-vite dev...\n`)
-
-const child = spawn(
-  'npx',
-  ['electron-vite', 'dev'],
-  {
-    stdio: 'inherit',
-    cwd: projectRoot,
-    env: {
-      ...process.env,
-      ELECTRON_EXEC_PATH: castlabsExe,
-      ELECTRON_OVERRIDE_DIST_PATH: castlabsDir
-    },
-    shell: true
-  }
-)
-
-child.on('close', (code) => process.exit(code ?? 0))
-child.on('error', (err) => {
-  console.error('[dev-wv] Failed to start electron-vite:', err.message)
+run().catch((err) => {
+  console.error('[dev-wv] Setup failed:', err.message)
   process.exit(1)
 })

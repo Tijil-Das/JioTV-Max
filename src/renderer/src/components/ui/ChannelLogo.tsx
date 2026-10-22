@@ -1,16 +1,15 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
+import { useRelayStore } from '@/store/useRelayStore'
 import type { Channel } from '@shared/types'
 
 const sizeMap = {
   xs:   { box: 'h-7 w-7 rounded-[6px] text-[9px]' },
   sm:   { box: 'h-9 w-9 rounded-[8px] text-[10px]' },
   md:   { box: 'h-11 w-11 rounded-[8px] text-[12px]' },
-  // Used in cards — ~50% of tile width means we let the parent control width
   lg:   { box: 'h-24 w-24 rounded-[12px] text-[22px]' },
   xl:   { box: 'h-28 w-28 rounded-[12px] text-[26px]' },
-  // Used in the hero — large centered logo
   hero: { box: 'h-40 w-40 rounded-[16px] text-[40px]' }
 } as const
 
@@ -18,13 +17,13 @@ interface ChannelLogoProps {
   channel: Channel
   size?: keyof typeof sizeMap
   className?: string
-  /** @deprecated — glow removed; kept for API compat */
+  /** @deprecated — kept for API compat */
   glow?: boolean
 }
 
 /**
- * Real logo via <img> (object-contain, fade in after load).
- * Fallback: monogram in text-2 on surface-3. No brand-color tint or glow.
+ * Renders the channel logo fetched via the local relay proxy (bypasses CDN CORS).
+ * Falls back to a neutral monogram on error or if the logo URL is absent.
  */
 export const ChannelLogo = memo(function ChannelLogo({
   channel,
@@ -32,22 +31,28 @@ export const ChannelLogo = memo(function ChannelLogo({
   className
 }: ChannelLogoProps) {
   const { box } = sizeMap[size]
+  const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
+  const [failed, setFailed] = useState(false)
 
-  if (channel.logoUrl) {
+  const src = channel.logoUrl ? logoProxyUrl(channel.logoUrl) : ''
+
+  if (src && !failed) {
     return (
       <img
-        src={channel.logoUrl}
+        src={src}
         alt={`${channel.name} logo`}
         loading="lazy"
-        className={cn('object-contain', box, className)}
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-        }}
+        className={cn(
+          'object-contain transition-opacity duration-300',
+          box,
+          className
+        )}
+        onError={() => setFailed(true)}
       />
     )
   }
 
-  // Fallback monogram — neutral, no color
+  // Neutral monogram fallback
   return (
     <span
       aria-hidden="true"

@@ -18,9 +18,8 @@ import {
 } from 'lucide-react'
 import type { AppInfo } from '@shared/types'
 import { cn } from '@/lib/cn'
-import { LANGUAGES, QUALITY_OPTIONS } from '@/lib/constants'
+import { QUALITY_OPTIONS } from '@/lib/constants'
 import { getBridge } from '@/services/api'
-import { sha256Hex } from '@/lib/hash'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChannelStore } from '@/store/useChannelStore'
 import { usePlayerStore } from '@/store/usePlayerStore'
@@ -29,7 +28,6 @@ import { useUIStore } from '@/store/useUIStore'
 import { PageTransition } from '@/components/ui/StateView'
 import { Button } from '@/components/ui/Button'
 import { SegmentedControl, Toggle } from '@/components/ui/Controls'
-import { PinDialog } from '@/components/settings/PinDialog'
 
 function Section({
   icon,
@@ -45,14 +43,14 @@ function Section({
   className?: string
 }): JSX.Element {
   return (
-    <section className={cn('glass rounded-panel p-6', className)}>
+    <section className={cn('rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0A0A0B] p-6', className)}>
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-accent-glow">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[rgba(255,255,255,0.07)] bg-[#111113] text-[#A1A1A6]">
           {icon}
         </span>
         <div className="min-w-0">
-          <h2 className="font-display text-[15px] font-semibold text-white">{title}</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-text-muted">{description}</p>
+          <h2 className="font-sans text-[15px] font-[600] text-[#F4F4F5]">{title}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#66666C]">{description}</p>
         </div>
       </div>
       <div className="mt-5 space-y-5">{children}</div>
@@ -61,26 +59,21 @@ function Section({
 }
 
 const selectClass =
-  'h-11 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-[13px] text-text-secondary outline-none transition-colors hover:border-white/20 focus:border-accent/50'
+  'h-11 w-full rounded-[8px] border border-[rgba(255,255,255,0.07)] bg-[#111113] px-3 text-[13px] text-[#A1A1A6] outline-none transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] focus:border-[rgba(225,29,46,0.55)]'
 
-/** Playback, account, appearance, parental and data controls. */
+/** Playback, account, appearance, data and keyboard settings. */
 export function SettingsPage(): JSX.Element {
   const navigate = useNavigate()
   const mode = useSettingsStore((state) => state.mode)
   const setMode = useSettingsStore((state) => state.setMode)
   const defaultQuality = useSettingsStore((state) => state.defaultQuality)
   const setDefaultQuality = useSettingsStore((state) => state.setDefaultQuality)
-  const language = useSettingsStore((state) => state.language)
-  const setLanguage = useSettingsStore((state) => state.setLanguage)
   const reduceMotion = useSettingsStore((state) => state.reduceMotion)
   const setReduceMotion = useSettingsStore((state) => state.setReduceMotion)
   const autoplay = useSettingsStore((state) => state.autoplay)
   const setAutoplay = useSettingsStore((state) => state.setAutoplay)
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop)
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop)
-  const parentalEnabled = useSettingsStore((state) => state.parentalEnabled)
-  const parentalPinHash = useSettingsStore((state) => state.parentalPinHash)
-  const setParental = useSettingsStore((state) => state.setParental)
   const recentSearches = useSettingsStore((state) => state.recentSearches)
   const clearRecentSearches = useSettingsStore((state) => state.clearRecentSearches)
 
@@ -95,7 +88,6 @@ export function SettingsPage(): JSX.Element {
   const openLogin = useUIStore((state) => state.openLogin)
   const pushToast = useUIStore((state) => state.pushToast)
 
-  const [pinDialog, setPinDialog] = useState<'set' | 'verify' | null>(null)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
 
   useEffect(() => {
@@ -107,7 +99,7 @@ export function SettingsPage(): JSX.Element {
 
   const bridge = getBridge()
 
-  const changeMode = async (next: 'demo' | 'jio') => {
+  const changeMode = async (next: 'demo' | 'jio'): Promise<void> => {
     if (next === mode) return
     if (next === 'jio' && status !== 'authenticated') {
       openLogin('Sign in with your JioTV number to switch to the live catalogue.')
@@ -119,13 +111,13 @@ export function SettingsPage(): JSX.Element {
       title: next === 'demo' ? 'Demo mode' : 'JioTV mode',
       description:
         next === 'demo'
-          ? 'Playing the bundled demo catalogue and sample streams.'
+          ? 'Playing the bundled demo catalogue.'
           : 'Loading your live JioTV catalogue.',
       variant: 'info'
     })
   }
 
-  const changeQuality = (value: QualityPreference) => {
+  const changeQuality = (value: QualityPreference): void => {
     setDefaultQuality(value)
     setPlayerQuality(value)
   }
@@ -145,13 +137,14 @@ export function SettingsPage(): JSX.Element {
   return (
     <PageTransition>
       <div className="grid grid-cols-1 gap-6 px-8 pb-12 pt-[92px] xl:grid-cols-2">
+        {/* ── Playback ─────────────────────────────────────────────────── */}
         <Section
           icon={<MonitorPlay className="h-4 w-4" />}
           title="Playback"
           description="How StreamDeck opens channels and chooses a stream quality."
         >
           <div>
-            <p className="mb-2 text-[12px] font-medium text-text-secondary">Catalogue source</p>
+            <p className="mb-2 text-[12px] font-[500] text-[#A1A1A6]">Catalogue source</p>
             <SegmentedControl
               ariaLabel="Catalogue source"
               value={mode}
@@ -161,22 +154,22 @@ export function SettingsPage(): JSX.Element {
                 { value: 'jio', label: 'JioTV account' }
               ]}
             />
-            <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
+            <p className="mt-2 text-[11px] leading-relaxed text-[#66666C]">
               {mode === 'demo'
-                ? 'Ships with a curated channel line-up and public HLS test streams. Works entirely offline.'
-                : 'Loads the live JioTV catalogue and resolves protected streams through the desktop backend.'}
+                ? 'Ships with a curated demo channel line-up. Works entirely offline.'
+                : 'Loads your live JioTV catalogue with real-time streams.'}
             </p>
           </div>
 
           <div>
-            <label htmlFor="quality" className="mb-2 block text-[12px] font-medium text-text-secondary">
+            <label htmlFor="quality" className="mb-2 block text-[12px] font-[500] text-[#A1A1A6]">
               Default quality
             </label>
             <select
               id="quality"
               value={String(defaultQuality)}
-              onChange={(event) =>
-                changeQuality(event.target.value === 'auto' ? 'auto' : Number(event.target.value))
+              onChange={(e) =>
+                changeQuality(e.target.value === 'auto' ? 'auto' : Number(e.target.value))
               }
               className={selectClass}
             >
@@ -186,27 +179,9 @@ export function SettingsPage(): JSX.Element {
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-[11px] text-text-muted">
-              The player starts at this level when the stream offers it, then you can pin any level.
+            <p className="mt-2 text-[11px] text-[#66666C]">
+              The player starts at this level when the stream offers it.
             </p>
-          </div>
-
-          <div>
-            <label htmlFor="language" className="mb-2 block text-[12px] font-medium text-text-secondary">
-              Preferred language
-            </label>
-            <select
-              id="language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              className={selectClass}
-            >
-              {LANGUAGES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
           </div>
 
           <Toggle
@@ -214,24 +189,25 @@ export function SettingsPage(): JSX.Element {
             checked={autoplay}
             onChange={setAutoplay}
             label="Autoplay when opening a channel"
-            description="Start playback immediately instead of showing the paused frame. Buffering still never bypasses the DRM gate."
+            description="Start playback immediately instead of showing the paused frame."
           />
         </Section>
 
+        {/* ── Account ──────────────────────────────────────────────────── */}
         <Section
           icon={<UserRound className="h-4 w-4" />}
           title="Account"
           description="Sign in to unlock the full JioTV catalogue. Tokens stay encrypted on this device."
         >
           {user ? (
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
+            <div className="rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-gradient font-display text-[15px] font-bold text-white">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[10px] bg-[#18181B] text-[15px] font-[700] text-[#A1A1A6]">
                   {user.name.slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-white">{user.name}</p>
-                  <p className="truncate text-[11px] text-text-muted">
+                  <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{user.name}</p>
+                  <p className="truncate text-[11px] text-[#66666C]">
                     +91 ••••• {user.phone.slice(-5)} · {user.mode === 'demo' ? 'Demo account' : 'JioTV account'}
                   </p>
                 </div>
@@ -254,12 +230,12 @@ export function SettingsPage(): JSX.Element {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
-              <p className="text-[13px] font-medium text-white">No account linked</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-text-muted">
+            <div className="rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4">
+              <p className="text-[13px] font-[500] text-[#F4F4F5]">No account linked</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-[#66666C]">
                 {status === 'authenticating'
                   ? 'A sign-in attempt is in progress.'
-                  : 'Sign in with a JioTV mobile number, or keep using the demo catalogue offline.'}
+                  : 'Sign in with a JioTV mobile number to access live channels.'}
               </p>
               <Button
                 variant="primary"
@@ -272,13 +248,13 @@ export function SettingsPage(): JSX.Element {
             </div>
           )}
 
-          <div className="flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-black/20 p-4 text-[11.5px] leading-relaxed text-text-muted">
-            <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-accent-alt" />
-            Tokens are sealed with your operating system keystore (DPAPI on Windows). They are
-            never written to localStorage, logs or crash reports.
+          <div className="flex items-start gap-3 rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4 text-[11.5px] leading-relaxed text-[#66666C]">
+            <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#A1A1A6]" />
+            Tokens are sealed with your OS keystore (DPAPI on Windows). Never written to localStorage or logs.
           </div>
         </Section>
 
+        {/* ── Appearance ───────────────────────────────────────────────── */}
         <Section
           icon={<Wand2 className="h-4 w-4" />}
           title="Appearance & motion"
@@ -289,7 +265,7 @@ export function SettingsPage(): JSX.Element {
             checked={reduceMotion}
             onChange={setReduceMotion}
             label="Reduce motion"
-            description="Disables hero rotation, card lifts and spring transitions. Your system preference is respected either way."
+            description="Disables hero rotation, card lifts and spring transitions. System preference is respected either way."
           />
           <Toggle
             id="always-on-top"
@@ -310,28 +286,7 @@ export function SettingsPage(): JSX.Element {
           />
         </Section>
 
-        <Section
-          icon={<LockKeyhole className="h-4 w-4" />}
-          title="Parental controls"
-          description="Require a PIN before opening channels in the Kids category. The PIN is stored only as a salted hash."
-        >
-          <Toggle
-            id="parental"
-            checked={parentalEnabled}
-            onChange={(value) => setPinDialog(value ? 'set' : 'verify')}
-            label="Kids category lock"
-            description={
-              parentalPinHash
-                ? 'A PIN is configured on this device.'
-                : 'No PIN configured yet — choose one to enable the lock.'
-            }
-          />
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
-            <ShieldCheck className="h-3.5 w-3.5 text-success" />
-            Locked categories ask for the PIN before playback starts.
-          </div>
-        </Section>
-
+        {/* ── Data & storage ───────────────────────────────────────────── */}
         <Section
           icon={<Database className="h-4 w-4" />}
           title="Data & storage"
@@ -385,6 +340,7 @@ export function SettingsPage(): JSX.Element {
           </div>
         </Section>
 
+        {/* ── Keyboard shortcuts ───────────────────────────────────────── */}
         <Section
           icon={<Keyboard className="h-4 w-4" />}
           title="Keyboard shortcuts"
@@ -394,10 +350,10 @@ export function SettingsPage(): JSX.Element {
             {shortcuts.map(([keys, description]) => (
               <li
                 key={keys}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-[8px] border border-[rgba(255,255,255,0.07)] bg-[#111113] px-3 py-2"
               >
-                <span className="text-[12px] text-text-secondary">{description}</span>
-                <kbd className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-0.5 font-sans text-[10.5px] text-text-primary">
+                <span className="text-[12px] text-[#A1A1A6]">{description}</span>
+                <kbd className="rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[#18181B] px-2 py-0.5 font-sans text-[10.5px] text-[#F4F4F5]">
                   {keys}
                 </kbd>
               </li>
@@ -405,6 +361,7 @@ export function SettingsPage(): JSX.Element {
           </ul>
         </Section>
 
+        {/* ── About ────────────────────────────────────────────────────── */}
         <Section
           icon={<Info className="h-4 w-4" />}
           title="About"
@@ -414,60 +371,31 @@ export function SettingsPage(): JSX.Element {
             {[
               ['Application', `StreamDeck TV ${appInfo?.version ?? '1.0.0'}`],
               ['Runtime', appInfo ? `Electron ${appInfo.electron} · ${appInfo.platform}` : 'Browser preview'],
-              [
-                'Backend',
-                bridge ? 'Electron bridge connected · loopback media relay' : 'Browser fallback · demo data'
-              ],
-              ['Playback', 'hls.js for HLS · shaka-player for DASH + Widevine'],
+              ['Backend', bridge ? 'Electron bridge · loopback media relay' : 'Browser fallback · demo data'],
+              ['Relay', appInfo?.relayBase ?? '—'],
+              ['Playback', 'shaka-player for DASH + Widevine · hls.js for HLS'],
               ['Guide', 'JioTV EPG with deterministic offline fallback']
             ].map(([label, value]) => (
-              <div key={label} className="flex items-start justify-between gap-6 border-b border-white/[0.05] pb-1.5">
-                <dt className="text-text-muted">{label}</dt>
-                <dd className="text-right text-text-secondary">{value}</dd>
+              <div key={label} className="flex items-start justify-between gap-6 border-b border-[rgba(255,255,255,0.05)] pb-1.5">
+                <dt className="text-[#66666C]">{label}</dt>
+                <dd className="text-right text-[#A1A1A6]">{value}</dd>
               </div>
             ))}
           </dl>
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
             <Cpu className="h-3.5 w-3.5" />
             Hardware decoding follows your GPU and codec support.
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
             <Sparkles className="h-3.5 w-3.5" />
             Widevine playback requires an Electron build bundled with a CDM.
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+          <div className="flex items-center gap-2 text-[11px] text-[#66666C]">
             <Gauge className="h-3.5 w-3.5" />
             Media relay keeps manifests, segments and licence requests on loopback.
           </div>
         </Section>
       </div>
-
-      <PinDialog
-        open={pinDialog === 'set'}
-        onClose={() => setPinDialog(null)}
-        title="Set a parental PIN"
-        description="You will be asked for it before kids channels start."
-        requireConfirmation
-        onSubmit={async (pin) => {
-          const hash = await sha256Hex(`streamdeck:${pin}`)
-          setParental(true, hash)
-          pushToast({ title: 'Parental lock enabled', variant: 'success' })
-          return null
-        }}
-      />
-      <PinDialog
-        open={pinDialog === 'verify'}
-        onClose={() => setPinDialog(null)}
-        title="Enter your PIN"
-        description="Confirm your PIN to turn the lock off."
-        onSubmit={async (pin) => {
-          const hash = await sha256Hex(`streamdeck:${pin}`)
-          if (!parentalPinHash || hash !== parentalPinHash) return 'Incorrect PIN.'
-          setParental(false, '')
-          pushToast({ title: 'Parental lock disabled', variant: 'success' })
-          return null
-        }}
-      />
     </PageTransition>
   )
 }

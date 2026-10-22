@@ -311,7 +311,9 @@ function copyHeaders(from: Headers, to: ServerResponse): void {
 
 export class MediaRelay {
   private server: Server | null = null
-  private port = 0
+  private _port = 0
+  /** Ephemeral loopback port the relay is listening on. */
+  get port(): number { return this._port }
   private lastActiveSessionId: string | null = null
   private readonly sessions = new Map<string, Session>()
   private readonly segmentCache = new Map<string, CachedSegment>()
@@ -340,8 +342,8 @@ export class MediaRelay {
       this.server!.once('error', reject)
       this.server!.listen(0, '127.0.0.1', () => {
         const address = this.server!.address()
-        this.port = typeof address === 'object' && address ? address.port : 0
-        console.log(`[MediaRelay] Server running on 127.0.0.1:${this.port}`)
+        this._port = typeof address === 'object' && address ? address.port : 0
+        console.log(`[MediaRelay] Server running on 127.0.0.1:${this._port}`)
         resolve()
       })
     })
@@ -370,7 +372,7 @@ export class MediaRelay {
     headers?: Record<string, string>
     quality?: RelayQuality
   }): RelaySession {
-    if (!this.port) throw new Error('Media relay is not running')
+    if (!this._port) throw new Error('Media relay is not running')
     const id = randomUUID()
     this.lastActiveSessionId = id
     this.sessions.set(id, {
@@ -384,7 +386,7 @@ export class MediaRelay {
       refreshPromise: null
     })
     console.log(`[MediaRelay] Registered session ${id} for channel ${input.channelId}`)
-    const base = `http://127.0.0.1:${this.port}/stream/${id}`
+    const base = `http://127.0.0.1:${this._port}/stream/${id}`
     return {
       id,
       manifestUrl: `${base}/manifest`,
@@ -594,7 +596,7 @@ export class MediaRelay {
       return
     }
 
-    const url = new URL(req.url ?? '/', `http://127.0.0.1:${this.port}`)
+    const url = new URL(req.url ?? '/', `http://127.0.0.1:${this._port}`)
     const raw = url.pathname === '/raw'
     const streamMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/(manifest|license)$/i)
     const segmentMatch = url.pathname.match(
@@ -833,6 +835,45 @@ export class MediaRelay {
         'Date': new Date().toUTCString()
       })
       res.end(JSON.stringify({ time: now }))
+      return
+    }
+
+    // /logo — proxy Jio's channel logo CDN images to avoid CORS.
+    // Accepts ?url=<full_url> or ?file=<filename> (bare name like "Colors_HD.png")
+    if (url.pathname === '/logo') {
+      const logoUrl = url.searchParams.get('url') || ''
+      const logoFile = url.searchParams.get('file') || ''
+      const target = logoUrl || (logoFile
+        ? `https://jiotv.catchup.cdn.jio.com/dare_images/images/${logoFile}`
+        : '')
+
+      if (!target) {
+        res.writeHead(400, CORS_HEADERS)
+        res.end('Missing url or file param')
+        return
+      }
+
+      try {
+        const upstream = await fetch(target, {
+          headers: {
+            'User-Agent': 'okhttp/4.9.0',
+            'Accept': 'image/webp,image/png,image/*,*/*',
+            'Referer': 'https://jiotv.com/'
+          }
+        })
+        const body = Buffer.from(await upstream.arrayBuffer())
+        const ct = upstream.headers.get('content-type') || 'image/png'
+        res.writeHead(upstream.ok ? 200 : 404, {
+          ...CORS_HEADERS,
+          'Content-Type': ct,
+          'Cache-Control': 'public, max-age=86400',
+          'Content-Length': String(body.length)
+        })
+        res.end(body)
+      } catch (err) {
+        res.writeHead(502, CORS_HEADERS)
+        res.end('Logo fetch failed')
+      }
       return
     }
 

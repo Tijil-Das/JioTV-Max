@@ -432,7 +432,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({
     version: app.getVersion(),
     platform: process.platform,
-    electron: process.versions.electron
+    electron: process.versions.electron,
+    relayBase: `http://127.0.0.1:${relay.port}`
   }))
 
   ipcMain.handle(IPC.toggleFullscreen, (): boolean => {

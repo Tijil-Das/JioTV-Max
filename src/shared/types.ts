@@ -102,6 +102,8 @@ export interface AppInfo {
   version: string
   platform: string
   electron: string
+  /** Base URL of the local media relay, e.g. "http://127.0.0.1:52100" */
+  relayBase: string
 }
 
 export type Result<T> =

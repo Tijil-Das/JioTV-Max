@@ -1,8 +1,10 @@
 # Re-derives all icon pack sizes and project assets from Icon-Pack/2048 x 2048.png
 Add-Type -AssemblyName System.Drawing
 
-$root = (Get-Item $PSScriptRoot).Parent.FullName
-$iconPackDir = Join-Path $root "Icon-Pack"
+$windowsRoot = (Get-Item $PSScriptRoot).Parent.FullName
+$repoRoot = (Get-Item $windowsRoot).Parent.FullName
+$root = $windowsRoot
+$iconPackDir = Join-Path $windowsRoot "Icon-Pack"
 $sourcePath = Join-Path $iconPackDir "2048 x 2048.png"
 
 if (-not (Test-Path $sourcePath)) {
@@ -70,19 +72,24 @@ foreach ($s in $sizes) {
 $master2048.Dispose()
 
 # 3. Update project icons wherever needed
-$buildDir = Join-Path $root "build"
+$buildDir = Join-Path $windowsRoot "build"
 if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Force -Path $buildDir | Out-Null }
 Copy-Item -Force (Join-Path $iconPackDir "1024 x 1024.png") (Join-Path $buildDir "icon.png")
 Write-Host "Updated build\icon.png (1024x1024)"
 
-$rendererIcons = Join-Path $root "src\renderer\src\assets\icons"
+$rendererIcons = Join-Path $windowsRoot "src\renderer\src\assets\icons"
 if (-not (Test-Path $rendererIcons)) { New-Item -ItemType Directory -Force -Path $rendererIcons | Out-Null }
 Copy-Item -Force (Join-Path $iconPackDir "256 x 256.png") (Join-Path $rendererIcons "app-icon-256.png")
 Copy-Item -Force (Join-Path $iconPackDir "128 x 128.png") (Join-Path $rendererIcons "app-icon-128.png")
 Copy-Item -Force (Join-Path $iconPackDir "32 x 32.png") (Join-Path $rendererIcons "favicon.png")
 Write-Host "Updated renderer assets: app-icon-256, app-icon-128, favicon"
 
-$websiteAssets = Join-Path $root "website\assets"
+$websiteCandidates = @(
+  (Join-Path $repoRoot "Website\assets"),
+  (Join-Path $repoRoot "website\assets")
+)
+$websiteAssets = $websiteCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $websiteAssets) { $websiteAssets = $websiteCandidates[0] }
 if (-not (Test-Path $websiteAssets)) { New-Item -ItemType Directory -Force -Path $websiteAssets | Out-Null }
 Copy-Item -Force (Join-Path $iconPackDir "256 x 256.png") (Join-Path $websiteAssets "app-icon-256.png")
 Copy-Item -Force (Join-Path $iconPackDir "128 x 128.png") (Join-Path $websiteAssets "app-icon-128.png")

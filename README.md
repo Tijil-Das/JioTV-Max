@@ -211,7 +211,7 @@ The player is fully controllable via the keyboard:
 1. **Clone the repository**:
    ```powershell
    git clone https://github.com/Tijil-Das/JioTV-Max.git "JioTV Max"
-   cd "JioTV Max"
+   cd "JioTV Max/JioTV-Max-Windows"
    ```
 
 2. **Install dependencies**:
@@ -244,7 +244,7 @@ The application starts in **Demo mode** on its first run:
 
 For live channels requiring Widevine DRM under DASH, JioTv Max integrates castLabs Electron with an automated setup:
 
-- Simply run:
+- Simply run from `JioTV-Max-Windows`:
   ```powershell
   pnpm dev:wv
   ```
@@ -255,7 +255,7 @@ For live channels requiring Widevine DRM under DASH, JioTv Max integrates castLa
 
 ## Packaging & Production Builds
 
-JioTv Max packages into a standalone unpacked directory or a production NSIS installer. The packaging runner (`scripts/pack.mjs`) automatically configures the castLabs distribution on any machine:
+JioTv Max packages into a standalone unpacked directory or a production NSIS installer. From within `JioTV-Max-Windows`:
 
 ```powershell
 # Typecheck both Node and Web TypeScript targets

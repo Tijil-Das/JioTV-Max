@@ -45,6 +45,7 @@ import { DvrSeekBar } from '@/components/player/DvrSeekBar'
 import { QualityMenu } from '@/components/player/QualityMenu'
 import { ShortcutsOverlay } from '@/components/player/ShortcutsOverlay'
 import { PinDialog } from '@/components/settings/PinDialog'
+import { WindowControls } from '@/components/layout/WindowControls'
 
 interface StreamFailure {
   message: string
@@ -262,6 +263,11 @@ export function PlayerPage(): JSX.Element {
     return () => {
       document.removeEventListener('fullscreenchange', onDocumentFullscreen)
       off?.()
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined)
+      }
+      void bridge?.setFullscreen(false).catch(() => undefined)
+      setFullscreen(false)
     }
   }, [bridge, setFullscreen])
 
@@ -518,16 +524,23 @@ export function PlayerPage(): JSX.Element {
       {/* Top overlay */}
       <div
         className={cn(
-          'absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/65 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
+          'drag-region absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/65 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
           controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
         <div className="flex items-start justify-between gap-6">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="no-drag flex min-w-0 flex-1 items-center gap-3">
             <IconButton
               label="Back"
               variant="glass"
-              onClick={() => navigate(-1)}
+              onClick={async () => {
+                if (document.fullscreenElement) {
+                  await document.exitFullscreen().catch(() => undefined)
+                }
+                await bridge?.setFullscreen(false).catch(() => undefined)
+                setFullscreen(false)
+                navigate(-1)
+              }}
               className="h-9 w-9 rounded-xl"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -545,7 +558,7 @@ export function PlayerPage(): JSX.Element {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="no-drag flex shrink-0 items-center gap-2">
             {stream?.isDrm ? (
               <span className="rounded-pill border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-amber-200">
                 Widevine
@@ -555,6 +568,11 @@ export function PlayerPage(): JSX.Element {
               <span className="rounded-pill border border-white/10 bg-black/35 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-md">
                 {stream.type === 'dash' ? 'DASH' : 'HLS'} · {qualityLabel}
               </span>
+            ) : null}
+            {!isFullscreen ? (
+              <div className="ml-2 flex h-8 items-center overflow-hidden rounded-[8px] border border-white/10 bg-black/40 backdrop-blur-md">
+                <WindowControls />
+              </div>
             ) : null}
           </div>
         </div>

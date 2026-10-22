@@ -449,6 +449,14 @@ function registerIpc(): void {
     return next
   })
 
+  ipcMain.handle(IPC.setFullscreen, (_event, value: boolean): boolean => {
+    if (!mainWindow) return false
+    const target = Boolean(value)
+    mainWindow.setFullScreen(target)
+    mainWindow.webContents.send(IPC.fullscreenChanged, target)
+    return target
+  })
+
   ipcMain.handle(IPC.windowMinimize, (): void => {
     mainWindow?.minimize()
   })

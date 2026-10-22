@@ -151,6 +151,7 @@ export interface StreamDeckApi {
   isElectron: true
   getAppInfo(): Promise<AppInfo>
   toggleFullscreen(): Promise<boolean>
+  setFullscreen(value: boolean): Promise<boolean>
   onFullscreenChange(callback: (fullscreen: boolean) => void): () => void
   minimize(): Promise<void>
   maximize(): Promise<boolean>

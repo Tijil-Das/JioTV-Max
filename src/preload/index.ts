@@ -20,6 +20,7 @@ const api = {
   isElectron: true as const,
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC.appInfo),
   toggleFullscreen: (): Promise<boolean> => ipcRenderer.invoke(IPC.toggleFullscreen),
+  setFullscreen: (value: boolean): Promise<boolean> => ipcRenderer.invoke(IPC.setFullscreen, value),
   onFullscreenChange: (callback: (fullscreen: boolean) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, fullscreen: boolean) => callback(fullscreen)
     ipcRenderer.on(IPC.fullscreenChanged, listener)

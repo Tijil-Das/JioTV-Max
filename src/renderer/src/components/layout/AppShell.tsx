@@ -2,31 +2,26 @@ import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Keyboard } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { TitleBar } from './TitleBar'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { BrandMark } from '@/components/ui/BrandMark'
-import { usePlayerStore } from '@/store/usePlayerStore'
 
 /**
  * Persistent chrome around the routed pages. The player route takes over the
- * full frame: no sidebar, no top bar, just the title strip and the video.
+ * full frame: no sidebar, no top bar, just the video and player controls.
  */
 export function AppShell({ children }: { children: React.ReactNode }): JSX.Element {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const isPlayer = location.pathname.startsWith('/watch')
-  const isFullscreen = usePlayerStore((state) => state.isFullscreen)
 
   useEffect(() => {
     if (!isPlayer && mainRef.current) mainRef.current.scrollTop = 0
   }, [location.pathname, isPlayer])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {!isFullscreen ? <TitleBar /> : null}
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        {!isPlayer ? <Sidebar /> : null}
+    <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
+      {!isPlayer ? <Sidebar /> : null}
         <main
           ref={mainRef}
           id="app-scroll"
@@ -54,7 +49,6 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
             children
           )}
         </main>
-      </div>
     </div>
   )
 }

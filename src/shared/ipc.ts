@@ -2,6 +2,7 @@
 export const IPC = {
   appInfo: 'app:info',
   toggleFullscreen: 'window:toggle-fullscreen',
+  setFullscreen: 'window:set-fullscreen',
   fullscreenChanged: 'window:fullscreen-changed',
   windowMinimize: 'window:minimize',
   windowMaximize: 'window:maximize',

@@ -9,6 +9,7 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUIStore } from '@/store/useUIStore'
 import { useRelayStore } from '@/store/useRelayStore'
+import { usePlayerStore } from '@/store/usePlayerStore'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LoginModal } from '@/components/auth/LoginModal'
@@ -166,6 +167,32 @@ export default function App(): JSX.Element {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  // ── Global fullscreen state sync ─────────────────────────────────────
+  useEffect(() => {
+    const onFullscreen = () => {
+      usePlayerStore.getState().setFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', onFullscreen)
+    const off = getBridge()?.onFullscreenChange((fs) => {
+      usePlayerStore.getState().setFullscreen(fs)
+    })
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreen)
+      off?.()
+    }
+  }, [])
+
+  // ── Route leave watcher: exit fullscreen when leaving player ─────────
+  useEffect(() => {
+    if (!location.pathname.startsWith('/watch')) {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined)
+      }
+      void getBridge()?.setFullscreen(false).catch(() => undefined)
+      usePlayerStore.getState().setFullscreen(false)
+    }
+  }, [location.pathname])
 
   // ── Window title ─────────────────────────────────────────────────────
   useEffect(() => {

@@ -6,10 +6,12 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { useOnline } from '@/hooks/useOnline'
 import { SearchBox } from './SearchBox'
 import { ProfileMenu } from './ProfileMenu'
+import { WindowControls } from './WindowControls'
 
 /**
  * 64px top bar. Transparent over the hero; glass at 80% + hairline when scrolled.
- * No subtitle text. No redundant provider pill.
+ * Integrated standard Windows window controls at the far right.
+ * Drag region allows moving the window by dragging empty bar space.
  */
 export function TopBar(): JSX.Element {
   const location = useLocation()
@@ -50,10 +52,10 @@ export function TopBar(): JSX.Element {
   const isHome = location.pathname === '/'
 
   return (
-    <div className="sticky top-0 z-30 -mb-[64px] h-[64px]">
+    <div className="drag-region sticky top-0 z-30 -mb-[64px] h-[64px]">
       <div
         className={cn(
-          'flex h-full items-center justify-between gap-6 px-12 transition-all duration-300',
+          'flex h-full items-center justify-between gap-6 pl-12 pr-0 transition-all duration-300',
           scrolled
             ? 'border-b border-[rgba(255,255,255,0.07)] bg-[rgba(10,10,11,0.80)] backdrop-blur-[28px]'
             : 'border-b border-transparent bg-transparent'
@@ -61,17 +63,19 @@ export function TopBar(): JSX.Element {
       >
         {/* Page title — flush left, no subtitle */}
         {!isHome && title ? (
-          <h1 className="min-w-0 truncate text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]">
+          <h1 className="no-drag min-w-0 truncate text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]">
             {title}
           </h1>
         ) : (
           <div className="min-w-0 flex-1" />
         )}
 
-        {/* Right: search + profile only — no provider pill */}
-        <div className="flex shrink-0 items-center gap-3">
+        {/* Right: search + profile + window controls */}
+        <div className="no-drag flex h-full shrink-0 items-center gap-3">
           <SearchBox />
           <ProfileMenu />
+          <div className="mx-1 h-4 w-px bg-white/[0.08]" aria-hidden />
+          <WindowControls />
         </div>
       </div>
     </div>

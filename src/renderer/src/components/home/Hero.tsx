@@ -223,6 +223,32 @@ export function Hero(): JSX.Element {
 
   useEffect(() => () => streamProbe.destroyProbePlayers(), [])
 
+  // ---- Auto scroll to top when hero is loaded (if user hasn't scrolled) ----
+  const userHasScrolled = useRef(false)
+  const hasAutoScrolled = useRef(false)
+
+  useEffect(() => {
+    const markScrolled = (): void => {
+      userHasScrolled.current = true
+    }
+    window.addEventListener('wheel', markScrolled, { passive: true })
+    window.addEventListener('touchmove', markScrolled, { passive: true })
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Space'].includes(e.code)) {
+        userHasScrolled.current = true
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    if (window.scrollY > 20) {
+      userHasScrolled.current = true
+    }
+    return () => {
+      window.removeEventListener('wheel', markScrolled)
+      window.removeEventListener('touchmove', markScrolled)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
+
   // ---- Interaction ---------------------------------------------------------
   const select = useCallback((id: string) => {
     setUserPaused(false)
@@ -298,6 +324,27 @@ export function Hero(): JSX.Element {
   const progress = current ? getProgress(current, now) : 0
   const artwork = current?.artworkUrl ?? ''
 
+  // Auto scroll to upper hero section once all hero content is loaded, if user hasn't scrolled yet
+  useEffect(() => {
+    if (!expanded || !activeChannel || hasAutoScrolled.current) return
+    hasAutoScrolled.current = true
+    if (!userHasScrolled.current && window.scrollY > 0) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [expanded, activeChannel])
+
+  const activeIdx = activeId ? verifiedOrdered.indexOf(activeId) : 0
+  const prevId =
+    verifiedOrdered.length > 1
+      ? verifiedOrdered[(activeIdx - 1 + verifiedOrdered.length) % verifiedOrdered.length]
+      : null
+  const nextId =
+    verifiedOrdered.length > 1
+      ? verifiedOrdered[(activeIdx + 1) % verifiedOrdered.length]
+      : null
+  const prevChannel = prevId ? channelById.get(prevId) ?? null : null
+  const nextChannel = nextId ? channelById.get(nextId) ?? null : null
+
   const cleanTitle = useMemo(() => {
     if (current?.title) return current.title
     return activeChannel?.name.replace(/\s+live$/i, '') ?? ''
@@ -338,263 +385,347 @@ export function Hero(): JSX.Element {
           <section
             ref={sectionRef}
             aria-label="Featured live channel"
-            className="relative h-[clamp(440px,60vh,640px)] w-full overflow-hidden bg-[#0A0A0B]"
+            onClick={() => activeChannel && watch(activeChannel.id)}
+            className="group/hero relative h-[clamp(440px,60vh,640px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
           >
-            {/* Static backdrop: real EPG artwork when present */}
-            <div className="absolute inset-0" aria-hidden>
-              {artwork ? (
-                <img
-                  src={artwork}
-                  alt=""
-                  className="h-full w-full object-cover object-center opacity-30"
-                  draggable={false}
-                />
+            {/* Center flex container: 16:9 video frame with adjacent channels peeping on wide screens */}
+            <div className="relative mx-auto flex h-full w-full items-center justify-center overflow-hidden">
+              {/* Previous channel peeping from left */}
+              {prevChannel && verifiedOrdered.length > 1 ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Watch ${prevChannel.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    watch(prevChannel.id)
+                  }}
+                  onMouseEnter={() => showTooltip(prevChannel.id)}
+                  onMouseLeave={hideTooltip}
+                  className={cn(
+                    'group/left relative hidden h-[84%] flex-1 max-w-[280px] min-w-[70px] shrink cursor-pointer items-center justify-end overflow-hidden',
+                    'rounded-l-2xl border-y border-l border-white/[0.08] bg-[#0E0E10]/95 backdrop-blur-md',
+                    'transition-all duration-300 hover:border-white/[0.22] hover:bg-[#151518] hover:scale-[1.01] xl:flex'
+                  )}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-black/75" />
+                  <div className="relative z-10 flex flex-col items-center justify-center gap-2 p-4 text-center">
+                    <div className="h-10 w-10 shrink-0 filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                      <ChannelLogo channel={prevChannel} size="cell" priority="visible" />
+                    </div>
+                    <span className="rounded-[6px] border border-white/10 bg-white/10 px-2 py-0.5 font-sans text-[11px] font-[650] tabular-nums text-[#F4F4F5]">
+                      CH {prevChannel.number}
+                    </span>
+                    <p className="line-clamp-1 max-w-[150px] text-[13px] font-[600] text-[#A1A1A6] group-hover/left:text-[#F4F4F5]">
+                      {prevChannel.name}
+                    </p>
+                    <span className="flex items-center gap-1 text-[11px] font-[500] text-[#8A8A91] transition-colors group-hover/left:text-[var(--red)]">
+                      <ChevronLeft className="h-3 w-3" /> Click to watch
+                    </span>
+                  </div>
+                </div>
               ) : null}
-            </div>
 
-            {/* A/B video slots: max two hls instances, 400ms crossfade, center 30% */}
-            <div className="absolute inset-0" aria-hidden>
-              {[0, 1].map((slot) => (
-                <video
-                  key={slot}
-                  ref={videoRefs[slot]}
-                  muted
-                  autoPlay
-                  playsInline
-                  disablePictureInPicture
-                  disableRemotePlayback
-                  tabIndex={-1}
+              {/* Active 16:9 Video & Content Stage: Never cuts top or bottom */}
+              <div className="relative h-full aspect-[16/9] max-w-full shrink-0 overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.9)] z-20">
+                {/* Static backdrop: real EPG artwork when present */}
+                <div className="absolute inset-0" aria-hidden>
+                  {artwork ? (
+                    <img
+                      src={artwork}
+                      alt=""
+                      className="h-full w-full object-cover object-center opacity-30"
+                      draggable={false}
+                    />
+                  ) : null}
+                </div>
+
+                {/* A/B video slots: max two hls instances, 400ms crossfade, full 16:9 aspect */}
+                <div className="absolute inset-0" aria-hidden>
+                  {[0, 1].map((slot) => (
+                    <video
+                      key={slot}
+                      ref={videoRefs[slot]}
+                      muted
+                      autoPlay
+                      playsInline
+                      disablePictureInPicture
+                      disableRemotePlayback
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                      style={{
+                        objectPosition: 'center 30%',
+                        opacity: opacity[slot],
+                        transition: 'opacity 500ms ease'
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Scrims: the only gradients in the app (Addendum 3 §8) */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[96px]"
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
                   style={{
-                    objectPosition: 'center 30%',
-                    opacity: opacity[slot],
-                    transition: 'opacity 500ms ease'
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%)'
                   }}
                 />
-              ))}
-            </div>
+                <div
+                  className="pointer-events-none absolute inset-0 z-10"
+                  aria-hidden
+                  style={{
+                    background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, transparent 60%)'
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[200px]"
+                  aria-hidden
+                  style={{
+                    background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, transparent 100%)'
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute inset-0 z-10 bg-black/20"
+                  aria-hidden
+                />
+                {!previewOn ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-10"
+                    aria-hidden
+                    style={{
+                      background:
+                        'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
+                    }}
+                  />
+                ) : null}
 
-            {/* Scrims: the only gradients in the app (Addendum 3 §8) */}
-            {/* Top 96px black 0.6 → 0 */}
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[96px]"
-              aria-hidden
-              style={{
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%)'
-              }}
-            />
-            {/* Left-to-right black 0.92 → 0 across the left 60% */}
-            <div
-              className="pointer-events-none absolute inset-0 z-10"
-              aria-hidden
-              style={{
-                background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, transparent 60%)'
-              }}
-            />
-            {/* Bottom 200px black 1 → 0 */}
-            <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[200px]"
-              aria-hidden
-              style={{
-                background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, transparent 100%)'
-              }}
-            />
-            {/* Flat rgba(0,0,0,0.2) over the video */}
-            <div
-              className="pointer-events-none absolute inset-0 z-10 bg-black/20"
-              aria-hidden
-            />
-            {/* Subtle radial lift over black when preview is off or prefers-reduced-motion */}
-            {!previewOn ? (
-              <div
-                className="pointer-events-none absolute inset-0 z-10"
-                aria-hidden
-                style={{
-                  background:
-                    'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
-                }}
-              />
-            ) : null}
-
-            {/* Content: left, bottom-aligned, max-width 560px, 48px gutter, 56px bottom padding, 12px rhythm */}
-            {activeChannel ? (
-              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-[var(--gutter)] pb-[56px]">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeChannel.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex max-w-[560px] flex-col gap-3"
-                  >
-                    {/* 1. Processed logo, max 36px tall and 160px wide, black drop-shadow */}
-                    <div
-                      className="flex h-9 max-w-[160px] items-center"
-                      style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.6))' }}
-                    >
-                      <ChannelLogo channel={activeChannel} size="hero" priority="visible" />
-                    </div>
-
-                    {/* 2. Overline: 6px red dot + LIVE NOW (11/600, 0.12em, text-2) + · CH 155 (12/650 tabular text-1) */}
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
-                        aria-hidden
-                      />
-                      <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
-                        LIVE NOW
-                      </span>
-                      <span className="font-sans text-[12px] font-[650] tabular-nums text-[#F4F4F5]">
-                        · CH {activeChannel.number}
-                      </span>
-                    </div>
-
-                    {/* 3. Title: current EPG program title, 52/700/-0.03em, max 2 lines. With no EPG clean channel name. */}
-                    <h1 className="line-clamp-2 text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
-                      {cleanTitle}
-                    </h1>
-
-                    {/* 4. Meta: 6:00 – 7:00 PM · 42 min left · English · HD at 14/500 text-2 + 140px 2px progress bar */}
-                    {metaParts.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-2 text-[14px] font-[500] text-[#A1A1A6]">
-                        <span>{metaParts.join(' · ')}</span>
-                        {current && progress > 0 ? (
-                          <span
-                            aria-hidden="true"
-                            className="inline-block h-[2px] w-[140px] overflow-hidden rounded-full bg-white/[0.12]"
-                          >
-                            <span
-                              className="block h-full bg-[var(--red)]"
-                              style={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
-                            />
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {/* 5. Description: EPG only, max 2 lines, text-2, max 520px. Omit if absent. */}
-                    {current?.description ? (
-                      <p className="line-clamp-2 max-w-[520px] text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
-                        {current.description}
-                      </p>
-                    ) : null}
-
-                    {/* 6. Buttons: Primary "Watch live", Secondary "Guide" */}
-                    <div className="mt-1 flex items-center gap-3">
-                      <Button
-                        variant="primary"
-                        size="lg"
-                        icon={<Play className="h-4 w-4 fill-current" />}
-                        onClick={() => watch(activeChannel.id)}
+                {/* Content: left, bottom-aligned, max-width 560px, 48px gutter, 56px bottom padding, 12px rhythm */}
+                {activeChannel ? (
+                  <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-[var(--gutter)] pb-[56px]">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={activeChannel.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex max-w-[560px] flex-col gap-3"
                       >
-                        Watch live
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="lg"
-                        onClick={() => navigate(`/guide?channel=${activeChannel.id}`)}
-                      >
-                        Guide
-                      </Button>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            ) : null}
-
-            {/* Always-on 32px pause/play icon button (accessibility) */}
-            {activeChannel ? (
-              <button
-                type="button"
-                title={previewOn ? 'Pause live preview' : 'Play live preview'}
-                aria-label={previewOn ? 'Pause live preview' : 'Play live preview'}
-                aria-pressed={previewOn}
-                onClick={() => {
-                  if (previewOn) {
-                    setUserPaused(true)
-                  } else {
-                    setOverridePlay(true)
-                    setUserPaused(false)
-                  }
-                }}
-                className={cn(
-                  'absolute right-[var(--gutter)] top-[76px] z-30 flex h-8 w-8 items-center justify-center rounded-full',
-                  'border border-[rgba(255,255,255,0.14)] bg-black/55 text-[#F4F4F5] backdrop-blur-sm',
-                  'transition-colors duration-150 hover:bg-black/75',
-                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
-                )}
-              >
-                {previewOn ? (
-                  <Pause className="h-3.5 w-3.5 fill-current" strokeWidth={0} />
-                ) : (
-                  <Play className="ml-[1px] h-3.5 w-3.5 fill-current" strokeWidth={0} />
-                )}
-              </button>
-            ) : null}
-
-            {/* Channel Switcher (bottom-right, 48px gutter, 56px from bottom): up to 6 plates of 56x56 */}
-            {verifiedOrdered.length > 0 ? (
-              <div
-                role="tablist"
-                aria-label="Verified featured channels"
-                onKeyDown={onTablistKeyDown}
-                className="absolute bottom-[56px] right-[var(--gutter)] z-30 flex items-center gap-[10px]"
-              >
-                {verifiedOrdered.map((id) => {
-                  const channel = channelById.get(id)
-                  if (!channel) return null
-                  const selected = id === activeId
-                  return (
-                    <div key={id} className="relative">
-                      {tooltipId === id ? (
+                        {/* 1. Processed logo, max 36px tall and 160px wide, black drop-shadow */}
                         <div
-                          role="tooltip"
-                          className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-[8px] border border-[rgba(255,255,255,0.12)] bg-[#111113] px-2.5 py-1 text-[12px] font-[500] text-[#F4F4F5] shadow-lg"
+                          className="flex h-9 max-w-[160px] items-center"
+                          style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.6))' }}
                         >
-                          {channel.name} · CH {channel.number}
+                          <ChannelLogo channel={activeChannel} size="hero" priority="visible" />
                         </div>
-                      ) : null}
-                      <button
-                        ref={(element) => {
-                          chipRefs.current[id] = element
-                        }}
-                        type="button"
-                        role="tab"
-                        aria-selected={selected}
-                        tabIndex={selected ? 0 : -1}
-                        title={channel.name}
-                        aria-label={`Show ${channel.name}`}
-                        onClick={() => select(id)}
-                        onMouseEnter={() => {
-                          startDwell(id)
-                          showTooltip(id)
-                        }}
-                        onMouseLeave={() => {
-                          cancelDwell()
-                          hideTooltip()
-                        }}
-                        onFocus={() => {
-                          cancelDwell()
-                          showTooltip(id)
-                        }}
-                        onBlur={hideTooltip}
-                        className={cn(
-                          'relative rounded-[12px] transition-opacity duration-150',
-                          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
-                          selected
-                            ? 'opacity-100 after:absolute after:inset-[-2px] after:rounded-[14px] after:border-2 after:border-[var(--red-line)] after:content-[""]'
-                            : 'opacity-60 hover:opacity-100'
-                        )}
-                      >
-                        <ChannelLogoCell channel={channel} priority="visible" />
-                      </button>
-                    </div>
-                  )
-                })}
+
+                        {/* 2. Overline: 6px red dot + LIVE NOW (11/600, 0.12em, text-2) + · CH 155 (12/650 tabular text-1) */}
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
+                            aria-hidden
+                          />
+                          <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
+                            LIVE NOW
+                          </span>
+                          <span className="font-sans text-[12px] font-[650] tabular-nums text-[#F4F4F5]">
+                            · CH {activeChannel.number}
+                          </span>
+                        </div>
+
+                        {/* 3. Title: current EPG program title, 52/700/-0.03em, max 2 lines */}
+                        <h1 className="line-clamp-2 text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
+                          {cleanTitle}
+                        </h1>
+
+                        {/* 4. Meta: 6:00 – 7:00 PM · 42 min left · English · HD + 140px 2px progress bar */}
+                        {metaParts.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2 text-[14px] font-[500] text-[#A1A1A6]">
+                            <span>{metaParts.join(' · ')}</span>
+                            {current && progress > 0 ? (
+                              <span
+                                aria-hidden="true"
+                                className="inline-block h-[2px] w-[140px] overflow-hidden rounded-full bg-white/[0.12]"
+                              >
+                                <span
+                                  className="block h-full bg-[var(--red)]"
+                                  style={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
+                                />
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {/* 5. Description: EPG only, max 2 lines, text-2, max 520px */}
+                        {current?.description ? (
+                          <p className="line-clamp-2 max-w-[520px] text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
+                            {current.description}
+                          </p>
+                        ) : null}
+
+                        {/* 6. Buttons: Primary "Watch live", Secondary "Guide" */}
+                        <div className="mt-1 flex items-center gap-3">
+                          <Button
+                            variant="primary"
+                            size="lg"
+                            icon={<Play className="h-4 w-4 fill-current" />}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              watch(activeChannel.id)
+                            }}
+                          >
+                            Watch live
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="lg"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigate(`/guide?channel=${activeChannel.id}`)
+                            }}
+                          >
+                            Guide
+                          </Button>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                ) : null}
+
+                {/* Always-on 32px pause/play icon button (accessibility) */}
+                {activeChannel ? (
+                  <button
+                    type="button"
+                    title={previewOn ? 'Pause live preview' : 'Play live preview'}
+                    aria-label={previewOn ? 'Pause live preview' : 'Play live preview'}
+                    aria-pressed={previewOn}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (previewOn) {
+                        setUserPaused(true)
+                      } else {
+                        setOverridePlay(true)
+                        setUserPaused(false)
+                      }
+                    }}
+                    className={cn(
+                      'absolute right-[24px] top-[76px] z-30 flex h-8 w-8 items-center justify-center rounded-full',
+                      'border border-[rgba(255,255,255,0.14)] bg-black/55 text-[#F4F4F5] backdrop-blur-sm',
+                      'transition-colors duration-150 hover:bg-black/75',
+                      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
+                    )}
+                  >
+                    {previewOn ? (
+                      <Pause className="h-3.5 w-3.5 fill-current" strokeWidth={0} />
+                    ) : (
+                      <Play className="ml-[1px] h-3.5 w-3.5 fill-current" strokeWidth={0} />
+                    )}
+                  </button>
+                ) : null}
+
+                {/* Channel Switcher (bottom-right inside active 16:9 stage): up to 6 plates of 56x56 */}
+                {verifiedOrdered.length > 0 ? (
+                  <div
+                    role="tablist"
+                    aria-label="Verified featured channels"
+                    onKeyDown={onTablistKeyDown}
+                    className="absolute bottom-[56px] right-[24px] z-30 flex items-center gap-[10px]"
+                  >
+                    {verifiedOrdered.map((id) => {
+                      const channel = channelById.get(id)
+                      if (!channel) return null
+                      const selected = id === activeId
+                      return (
+                        <div key={id} className="relative">
+                          {tooltipId === id ? (
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-[8px] border border-[rgba(255,255,255,0.12)] bg-[#111113] px-2.5 py-1 text-[12px] font-[500] text-[#F4F4F5] shadow-lg"
+                            >
+                              {channel.name} · CH {channel.number}
+                            </div>
+                          ) : null}
+                          <button
+                            ref={(element) => {
+                              chipRefs.current[id] = element
+                            }}
+                            type="button"
+                            role="tab"
+                            aria-selected={selected}
+                            tabIndex={selected ? 0 : -1}
+                            title={channel.name}
+                            aria-label={`Show ${channel.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              watch(id)
+                            }}
+                            onMouseEnter={() => {
+                              startDwell(id)
+                              showTooltip(id)
+                            }}
+                            onMouseLeave={() => {
+                              cancelDwell()
+                              hideTooltip()
+                            }}
+                            onFocus={() => {
+                              cancelDwell()
+                              showTooltip(id)
+                            }}
+                            onBlur={hideTooltip}
+                            className={cn(
+                              'relative rounded-[12px] transition-opacity duration-150',
+                              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
+                              selected
+                                ? 'opacity-100 after:absolute after:inset-[-2px] after:rounded-[14px] after:border-2 after:border-[var(--red-line)] after:content-[""]'
+                                : 'opacity-60 hover:opacity-100'
+                            )}
+                          >
+                            <ChannelLogoCell channel={channel} priority="visible" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+
+              {/* Next channel peeping from right */}
+              {nextChannel && verifiedOrdered.length > 1 ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Watch ${nextChannel.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    watch(nextChannel.id)
+                  }}
+                  onMouseEnter={() => showTooltip(nextChannel.id)}
+                  onMouseLeave={hideTooltip}
+                  className={cn(
+                    'group/right relative hidden h-[84%] flex-1 max-w-[280px] min-w-[70px] shrink cursor-pointer items-center justify-start overflow-hidden',
+                    'rounded-r-2xl border-y border-r border-white/[0.08] bg-[#0E0E10]/95 backdrop-blur-md',
+                    'transition-all duration-300 hover:border-white/[0.22] hover:bg-[#151518] hover:scale-[1.01] xl:flex'
+                  )}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-black/85" />
+                  <div className="relative z-10 flex flex-col items-center justify-center gap-2 p-4 text-center">
+                    <div className="h-10 w-10 shrink-0 filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                      <ChannelLogo channel={nextChannel} size="cell" priority="visible" />
+                    </div>
+                    <span className="rounded-[6px] border border-white/10 bg-white/10 px-2 py-0.5 font-sans text-[11px] font-[650] tabular-nums text-[#F4F4F5]">
+                      CH {nextChannel.number}
+                    </span>
+                    <p className="line-clamp-1 max-w-[150px] text-[13px] font-[600] text-[#A1A1A6] group-hover/right:text-[#F4F4F5]">
+                      {nextChannel.name}
+                    </p>
+                    <span className="flex items-center gap-1 text-[11px] font-[500] text-[#8A8A91] transition-colors group-hover/side-right:text-[var(--red)]">
+                      Click to watch <ChevronRight className="h-3 w-3" />
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             {/* ?debug=hero — candidate scores and verification verdicts */}
             {debugHero ? (

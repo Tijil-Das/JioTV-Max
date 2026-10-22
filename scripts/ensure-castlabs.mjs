@@ -127,3 +127,16 @@ export async function ensureCastlabsElectron(targetDir = findCastlabsDir()) {
   console.log(`[castLabs] Successfully installed castLabs Electron at:\n  ${targetDir}\n`)
   return targetDir
 }
+
+// Automatically execute if invoked directly via CLI or package.json postinstall
+const isDirectRun =
+  process.argv[1] &&
+  (process.argv[1].endsWith('ensure-castlabs.mjs') ||
+    process.argv[1].replace(/\\/g, '/').endsWith('scripts/ensure-castlabs.mjs'))
+
+if (isDirectRun) {
+  ensureCastlabsElectron().catch((err) => {
+    console.warn('\n[castLabs] Notice: Automatic download during postinstall could not complete:', err.message)
+    console.warn('[castLabs] The app will retry downloading when you run "pnpm dev:wv".\n')
+  })
+}

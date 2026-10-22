@@ -1,35 +1,29 @@
 /**
- * Addendum 3 — channel logo pipeline.
+ * Addendum 4 — channel logo pipeline (Pixel-Pure Icons Spec).
  *
- * Pure pixel routines shared by the Web Worker (OffscreenCanvas) and the Vitest
- * fixtures. No DOM access happens here, so every step is deterministic and can
- * be exercised headlessly.
+ * The channel logo is the server's asset. We never repaint it.
+ * ALLOWED, only these:
+ * 1. Decode.
+ * 2. Remove a solid near-white background, only if the image is fully opaque
+ *    AND all four corners are near-white. Use a border-connected flood fill
+ *    (ΔE76 < 6, 1px feather). Interior pixels are never touched, so white
+ *    letters inside the logo survive.
+ * 3. Trim fully transparent margins (alpha < 0.02).
+ * 4. Uniform scaling (§3).
+ * 5. Translation for optical centering.
  *
- * Tiers returned:
- *   asis      the original colours survive (possibly with lifted dark ink/rim)
- *   knockout  the whole mark was recoloured to #F2F2F4
- *   monogram  the asset is unusable; the UI must draw initials
+ * FORBIDDEN: any per-pixel color change inside the logo (knock-out, lift,
+ * invert, tint, grayscale, rim/outline, halo, blend modes, CSS filters).
  */
 
-export type LogoPipelineTier = 'asis' | 'knockout' | 'monogram'
+export type LogoPipelineTier = 'asis' | 'monogram'
 
 export type LogoPipelineFlag =
-  | 'opaque'
-  | 'alpha'
-  | 'repaired'
-  | 'badge'
-  | 'light-badge'
-  | 'knockout'
-  | 'lifted-dark'
-  | 'rim'
-  | 'clamped'
-  | 'upscale-capped'
-  | 'luminance-reduced'
-  | 'low-ink'
-  | 'solid-slab'
-  | 'too-small'
-  | 'too-light'
-  | 'decode-failed'
+  | 'low-res'
+  | 'low-contrast'
+  | 'matted'
+  | 'opaque-light'
+  | 'monogram'
 
 export interface RgbaImage {
   data: Uint8ClampedArray
@@ -86,16 +80,14 @@ export interface LogoPipelineResult {
 export interface LogoPipelineOptions {
   tileSize?: number
   areaFactor?: number
-  forceTier?: 'asis' | 'knockout' | 'monogram'
+  forceTier?: 'asis' | 'monogram'
   channelId?: string
 }
 
-export const PIPELINE_VERSION = 1
+export const PIPELINE_VERSION = 4
 export const PLATE_COLOR = { r: 14, g: 14, b: 16 } // #0E0E10
-const INK_ALPHA = 16 // alpha > 0.06
-const OPAQUE_ALPHA_COVERAGE = 0.02
-const KNOCKOUT_COLOR = { r: 242, g: 242, b: 244 } // #F2F2F4
-const LIFT_COLOR = { r: 230, g: 230, b: 234 } // #E6E6EA
+const WHITE_REF = { r: 255, g: 255, b: 255 }
+const INK_ALPHA = 5 // alpha < 0.02 of 255 is <= 5
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -120,12 +112,6 @@ export function contrastRatio(
   return (hi + 0.05) / (lo + 0.05)
 }
 
-function hsvSaturation(r: number, g: number, b: number): number {
-  const max = Math.max(r, g, b) / 255
-  const min = Math.min(r, g, b) / 255
-  return max === 0 ? 0 : (max - min) / max
-}
-
 function rgbToLab(r: number, g: number, b: number): { l: number; a: number; b: number } {
   const rl = srgbToLinear(r)
   const gl = srgbToLinear(g)
@@ -137,13 +123,17 @@ function rgbToLab(r: number, g: number, b: number): { l: number; a: number; b: n
   return { l: 116 * f(y) - 16, a: 500 * (f(x) - f(y)), b: 200 * (f(y) - f(z)) }
 }
 
-function deltaE76(
+export function deltaE76(
   a: { r: number; g: number; b: number },
   b: { r: number; g: number; b: number }
 ): number {
   const labA = rgbToLab(a.r, a.g, a.b)
   const labB = rgbToLab(b.r, b.g, b.b)
   return Math.sqrt((labA.l - labB.l) ** 2 + (labA.a - labB.a) ** 2 + (labA.b - labB.b) ** 2)
+}
+
+function isNearWhite(color: { r: number; g: number; b: number }): boolean {
+  return deltaE76(color, WHITE_REF) < 6
 }
 
 function alphaCoverageOf(image: RgbaImage): number {
@@ -155,178 +145,100 @@ function alphaCoverageOf(image: RgbaImage): number {
   return transparent / (image.width * image.height)
 }
 
-interface PatchColor {
-  r: number
-  g: number
-  b: number
+function isFullyOpaque(image: RgbaImage): boolean {
+  return alphaCoverageOf(image) < 0.005
 }
 
-/** Median RGB of a square patch, sampled from the original pixels. */
-function medianPatch(image: RgbaImage, cx: number, cy: number, size = 8): PatchColor {
-  const half = Math.max(1, Math.floor(size / 2))
-  const x0 = Math.max(0, Math.min(image.width - 1, cx - half))
-  const y0 = Math.max(0, Math.min(image.height - 1, cy - half))
-  const x1 = Math.max(0, Math.min(image.width, x0 + size))
-  const y1 = Math.max(0, Math.min(image.height, y0 + size))
-  const rs: number[] = []
-  const gs: number[] = []
-  const bs: number[] = []
-  for (let y = y0; y < y1; y += 1) {
-    for (let x = x0; x < x1; x += 1) {
-      const idx = (y * image.width + x) * 4
-      rs.push(image.data[idx])
-      gs.push(image.data[idx + 1])
-      bs.push(image.data[idx + 2])
-    }
-  }
-  const median = (values: number[]): number => {
-    if (values.length === 0) return 0
-    const sorted = [...values].sort((a, b) => a - b)
-    return sorted[Math.floor(sorted.length / 2)]
-  }
-  return { r: median(rs), g: median(gs), b: median(bs) }
-}
-
-interface KeySample {
-  color: PatchColor
-  agree: boolean
+function cornersNearWhite(image: RgbaImage): boolean {
+  const { width, height, data } = image
+  const corners = [
+    { x: 0, y: 0 },
+    { x: width - 1, y: 0 },
+    { x: 0, y: height - 1 },
+    { x: width - 1, y: height - 1 }
+  ]
+  return corners.every(({ x, y }) => {
+    const idx = (y * width + x) * 4
+    return isNearWhite({ r: data[idx], g: data[idx + 1], b: data[idx + 2] })
+  })
 }
 
 /**
- * Samples the four 8×8 corner patches plus the four edge midpoints. A key is
- * usable when every patch is within ΔE76 < 8 of the aggregate median.
+ * Step 2: Remove a solid near-white background using a border-connected flood
+ * fill (ΔE76 < 6, 1px feather). Interior pixels are never touched, so white
+ * letters inside the logo survive.
  */
-function sampleKeyColor(image: RgbaImage): KeySample {
-  const { width, height } = image
-  const patches = [
-    medianPatch(image, 3, 3),
-    medianPatch(image, width - 4, 3),
-    medianPatch(image, 3, height - 4),
-    medianPatch(image, width - 4, height - 4),
-    medianPatch(image, Math.floor(width / 2), 3),
-    medianPatch(image, Math.floor(width / 2), height - 4),
-    medianPatch(image, 3, Math.floor(height / 2)),
-    medianPatch(image, width - 4, Math.floor(height / 2))
-  ]
-  // Aggregate median of the eight patch medians.
-  const med = (values: number[]): number => {
-    const sorted = [...values].sort((a, b) => a - b)
-    return sorted[Math.floor(sorted.length / 2)]
-  }
-  const color = {
-    r: med(patches.map((p) => p.r)),
-    g: med(patches.map((p) => p.g)),
-    b: med(patches.map((p) => p.b))
-  }
-  const agree = patches.every((patch) => deltaE76(patch, color) < 8)
-  return { color, agree }
-}
-
-function applyColorToAlpha(image: RgbaImage, key: PatchColor): void {
-  const { data } = image
-  const k = { r: key.r, g: key.g, b: key.b }
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    const p = { r: data[i], g: data[i + 1], b: data[i + 2] }
-    const channelAlpha = (pc: number, kc: number): number => {
-      if (pc > kc) return kc < 255 ? (pc - kc) / (255 - kc) : 0
-      return kc > 0 ? (kc - pc) / kc : 0
-    }
-    const alpha = Math.max(
-      channelAlpha(p.r, k.r),
-      channelAlpha(p.g, k.g),
-      channelAlpha(p.b, k.b)
-    )
-    if (alpha <= 0.004) {
-      data[i] = 0
-      data[i + 1] = 0
-      data[i + 2] = 0
-      data[i + 3] = 0
-      continue
-    }
-    data[i] = Math.round(Math.min(255, Math.max(0, k.r + (p.r - k.r) / alpha)))
-    data[i + 1] = Math.round(Math.min(255, Math.max(0, k.g + (p.g - k.g) / alpha)))
-    data[i + 2] = Math.round(Math.min(255, Math.max(0, k.b + (p.b - k.b) / alpha)))
-    data[i + 3] = Math.round(clamp01(alpha) * 255)
-  }
-  featherAlpha(image)
-}
-
-/** One-pixel alpha feather after the colour-to-alpha repair. */
-function featherAlpha(image: RgbaImage): void {
+function removeNearWhiteBackground(image: RgbaImage): boolean {
   const { width, height, data } = image
-  const alpha = new Uint8ClampedArray(width * height)
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) alpha[p] = data[i + 3]
+  const visited = new Uint8Array(width * height)
+  const queue = new Int32Array(width * height)
+  let qHead = 0
+  let qTail = 0
 
+  const pushCoord = (x: number, y: number): void => {
+    const idx = y * width + x
+    if (visited[idx]) return
+    const pIdx = idx * 4
+    if (isNearWhite({ r: data[pIdx], g: data[pIdx + 1], b: data[pIdx + 2] })) {
+      visited[idx] = 1
+      queue[qTail++] = idx
+    }
+  }
+
+  // Enqueue all outer boundary pixels that match near-white
+  for (let x = 0; x < width; x += 1) {
+    pushCoord(x, 0)
+    pushCoord(x, height - 1)
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    pushCoord(0, y)
+    pushCoord(width - 1, y)
+  }
+
+  if (qTail === 0) return false
+
+  // 4-connected BFS flood fill
+  while (qHead < qTail) {
+    const idx = queue[qHead++]
+    const x = idx % width
+    const y = Math.floor(idx / width)
+
+    if (x > 0) pushCoord(x - 1, y)
+    if (x < width - 1) pushCoord(x + 1, y)
+    if (y > 0) pushCoord(x, y - 1)
+    if (y < height - 1) pushCoord(x, y + 1)
+  }
+
+  // Clear visited background pixels with 1px feather at the perimeter
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const p = y * width + x
-      const a = alpha[p]
-      if (a === 0 || a === 255) continue
-      let total = a * 2
-      let weight = 2
-      for (let dy = -1; dy <= 1; dy += 1) {
-        for (let dx = -1; dx <= 1; dx += 1) {
-          if (dx === 0 && dy === 0) continue
-          const nx = x + dx
-          const ny = y + dy
-          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
-          total += alpha[ny * width + nx]
-          weight += 1
-        }
-      }
-      data[p * 4 + 3] = Math.round(total / weight)
-    }
-  }
-}
+      const idx = y * width + x
+      if (!visited[idx]) continue
 
-function clipRoundedCorners(image: RgbaImage, radiusRatio = 0.14): void {
-  const { width, height, data } = image
-  const radius = Math.max(1, Math.min(width, height) * radiusRatio)
-  const r2 = radius * radius
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      let cx = -1
-      let cy = -1
-      if (x < radius && y < radius) {
-        cx = radius
-        cy = radius
-      } else if (x > width - 1 - radius && y < radius) {
-        cx = width - 1 - radius
-        cy = radius
-      } else if (x < radius && y > height - 1 - radius) {
-        cx = radius
-        cy = height - 1 - radius
-      } else if (x > width - 1 - radius && y > height - 1 - radius) {
-        cx = width - 1 - radius
-        cy = height - 1 - radius
-      }
-      if (cx < 0) continue
-      const dist2 = (x - cx) ** 2 + (y - cy) ** 2
-      if (dist2 > r2) {
-        data[(y * width + x) * 4 + 3] = 0
-      } else if (dist2 > (radius - 1) ** 2) {
-        const coverage = Math.min(1, Math.max(0, radius - Math.sqrt(dist2)))
-        data[(y * width + x) * 4 + 3] = Math.round(
-          data[(y * width + x) * 4 + 3] * coverage
+      const hasUnvisitedNeighbor =
+        (x > 0 && !visited[idx - 1]) ||
+        (x < width - 1 && !visited[idx + 1]) ||
+        (y > 0 && !visited[idx - width]) ||
+        (y < height - 1 && !visited[idx + width])
+
+      const pIdx = idx * 4
+      if (hasUnvisitedNeighbor) {
+        const dE = deltaE76(
+          { r: data[pIdx], g: data[pIdx + 1], b: data[pIdx + 2] },
+          WHITE_REF
         )
+        const featherAlpha = Math.round(clamp01((dE - 4) / 2) * 64)
+        data[pIdx + 3] = featherAlpha
+      } else {
+        data[pIdx + 3] = 0
       }
     }
   }
+
+  return true
 }
 
-function meanImageLuminance(image: RgbaImage): number {
-  const { data } = image
-  let total = 0
-  let count = 0
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    total += relativeLuminance(data[i], data[i + 1], data[i + 2])
-    count += 1
-  }
-  return count === 0 ? 0 : total / count
-}
-
+/** Step 3: Trim fully transparent margins (alpha < 0.02, i.e. alpha <= 5). */
 function findInkBbox(image: RgbaImage): LogoBbox | null {
   const { width, height, data } = image
   let minX = width
@@ -364,7 +276,6 @@ interface InkStats {
   darkShare: number
   centroidX: number
   centroidY: number
-  centroidWeight: number
 }
 
 function measureInk(image: RgbaImage): InkStats {
@@ -393,7 +304,7 @@ function measureInk(image: RgbaImage): InkStats {
       const lum = relativeLuminance(r, g, b)
       lumWeight += lum * weight
       lumSqWeight += lum * lum * weight
-      if (lum < 0.22 && hsvSaturation(r, g, b) < 0.3) darkWeight += weight
+      if (lum < 0.22) darkWeight += weight
       const lw = weight * (0.02 + lum)
       cx += x * lw
       cy += y * lw
@@ -402,72 +313,44 @@ function measureInk(image: RgbaImage): InkStats {
   }
 
   const meanLuminance = alphaWeight > 0 ? lumWeight / alphaWeight : 0
-  const variance = alphaWeight > 0 ? Math.max(0, lumSqWeight / alphaWeight - meanLuminance ** 2) : 0
+  const variance =
+    alphaWeight > 0 ? Math.max(0, lumSqWeight / alphaWeight - meanLuminance ** 2) : 0
   return {
     inkCoverage: inkPixels / area,
     meanLuminance,
     stdDev: Math.sqrt(variance),
     darkShare: alphaWeight > 0 ? darkWeight / alphaWeight : 0,
     centroidX: centroidWeight > 0 ? cx / centroidWeight : width / 2,
-    centroidY: centroidWeight > 0 ? cy / centroidWeight : height / 2,
-    centroidWeight
+    centroidY: centroidWeight > 0 ? cy / centroidWeight : height / 2
   }
 }
 
-function recolorAll(image: RgbaImage, color: PatchColor): void {
+function checkLowContrast(image: RgbaImage): boolean {
   const { data } = image
+  let inkCount = 0
+  let lowContrastCount = 0
   for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    data[i] = color.r
-    data[i + 1] = color.g
-    data[i + 2] = color.b
+    const a = data[i + 3]
+    if (a <= INK_ALPHA) continue
+    inkCount += 1
+    const alpha = a / 255
+    const r = data[i] * alpha + PLATE_COLOR.r * (1 - alpha)
+    const g = data[i + 1] * alpha + PLATE_COLOR.g * (1 - alpha)
+    const b = data[i + 2] * alpha + PLATE_COLOR.b * (1 - alpha)
+    if (contrastRatio({ r, g, b }, PLATE_COLOR) < 2.0) lowContrastCount += 1
   }
-}
-
-function liftDarkInk(image: RgbaImage): void {
-  const { data } = image
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    const lum = relativeLuminance(r, g, b)
-    if (lum >= 0.22 || hsvSaturation(r, g, b) >= 0.3) continue
-    const t = clamp01((0.22 - lum) / 0.22)
-    const smooth = t * t * (3 - 2 * t)
-    data[i] = Math.round(r + (LIFT_COLOR.r - r) * smooth)
-    data[i + 1] = Math.round(g + (LIFT_COLOR.g - g) * smooth)
-    data[i + 2] = Math.round(b + (LIFT_COLOR.b - b) * smooth)
-  }
-}
-
-function addRim(image: RgbaImage): void {
-  const { width, height, data } = image
-  const alpha = new Uint8ClampedArray(width * height)
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) alpha[p] = data[i + 3]
-  const blend = 0.22
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const p = y * width + x
-      if (alpha[p] <= INK_ALPHA) continue
-      const left = x === 0 || alpha[p - 1] <= INK_ALPHA
-      const right = x === width - 1 || alpha[p + 1] <= INK_ALPHA
-      const up = y === 0 || alpha[p - width] <= INK_ALPHA
-      const down = y === height - 1 || alpha[p + width] <= INK_ALPHA
-      if (!left && !right && !up && !down) continue
-      const idx = p * 4
-      data[idx] = Math.round(data[idx] * (1 - blend) + 255 * blend)
-      data[idx + 1] = Math.round(data[idx + 1] * (1 - blend) + 255 * blend)
-      data[idx + 2] = Math.round(data[idx + 2] * (1 - blend) + 255 * blend)
-      data[idx + 3] = Math.max(data[idx + 3], Math.round(0.22 * 255))
-    }
-  }
+  return inkCount > 0 && lowContrastCount / inkCount > 0.4
 }
 
 /**
- * Normalizes a cropped logo into the 1:1 tile. Width scales with
- * sqrt(aspect) so the bbox area lands on `areaFactor` of the tile while wide
- * wordmarks remain wide.
+ * Normalizes a cropped logo into the target box according to Addendum 4 §3.
+ *
+ * Target bbox area = area factor × box area, width ∝ aspect^0.5.
+ * Clamped: width ≤ 0.80 × box width, height ≤ 0.66 × box height.
+ * Shortest side ≥ 40px unless clamped.
+ * Never upscale raster > 1.25x native size (flag low-res).
+ * Optical scale: opaque meanLum > 0.75 scales ×0.88; ink meanLum > 0.7 scales ×0.94.
+ * Optical translate: luminance-weighted ink centroid offset clamped to ±5%.
  */
 export function computeLogoLayout(
   input: {
@@ -476,21 +359,24 @@ export function computeLogoLayout(
     nativeWidth: number
     nativeHeight: number
     meanLuminance: number
+    isOpaque?: boolean
     centroidX: number
     centroidY: number
   },
-  tileSize = 144,
-  areaFactor = 0.22
+  boxSize = 144,
+  areaFactor = 0.30
 ): LogoLayout {
   const aspect = input.width / input.height
-  const targetArea = areaFactor * tileSize * tileSize
+  const boxArea = boxSize * boxSize
+  const targetArea = areaFactor * boxArea
+
   let width = Math.sqrt(targetArea) * Math.sqrt(aspect)
   let height = width / aspect
   let clamped = false
   let upscaleCapped = false
 
-  const maxWidth = tileSize * 0.74
-  const maxHeight = tileSize * 0.62
+  const maxWidth = boxSize * 0.8
+  const maxHeight = boxSize * 0.66
 
   if (width > maxWidth) {
     width = maxWidth
@@ -503,9 +389,10 @@ export function computeLogoLayout(
     clamped = true
   }
 
-  const minSide = 28
-  if (!clamped && Math.min(width, height) < minSide) {
-    const scale = minSide / Math.min(width, height)
+  // Shortest side at least 40px unless clamped
+  const shortest = Math.min(width, height)
+  if (!clamped && shortest < 40) {
+    const scale = 40 / shortest
     width *= scale
     height *= scale
     if (width > maxWidth) {
@@ -520,39 +407,44 @@ export function computeLogoLayout(
     }
   }
 
-  const nativeCapWidth = input.nativeWidth * 1.5
-  const nativeCapHeight = input.nativeHeight * 1.5
-  if (width > nativeCapWidth || height > nativeCapHeight) {
-    const scale = Math.min(nativeCapWidth / width, nativeCapHeight / height)
+  // Never upscale a raster more than 1.25x native size
+  const maxNativeWidth = input.nativeWidth * 1.25
+  const maxNativeHeight = input.nativeHeight * 1.25
+  if (width > maxNativeWidth || height > maxNativeHeight) {
+    const scale = Math.min(maxNativeWidth / width, maxNativeHeight / height)
     width *= scale
     height *= scale
     upscaleCapped = true
     clamped = true
   }
 
-  if (input.meanLuminance > 0.7) {
+  // Optical corrections (scale and position only):
+  if (input.isOpaque && input.meanLuminance > 0.75) {
+    width *= 0.88
+    height *= 0.88
+  } else if (input.meanLuminance > 0.7) {
     width *= 0.94
     height *= 0.94
   }
 
   const dx = (input.width / 2 - input.centroidX) * (width / input.width)
   const dy = (input.height / 2 - input.centroidY) * (height / input.height)
-  const maxOffset = tileSize * 0.06
+  const maxOffset = boxSize * 0.05
   const offsetX = Math.max(-maxOffset, Math.min(maxOffset, dx))
   const offsetY = Math.max(-maxOffset, Math.min(maxOffset, dy))
 
   return {
-    tileSize,
+    tileSize: boxSize,
     areaFactor,
     width,
     height,
-    widthRatio: width / tileSize,
-    heightRatio: height / tileSize,
-    areaRatio: (width * height) / (tileSize * tileSize),
+    widthRatio: width / boxSize,
+    heightRatio: height / boxSize,
+    areaRatio: (width * height) / (boxSize * boxSize),
     offsetX,
     offsetY,
-    offsetXRatio: offsetX / tileSize,
-    offsetYRatio: offsetY / tileSize,
+    offsetXRatio: offsetX / boxSize,
+    offsetYRatio: offsetY / boxSize,
     clamped,
     upscaleCapped
   }
@@ -579,7 +471,7 @@ export function runLogoPipeline(
   options: LogoPipelineOptions = {}
 ): LogoPipelineResult {
   const tileSize = options.tileSize ?? 144
-  const areaFactor = options.areaFactor ?? 0.22
+  const areaFactor = options.areaFactor ?? 0.3
   const image: RgbaImage = {
     data: new Uint8ClampedArray(source.data),
     width: source.width,
@@ -618,51 +510,35 @@ export function runLogoPipeline(
   }
 
   if (options.forceTier === 'monogram') {
-    return reject({ ...emptyBase, reason: 'override' }, 'monogram override', 'decode-failed')
+    return reject({ ...emptyBase, reason: 'override' }, 'monogram override', 'monogram')
   }
   if (image.width < 1 || image.height < 1) {
-    return reject({ ...emptyBase, reason: 'empty' }, 'empty image', 'decode-failed')
+    return reject({ ...emptyBase, reason: 'empty' }, 'empty image', 'monogram')
   }
 
-  const opaque = alphaCoverage < OPAQUE_ALPHA_COVERAGE
-  let badgeMode = false
-  if (opaque) {
-    flags.push('opaque')
-    const key = sampleKeyColor(image)
-    if (key.agree) {
-      applyColorToAlpha(image, key.color)
-      flags.push('repaired')
-    } else {
-      // Full-bleed badge: keep the artwork, clip corners instead of running
-      // colour-to-alpha (the white-square bug is explicitly avoided here).
-      badgeMode = true
-      flags.push('badge')
-      const mean = meanImageLuminance(image)
-      if (mean > 0.75) {
-        return reject(
-          { ...emptyBase, reason: 'light badge', meanLuminance: mean },
-          'light badge',
-          'light-badge'
-        )
-      }
-      clipRoundedCorners(image)
-    }
-  } else {
-    flags.push('alpha')
+  const opaque = isFullyOpaque(image)
+  let matted = false
+
+  // Step 2: Remove solid near-white background ONLY if fully opaque AND all 4 corners near-white
+  if (opaque && cornersNearWhite(image)) {
+    matted = removeNearWhiteBackground(image)
+    if (matted) flags.push('matted')
   }
 
+  // Step 3: Trim fully transparent margins (alpha < 0.02)
   const bbox = findInkBbox(image)
   if (!bbox) {
-    return reject({ ...emptyBase, reason: 'no ink' }, 'no ink', 'low-ink')
+    return reject({ ...emptyBase, reason: 'no ink' }, 'no ink', 'monogram')
   }
   if (bbox.width < 16 || bbox.height < 16) {
     return reject(
       { ...emptyBase, bbox, reason: 'bbox under 16px' },
       'bbox under 16px',
-      'too-small'
+      'monogram'
     )
   }
 
+  // Crop byte-for-byte
   const cropped = cropImage(image, bbox)
   const ink = measureInk(cropped)
 
@@ -670,10 +546,12 @@ export function runLogoPipeline(
     return reject(
       { ...emptyBase, bbox, inkCoverage: ink.inkCoverage, reason: 'ink under 1.5%' },
       'ink under 1.5%',
-      'low-ink'
+      'monogram'
     )
   }
-  if (!badgeMode && ink.inkCoverage > 0.85 && ink.stdDev < 0.06) {
+
+  // Check solid slab (plain uniform background with no discernible logo)
+  if (!matted && opaque && ink.inkCoverage > 0.95 && ink.stdDev < 0.03) {
     return reject(
       {
         ...emptyBase,
@@ -686,48 +564,18 @@ export function runLogoPipeline(
         reason: 'solid slab'
       },
       'solid slab',
-      'solid-slab'
+      'monogram'
     )
   }
 
-  let tier: LogoPipelineTier = 'asis'
-  if (options.forceTier === 'knockout') {
-    recolorAll(cropped, KNOCKOUT_COLOR)
-    tier = 'knockout'
-    flags.push('knockout')
-  } else if (options.forceTier === 'asis') {
-    // Keep the repaired pixels exactly as-is.
-  } else if (!badgeMode) {
-    const d = ink.darkShare
-    if (d >= 0.9) {
-      recolorAll(cropped, KNOCKOUT_COLOR)
-      tier = 'knockout'
-      flags.push('knockout')
-    } else if (d >= 0.04 && d < 0.35) {
-      liftDarkInk(cropped)
-      flags.push('lifted-dark')
-    } else if (d >= 0.35 && d < 0.9) {
-      addRim(cropped)
-      flags.push('rim')
-    }
+  // Contrast check (§1): Low contrast is flagged, NOT repaired
+  if (checkLowContrast(cropped)) {
+    flags.push('low-contrast')
   }
 
-  const processedInk = measureInk(cropped)
-  if (processedInk.meanLuminance > 0.9 && processedInk.inkCoverage > 0.6) {
-    return reject(
-      {
-        ...emptyBase,
-        bbox,
-        inkCoverage: processedInk.inkCoverage,
-        inkLuminance: processedInk.meanLuminance,
-        inkStdDev: processedInk.stdDev,
-        darkShare: processedInk.darkShare,
-        meanLuminance: processedInk.meanLuminance,
-        reason: 'processed image too light'
-      },
-      'processed image too light',
-      'too-light'
-    )
+  // Opaque glare check (§3)
+  if (opaque && !matted && ink.meanLuminance > 0.75) {
+    flags.push('opaque-light')
   }
 
   const normalized = computeLogoLayout(
@@ -736,20 +584,20 @@ export function runLogoPipeline(
       height: cropped.height,
       nativeWidth: cropped.width,
       nativeHeight: cropped.height,
-      meanLuminance: processedInk.meanLuminance,
-      centroidX: processedInk.centroidX,
-      centroidY: processedInk.centroidY
+      meanLuminance: ink.meanLuminance,
+      isOpaque: opaque && !matted,
+      centroidX: ink.centroidX,
+      centroidY: ink.centroidY
     },
     tileSize,
     areaFactor
   )
-  if (normalized.clamped) flags.push('clamped')
-  if (normalized.upscaleCapped) flags.push('upscale-capped')
-  if (processedInk.meanLuminance > 0.7) flags.push('luminance-reduced')
+
+  if (normalized.upscaleCapped) flags.push('low-res')
 
   return {
     ok: true,
-    tier,
+    tier: 'asis',
     flags,
     bbox,
     sourceWidth: source.width,
@@ -758,14 +606,14 @@ export function runLogoPipeline(
     imageWidth: cropped.width,
     imageHeight: cropped.height,
     alphaCoverage,
-    inkCoverage: processedInk.inkCoverage,
-    inkLuminance: processedInk.meanLuminance,
-    inkStdDev: processedInk.stdDev,
-    darkShare: processedInk.darkShare,
-    meanLuminance: processedInk.meanLuminance,
+    inkCoverage: ink.inkCoverage,
+    inkLuminance: ink.meanLuminance,
+    inkStdDev: ink.stdDev,
+    darkShare: ink.darkShare,
+    meanLuminance: ink.meanLuminance,
     aspect: cropped.width / cropped.height,
-    centroidX: processedInk.centroidX,
-    centroidY: processedInk.centroidY,
+    centroidX: ink.centroidX,
+    centroidY: ink.centroidY,
     normalized
   }
 }
@@ -774,9 +622,8 @@ export function runLogoPipeline(
 export function isSolidSlab(result: LogoPipelineResult): boolean {
   return (
     result.ok &&
-    result.inkCoverage > 0.85 &&
-    result.inkStdDev < 0.06 &&
-    !result.flags.includes('badge')
+    result.inkCoverage > 0.95 &&
+    result.inkStdDev < 0.03
   )
 }
 
@@ -794,7 +641,7 @@ export function cornerAlphas(image: RgbaImage): [number, number, number, number]
 export function inkContrastShare(
   image: RgbaImage,
   plate = PLATE_COLOR,
-  threshold = 3
+  threshold = 2
 ): number {
   const { data } = image
   let total = 0

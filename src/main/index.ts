@@ -538,6 +538,7 @@ function registerIpc(): void {
     jio.getStream(channelId, quality)
   )
   ipcMain.handle(IPC.getEpg, async (_event, channelId: string) => jio.fetchEpg(channelId))
+  ipcMain.handle(IPC.getFeatured, async () => jio.fetchFeatured())
 
   // Addendum 3 · logo bytes through the privileged main process. Keeping this
   // out of the renderer preserves webSecurity and keeps canvases untainted.

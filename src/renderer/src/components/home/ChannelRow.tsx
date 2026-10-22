@@ -8,6 +8,7 @@ import { ChannelCardSkeleton } from '@/components/ui/Skeleton'
 
 interface ChannelRowProps {
   title: string
+  /** @deprecated Addendum 4 §6a: No row subtitles anywhere. */
   subtitle?: string
   channels: Channel[]
   epg: Record<string, Program[]>
@@ -19,16 +20,15 @@ interface ChannelRowProps {
 }
 
 /**
- * Addendum 3 §3 row.
- *
- * Full-bleed scroller with the 48px gutter as both padding and scroll-padding
- * so the first tile's left edge is exactly the row title's left edge. The right
- * edge is masked with a peek of the next tile; the left mask only appears once
- * the scroller has moved.
+ * Addendum 4 §6 — Home row presentation & content hygiene:
+ * a) No row subtitles anywhere.
+ * b) Header: title on the left; "View all" followed by chevrons grouped on the right.
+ *    Chevrons show only when the row can scroll, and the left chevron is hidden at scrollLeft 0.
+ * d) Full-bleed scroller with padding-inline: var(--gutter) (48px) and equal scroll-padding.
+ *    Gap 16px. Left mask fade only appears when scrollLeft > 0.
  */
 export function ChannelRow({
   title,
-  subtitle,
   channels,
   epg,
   loading = false,
@@ -41,6 +41,7 @@ export function ChannelRow({
 
   if (!loading && channels.length === 0) return <></>
 
+  const canScroll = canScrollLeft || canScrollRight
   const maskImage = canScrollLeft
     ? 'linear-gradient(to right, transparent 0, #000 48px, #000 calc(100% - 64px), transparent 100%)'
     : 'linear-gradient(to right, #000 0, #000 calc(100% - 64px), transparent 100%)'
@@ -58,9 +59,6 @@ export function ChannelRow({
           >
             {title}
           </h2>
-          {subtitle ? (
-            <p className="mt-1 text-[12px] font-[450] text-[#A1A1A6]">{subtitle}</p>
-          ) : null}
         </div>
         <div className="flex items-center gap-1">
           {viewAllTo ? (
@@ -72,32 +70,30 @@ export function ChannelRow({
               View all
             </button>
           ) : null}
-          <button
-            aria-label={`Scroll ${title} left`}
-            type="button"
-            onClick={() => scrollByPage(-1)}
-            disabled={!canScrollLeft}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-[8px] text-[#A1A1A6] transition-all duration-[120ms]',
-              'hover:bg-white/[0.06] hover:text-[#F4F4F5]',
-              !canScrollLeft && 'pointer-events-none opacity-0'
-            )}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            aria-label={`Scroll ${title} right`}
-            type="button"
-            onClick={() => scrollByPage(1)}
-            disabled={!canScrollRight}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-[8px] text-[#A1A1A6] transition-all duration-[120ms]',
-              'hover:bg-white/[0.06] hover:text-[#F4F4F5]',
-              !canScrollRight && 'pointer-events-none opacity-0'
-            )}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          {canScroll ? (
+            <>
+              {canScrollLeft ? (
+                <button
+                  aria-label={`Scroll ${title} left`}
+                  type="button"
+                  onClick={() => scrollByPage(-1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#A1A1A6] transition-all duration-[120ms] hover:bg-white/[0.06] hover:text-[#F4F4F5]"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              ) : null}
+              {canScrollRight ? (
+                <button
+                  aria-label={`Scroll ${title} right`}
+                  type="button"
+                  onClick={() => scrollByPage(1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#A1A1A6] transition-all duration-[120ms] hover:bg-white/[0.06] hover:text-[#F4F4F5]"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </header>
 

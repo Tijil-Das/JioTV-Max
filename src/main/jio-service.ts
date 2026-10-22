@@ -40,7 +40,8 @@ const API = {
   channelsPublic:
     'https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=315&langId=6',
   playback: 'https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl?langId=6',
-  epg: 'https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get'
+  epg: 'https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get',
+  featured: 'https://tv.media.jio.com/apis/v1.6/getdata/featurednew'
 } as const
 
 const APP_KEY = 'NzNiMDhlYzQyNjJm'
@@ -971,5 +972,44 @@ export class JioService {
       }
     }
     return { ok: false, error: lastError, retryable: true }
+  }
+
+  async fetchFeatured(): Promise<Result<Array<{ channelId: string; priority: number }>>> {
+    const headers = {
+      'User-Agent': 'okhttp/4.2.2',
+      usergroup: USER_GROUP,
+      os: 'android',
+      devicetype: 'phone',
+      versionCode: '226',
+      Accept: 'application/json'
+    }
+    const results: Array<{ channelId: string; priority: number }> = []
+    const langIds = ['6', '1']
+    for (const langId of langIds) {
+      try {
+        const url = `${API.featured}?start=0&limit=30&langId=${langId}`
+        const { response, body } = await requestJson(url, { headers }, { timeout: 6000 })
+        if (!response.ok) continue
+        const parsed = (body ?? {}) as {
+          featuredNewData?: Array<{ data?: Array<{ channel_id?: number | string; showStatus?: string }> }>
+        }
+        if (Array.isArray(parsed.featuredNewData)) {
+          let priority = 100
+          for (const section of parsed.featuredNewData) {
+            for (const item of section.data ?? []) {
+              if (item.channel_id) {
+                const channelId = String(item.channel_id)
+                if (!results.some((r) => r.channelId === channelId)) {
+                  results.push({ channelId, priority: priority-- })
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Fall back gracefully
+      }
+    }
+    return { ok: true, data: results }
   }
 }

@@ -10,13 +10,73 @@ import { Hero } from '@/components/home/Hero'
 import { CategoryTiles } from '@/components/home/CategoryTiles'
 import { ChannelRow } from '@/components/home/ChannelRow'
 
-function pick(channels: Channel[], category: ChannelCategory, count = 12): Channel[] {
-  return channels.filter((channel) => channel.category === category).slice(0, count)
+/**
+ * Addendum 4 §6c — Simulcast collapsing (Home rows and hero only).
+ * Group key = brandKey + language.
+ * brandKey is the lowercase name with quality tokens (HD, SD, FHD, UHD, 4K),
+ * "Live" and punctuation removed, and with the language word removed when
+ * it equals channel.language. The primary is the highest quality, then lowest number.
+ */
+export function getSimulcastBrandKey(channel: Channel): string {
+  let name = channel.name.toLowerCase()
+  name = name.replace(/[^\w\s]/g, ' ')
+  name = name.replace(/\b(hd|sd|fhd|uhd|4k)\b/gi, ' ')
+  name = name.replace(/\b(live)\b/gi, ' ')
+  if (channel.language) {
+    const langWord = channel.language.toLowerCase()
+    name = name.replace(new RegExp(`\\b${langWord}\\b`, 'gi'), ' ')
+  }
+  return name.replace(/\s+/g, ' ').trim()
+}
+
+const QUALITY_ORDER: Record<string, number> = {
+  '4K': 3,
+  UHD: 3,
+  FHD: 2,
+  HD: 2,
+  SD: 1
+}
+
+function channelMaxQuality(channel: Channel): number {
+  let max = 0
+  for (const q of channel.quality ?? []) {
+    max = Math.max(max, QUALITY_ORDER[q] ?? 1)
+  }
+  return max
+}
+
+export function collapseSimulcasts(channels: Channel[]): Channel[] {
+  const groups = new Map<string, Channel[]>()
+  for (const ch of channels) {
+    const brandKey = getSimulcastBrandKey(ch)
+    const groupKey = `${brandKey}__${ch.language.toLowerCase()}`
+    const existing = groups.get(groupKey)
+    if (existing) {
+      existing.push(ch)
+    } else {
+      groups.set(groupKey, [ch])
+    }
+  }
+
+  const result: Channel[] = []
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => {
+      const qA = channelMaxQuality(a)
+      const qB = channelMaxQuality(b)
+      if (qA !== qB) return qB - qA
+      return a.number - b.number
+    })
+    result.push(sorted[0])
+  }
+  return result
 }
 
 /**
- * Home is an editorial front page: hero, quick categories, then shelves.
- * Every shelf reads from the same catalogue/EPG maps so timestamps agree.
+ * Home is an editorial front page: live hero, quick categories, then shelves.
+ * Addendum 4 §6:
+ * a) No row subtitles anywhere.
+ * b) Disjoint rows: a channel shown in one Home shelf is excluded from later shelves.
+ * c) Simulcasts are collapsed into primary variants.
  */
 export function HomePage(): JSX.Element {
   const channels = useChannelStore((state) => state.channels)
@@ -31,20 +91,52 @@ export function HomePage(): JSX.Element {
 
   const recentlyWatched = useMemo(() => {
     const byId = new Map(channels.map((channel) => [channel.id, channel]))
-    return recents
+    const picked = recents
       .map((recent) => byId.get(recent.channelId))
       .filter((channel): channel is Channel => Boolean(channel))
-      .slice(0, 10)
+    return collapseSimulcasts(picked).slice(0, 10)
   }, [channels, recents])
 
-  const favoriteChannels = useMemo(
-    () => channels.filter((channel) => favorites.includes(channel.id)),
-    [channels, favorites]
-  )
-  const mixedLive = useMemo(
-    () => [...channels].sort((a, b) => a.number - b.number).slice(0, 14),
-    [channels]
-  )
+  const favoriteChannels = useMemo(() => {
+    const matching = channels.filter((channel) => favorites.includes(channel.id))
+    return collapseSimulcasts(matching)
+  }, [channels, favorites])
+
+  // Disjoint shelves: channels shown in earlier shelves are excluded from later shelves (§6b)
+  const {
+    sportsChannels,
+    newsChannels,
+    entertainmentChannels,
+    movieChannels,
+    kidsChannels,
+    regionalChannels
+  } = useMemo(() => {
+    const seen = new Set<string>()
+
+    const pickDisjoint = (category: ChannelCategory, count = 14): Channel[] => {
+      const matching = channels.filter((c) => c.category === category && !seen.has(c.id))
+      const collapsed = collapseSimulcasts(matching)
+      const selected = collapsed.slice(0, count)
+      for (const ch of selected) seen.add(ch.id)
+      return selected
+    }
+
+    const sports = pickDisjoint('sports')
+    const news = pickDisjoint('news')
+    const entertainment = pickDisjoint('entertainment')
+    const movies = pickDisjoint('movies')
+    const kids = pickDisjoint('kids')
+    const regional = pickDisjoint('regional')
+
+    return {
+      sportsChannels: sports,
+      newsChannels: news,
+      entertainmentChannels: entertainment,
+      movieChannels: movies,
+      kidsChannels: kids,
+      regionalChannels: regional
+    }
+  }, [channels])
 
   const isInitialLoading = loading && channels.length === 0
 
@@ -113,20 +205,10 @@ export function HomePage(): JSX.Element {
             />
           ) : null}
 
-          <ChannelRow
-            className="mt-8"
-            title="Live right now"
-            subtitle="A snapshot of everything on air"
-            channels={mixedLive}
-            epg={epg}
-            viewAllTo="/category/entertainment"
-          />
-
           {favoriteChannels.length > 0 ? (
             <ChannelRow
               className="mt-8"
               title="From My List"
-              subtitle="Your hand-picked channels"
               channels={favoriteChannels}
               epg={epg}
               viewAllTo="/favorites"
@@ -136,40 +218,47 @@ export function HomePage(): JSX.Element {
           <ChannelRow
             className="mt-8"
             title="Sports"
-            subtitle="Live matches, analysis and the road to the final"
-            channels={pick(channels, 'sports')}
+            channels={sportsChannels}
             epg={epg}
             viewAllTo="/category/sports"
           />
+
           <ChannelRow
             className="mt-8"
-            title="The newsroom"
-            subtitle="Breaking stories with calm, clear context"
-            channels={pick(channels, 'news')}
+            title="News"
+            channels={newsChannels}
             epg={epg}
             viewAllTo="/category/news"
           />
+
           <ChannelRow
             className="mt-8"
-            title="Cinema tonight"
-            subtitle="Films on a schedule, the way broadcast intended"
-            channels={pick(channels, 'movies')}
+            title="Entertainment"
+            channels={entertainmentChannels}
+            epg={epg}
+            viewAllTo="/category/entertainment"
+          />
+
+          <ChannelRow
+            className="mt-8"
+            title="Movies"
+            channels={movieChannels}
             epg={epg}
             viewAllTo="/category/movies"
           />
+
           <ChannelRow
             className="mt-8"
-            title="Kids corner"
-            subtitle="Bright adventures and gentle bedtime stories"
-            channels={pick(channels, 'kids')}
+            title="Kids"
+            channels={kidsChannels}
             epg={epg}
             viewAllTo="/category/kids"
           />
+
           <ChannelRow
             className="mt-8"
-            title="Regional spotlight"
-            subtitle="Stories and voices from across India"
-            channels={pick(channels, 'regional')}
+            title="Regional"
+            channels={regionalChannels}
             epg={epg}
             viewAllTo="/category/regional"
           />

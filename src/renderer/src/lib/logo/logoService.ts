@@ -80,9 +80,9 @@ interface WorkerReply {
   blob?: Blob
 }
 
-const PIPELINE_VERSION = 2
+const PIPELINE_VERSION = 4
 const DB_NAME = 'jiotv-logo-pipeline'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE = 'logos'
 const TILE_SIZE = 144
 const VISIBLE_CONCURRENCY = 2
@@ -101,7 +101,7 @@ function openDatabase(): Promise<IDBDatabase | null> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = (event) => {
       const db = request.result
-      if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE)) {
+      if (event.oldVersion < 3 && db.objectStoreNames.contains(STORE)) {
         db.deleteObjectStore(STORE)
       }
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })

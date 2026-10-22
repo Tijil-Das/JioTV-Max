@@ -198,59 +198,74 @@ function fullBleedColoredSquare(): RgbaImage {
   return image
 }
 
+/** Transparent canvas with pure white wordmark. */
+function transparentWhiteOnly(): RgbaImage {
+  const image = createImage(240, 100, [0, 0, 0], 0)
+  bar(image, 24, 24, 54, 52, [255, 255, 255])
+  bar(image, 92, 24, 54, 52, [255, 255, 255])
+  bar(image, 160, 24, 54, 52, [255, 255, 255])
+  return image
+}
+
 export const logoFixtures: LogoFixture[] = [
   {
     name: 'white-bg-opaque',
     image: whiteBackground(),
-    expectedTier: 'knockout',
-    expectedFlags: ['opaque', 'repaired', 'knockout']
+    expectedTier: 'asis',
+    expectedFlags: ['matted']
   },
   {
     name: 'black-bg-opaque',
     image: blackBackground(),
     expectedTier: 'asis',
-    expectedFlags: ['opaque', 'repaired']
+    expectedFlags: []
   },
   {
     name: 'transparent-colored',
     image: transparentColored(),
     expectedTier: 'asis',
-    expectedFlags: ['alpha']
+    expectedFlags: []
   },
   {
     name: 'transparent-dark-mono',
     image: transparentDarkMono(),
-    expectedTier: 'knockout',
-    expectedFlags: ['alpha', 'knockout']
+    expectedTier: 'asis',
+    expectedFlags: ['low-contrast']
   },
   {
     name: 'dark-filled-badge',
     image: darkFilledBadge(),
     expectedTier: 'asis',
-    expectedFlags: ['rim']
+    expectedFlags: []
   },
   {
     name: 'thin-dark-text-plus-gold-emblem',
     image: thinDarkTextGold(),
     expectedTier: 'asis',
-    expectedFlags: ['lifted-dark']
+    expectedFlags: []
   },
   {
     name: 'wordmark-6-1',
     image: wordmarkWide(),
     expectedTier: 'asis',
-    expectedFlags: ['clamped']
+    expectedFlags: []
   },
   {
     name: 'tall-emblem',
     image: tallEmblem(),
     expectedTier: 'asis',
-    expectedFlags: ['clamped']
+    expectedFlags: []
   },
   {
     name: 'full-bleed-colored-square',
     image: fullBleedColoredSquare(),
     expectedTier: 'asis',
-    expectedFlags: ['badge']
+    expectedFlags: []
+  },
+  {
+    name: 'transparent-white-only',
+    image: transparentWhiteOnly(),
+    expectedTier: 'asis',
+    expectedFlags: []
   }
 ]

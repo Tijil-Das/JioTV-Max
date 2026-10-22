@@ -14,6 +14,8 @@
   --safe-bottom:     24px;
   /* Horizontal gutter shared by page headers, rows and the hero. */
   --gutter:          48px;
+  /* Addendum 4 §4 channel tile width */
+  --tile:            clamp(144px, 11.6vw, 176px);
 
   /* Color tokens — use these in inline styles when Tailwind utilities aren't enough */
   --bg:              #000000;

@@ -4,26 +4,33 @@ import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
 import { getLogoBox } from '@/lib/logo/logoService'
+import { useChannelStore } from '@/store/useChannelStore'
 
-export type LogoSizeVariant =
+export type ChannelLogoContext =
   | 'tile'
   | 'cell'
   | 'switcher'
-  | 'bug'
   | 'hero'
+  | 'banner'
+
+export type LogoSizeVariant =
+  | ChannelLogoContext
+  | 'bug'
   | 'xs'
   | 'sm'
   | 'md'
   | 'lg'
   | 'xl'
 
-interface ChannelLogoProps {
-  channel: Channel
+export interface ChannelLogoProps {
+  channelId?: string
+  channel?: Channel
+  context?: ChannelLogoContext
   size?: LogoSizeVariant
   className?: string
   /** Force early processing for above-the-fold artwork (hero, dev sheet). */
   priority?: 'visible' | 'idle'
-  /** Pipeline area factor: 0.22 for tiles, 0.30 for list/switcher cells. */
+  /** Explicit override for pipeline area factor (0.30 for tiles, 0.38 for cells). */
   areaFactor?: number
   /** @deprecated kept for API compatibility */
   glow?: boolean
@@ -31,12 +38,13 @@ interface ChannelLogoProps {
   metrics?: unknown
 }
 
-const monogramSize: Record<LogoSizeVariant, string> = {
+const monogramSize: Record<string, string> = {
   tile: 'text-[28px]',
   cell: 'text-[18px]',
   switcher: 'text-[18px]',
   bug: 'text-[12px]',
   hero: 'text-[28px]',
+  banner: 'text-[20px]',
   xs: 'text-[12px]',
   sm: 'text-[14px]',
   md: 'text-[18px]',
@@ -44,28 +52,59 @@ const monogramSize: Record<LogoSizeVariant, string> = {
   xl: 'text-[28px]'
 }
 
-function areaFor(size: LogoSizeVariant, explicit?: number): number {
+function resolveContext(
+  context?: ChannelLogoContext,
+  size?: LogoSizeVariant
+): ChannelLogoContext {
+  if (context) return context
+  if (size === 'cell' || size === 'switcher' || size === 'hero' || size === 'banner') {
+    return size
+  }
+  if (size === 'sm' || size === 'md') return 'cell'
+  if (size === 'lg' || size === 'xl') return 'banner'
+  return 'tile'
+}
+
+function areaFor(context: ChannelLogoContext, explicit?: number): number {
   if (explicit !== undefined) return explicit
-  if (size === 'cell' || size === 'switcher') return 0.3
-  return 0.22
+  if (context === 'cell' || context === 'switcher') return 0.38
+  return 0.3
 }
 
 /**
- * Channel mark presentation (Addendum 3 §2/§3).
+ * Addendum 4 §2 — One component everywhere:
+ * Use a single <ChannelLogo channelId context> for tiles, list rows, search
+ * results, the guide column, the channel drawer, the hero switcher, the hero,
+ * and the player banner. Never render a logo <img> anywhere else.
  *
- * The processed PNG is always rendered in a plain <img>. No filters, blend
- * modes or backgrounds touch it. Geometry comes from the pipeline's normalized
- * bbox and luminance centroid, expressed as percentages of the tile.
+ * | context | box | area factor |
+ * | tile | tile size | 0.30 |
+ * | list / search / guide / drawer cell | 56x56 | 0.38 |
+ * | hero switcher plate | 56x56 | 0.38 |
+ * | hero logo | no plate, max height 40px, max width 180px | n/a |
+ * | player banner | max height 40px | n/a |
  */
 export const ChannelLogo = memo(function ChannelLogo({
-  channel,
-  size = 'tile',
+  channelId,
+  channel: directChannel,
+  context: rawContext,
+  size,
   className,
   priority = 'idle',
-  areaFactor,
+  areaFactor: explicitAreaFactor,
   glow: _glow,
   metrics: _metrics
 }: ChannelLogoProps): JSX.Element {
+  const storeChannel = useChannelStore((state) =>
+    channelId ? state.channels.find((c) => c.id === channelId) : undefined
+  )
+  const channel = directChannel ?? storeChannel
+
+  const context = resolveContext(rawContext, size)
+  const isCell = context === 'cell' || context === 'switcher'
+  const isHero = context === 'hero'
+  const isBanner = context === 'banner'
+
   const hostRef = useRef<HTMLSpanElement>(null)
   const [visible, setVisible] = useState(priority === 'visible')
   const { logo, loading } = useProcessedLogo(
@@ -104,14 +143,18 @@ export const ChannelLogo = memo(function ChannelLogo({
   }, [logo])
 
   const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
-  const isHero = size === 'hero'
-  const box = logo?.spec && !isHero ? getLogoBox(logo.spec, areaFor(size, areaFactor), 100) : null
+  const areaFactor = areaFor(context, explicitAreaFactor)
+  const box = logo?.spec && !isHero && !isBanner ? getLogoBox(logo.spec, areaFactor, 100) : null
 
-  return (
+  // Inner logo content
+  const content = (
     <span
       ref={hostRef}
       aria-hidden="true"
-      className={cn('relative flex h-full w-full items-center justify-center select-none', className)}
+      className={cn(
+        'relative flex h-full w-full items-center justify-center select-none',
+        !isCell && className
+      )}
     >
       {loading ? (
         <span className="shimmer-plate absolute inset-0 rounded-[inherit] bg-white/[0.025]" />
@@ -121,10 +164,10 @@ export const ChannelLogo = memo(function ChannelLogo({
         <span
           className={cn(
             'pointer-events-none font-sans font-[600] leading-none text-[#A1A1A6]',
-            monogramSize[size]
+            monogramSize[context] ?? monogramSize.tile
           )}
         >
-          {initials(channel.name)}
+          {initials(channel?.name ?? channelId ?? 'TV')}
         </span>
       ) : null}
 
@@ -134,16 +177,37 @@ export const ChannelLogo = memo(function ChannelLogo({
             src={logo.objectUrl}
             alt=""
             draggable={false}
-            className="pointer-events-none block h-auto w-auto max-h-[36px] max-w-[160px] object-contain"
-            style={{ opacity: faded ? 1 : 0, transition: 'opacity 300ms ease' }}
+            decoding="async"
+            className="pointer-events-none block h-auto w-auto max-h-[40px] max-w-[180px] object-contain"
+            style={{
+              imageRendering: 'auto',
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))',
+              opacity: faded ? 1 : 0,
+              transition: 'opacity 300ms ease'
+            }}
+          />
+        ) : isBanner ? (
+          <img
+            src={logo.objectUrl}
+            alt=""
+            draggable={false}
+            decoding="async"
+            className="pointer-events-none block h-auto w-auto max-h-[40px] object-contain"
+            style={{
+              imageRendering: 'auto',
+              opacity: faded ? 1 : 0,
+              transition: 'opacity 300ms ease'
+            }}
           />
         ) : box ? (
           <img
             src={logo.objectUrl}
             alt=""
             draggable={false}
+            decoding="async"
             className="pointer-events-none absolute block object-contain"
             style={{
+              imageRendering: 'auto',
               left: `${50 + box.offsetXRatio * 100}%`,
               top: `${50 + box.offsetYRatio * 100}%`,
               width: `${box.widthRatio * 100}%`,
@@ -157,36 +221,26 @@ export const ChannelLogo = memo(function ChannelLogo({
       ) : null}
     </span>
   )
+
+  // Context "cell" and "switcher": 56 × 56 plate (Addendum 4 §2/§5)
+  if (isCell) {
+    return (
+      <span
+        className={cn(
+          'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px]',
+          'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
+          className
+        )}
+      >
+        {content}
+      </span>
+    )
+  }
+
+  return content
 })
 
-/**
- * 56 × 56 list/drawer/switcher cell (Addendum 3 §4). Same plate recipe as the
- * tile, radius 12, pipeline area factor 0.30.
- */
-export const ChannelLogoCell = memo(function ChannelLogoCell({
-  channel,
-  className,
-  priority = 'idle'
-}: {
-  channel: Channel
-  className?: string
-  priority?: 'visible' | 'idle'
-}): JSX.Element {
-  return (
-    <span
-      className={cn(
-        'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px]',
-        'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
-        className
-      )}
-    >
-      <ChannelLogo
-        channel={channel}
-        size="cell"
-        areaFactor={0.3}
-        priority={priority}
-        className="h-full w-full"
-      />
-    </span>
-  )
+/** Backward-compatible alias for 56 × 56 cell plate. */
+export const ChannelLogoCell = memo(function ChannelLogoCell(props: ChannelLogoProps): JSX.Element {
+  return <ChannelLogo {...props} context="cell" />
 })

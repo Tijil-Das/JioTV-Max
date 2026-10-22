@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Heart, Play } from 'lucide-react'
+import { Heart, Lock, Play } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
@@ -22,10 +22,13 @@ interface ChannelCardProps {
 }
 
 /**
- * Addendum 3 §3 — square channel icon tile.
+ * Addendum 4 §4 — square channel icon tile (rows and grids).
  *
- * At rest the plate contains only the processed logo and the number chip.
- * Hover adds the play affordance, heart and (when EPG exists) a progress line.
+ * Size: --tile: clamp(144px, 11.6vw, 176px). 1:1, radius 16px.
+ * Plate: fill #0E0E10, 1px rgba(255,255,255,0.07) border.
+ * Number chip: 20px tall, padding 0 7px, radius 6px, fill rgba(255,255,255,0.10).
+ * Premium channels show a 10px lock glyph at 70% opacity inside the chip.
+ * Hover scale applies to whole tile only. Logo is never scaled separately.
  */
 export const ChannelCard = memo(function ChannelCard({
   channel,
@@ -42,7 +45,6 @@ export const ChannelCard = memo(function ChannelCard({
   const isFavorite = favorites.includes(channel.id)
 
   const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
-  // getProgress returns a 0-100 percentage.
   const progress = current ? getProgress(current, now) : 0
   const quality = highestQuality(channel)
   const secondary = current ? null : [channel.language, quality].filter(Boolean).join(' · ')
@@ -52,11 +54,15 @@ export const ChannelCard = memo(function ChannelCard({
     navigate(`/watch/${channel.id}`)
   }
 
+  const ariaLabel = current
+    ? `Channel ${channel.number}, ${channel.name}, ${channel.language}, ${quality}, now: ${current.title}`
+    : `Channel ${channel.number}, ${channel.name}, ${channel.language}, ${quality}`
+
   return (
     <div
       className={cn(
         'group relative shrink-0 select-none',
-        fluid ? 'w-full' : 'w-[clamp(128px,10.5vw,160px)]',
+        fluid ? 'w-full' : 'w-[clamp(144px,11.6vw,176px)]',
         className
       )}
     >
@@ -73,14 +79,20 @@ export const ChannelCard = memo(function ChannelCard({
             'group-focus-within:outline group-focus-within:outline-2 group-focus-within:outline-offset-2 group-focus-within:outline-[var(--red-line)]'
           )}
         >
-          <div className="absolute inset-0 transition-transform duration-200 group-hover:scale-[1.03]">
-            <ChannelLogo channel={channel} size="tile" />
+          {/* Logo container: whole tile scales, logo is never scaled separately */}
+          <div className="absolute inset-0">
+            <ChannelLogo channel={channel} context="tile" />
           </div>
 
-          <span className="pointer-events-none absolute left-2 top-2 z-20 flex h-5 items-center rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.10)] px-[7px] font-sans text-[12px] font-[650] tabular-nums leading-none text-[#F4F4F5]">
-            {channel.number}
+          {/* Number chip (top-left, inset 8px): 20px tall, padding 0 7px, radius 6px */}
+          <span className="pointer-events-none absolute left-2 top-2 z-20 flex h-5 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.10)] px-[7px] font-sans text-[12px] font-[650] tabular-nums leading-none text-[#F4F4F5]">
+            <span>{channel.number}</span>
+            {channel.isPremium ? (
+              <Lock className="h-[10px] w-[10px] opacity-70" aria-label="Premium lock" />
+            ) : null}
           </span>
 
+          {/* Hover play affordance (bottom-right, inset 8px, 32px solid white circle) */}
           <span
             aria-hidden="true"
             className="pointer-events-none absolute bottom-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white text-black opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -88,6 +100,7 @@ export const ChannelCard = memo(function ChannelCard({
             <Play className="ml-[1px] h-3.5 w-3.5 fill-black" strokeWidth={0} />
           </span>
 
+          {/* EPG progress line (bottom edge) */}
           {current && progress > 0 ? (
             <span
               aria-hidden="true"
@@ -100,13 +113,15 @@ export const ChannelCard = memo(function ChannelCard({
             </span>
           ) : null}
 
+          {/* Accessible tile button (§7) */}
           <button
             type="button"
             onClick={open}
             className="absolute inset-0 z-10 cursor-pointer rounded-[16px] focus:outline-none"
-            aria-label={`Watch ${channel.name}`}
+            aria-label={ariaLabel}
           />
 
+          {/* Favorite button */}
           <button
             type="button"
             onClick={() => toggleFavorite(channel.id)}
@@ -126,8 +141,12 @@ export const ChannelCard = memo(function ChannelCard({
         </div>
       </motion.div>
 
+      {/* Under tile: 8px gap, two single-line ellipsis rows with title tooltip */}
       <div className="mt-2 min-w-0">
-        <p className="truncate text-[13px] font-[600] leading-[1.25] text-[#F4F4F5]">
+        <p
+          title={channel.name}
+          className="truncate text-[13px] font-[600] leading-[1.25] text-[#F4F4F5]"
+        >
           {channel.name}
         </p>
         <p className="mt-[3px] flex min-w-0 items-center gap-1.5 text-[12px] font-[450] leading-[1.25] text-[#A1A1A6]">

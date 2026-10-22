@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
 import { getNowNext } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
-import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
+import { ChannelLogo } from '@/components/ui/ChannelLogo'
 
 interface ChannelListRowProps {
   channel: Channel
@@ -53,7 +53,7 @@ export const ChannelListRow = memo(function ChannelListRow({
       <span className="w-11 shrink-0 text-right text-[14px] font-[600] tabular-nums leading-none text-[#A1A1A6]">
         {channel.number}
       </span>
-      <ChannelLogoCell channel={channel} />
+      <ChannelLogo channelId={channel.id} channel={channel} context="cell" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14px] font-[600] leading-[1.2] text-[#F4F4F5]">
           {channel.name}

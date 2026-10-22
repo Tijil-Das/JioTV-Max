@@ -18,6 +18,7 @@ export const IPC = {
   fetchChannels: 'jio:fetch-channels',
   getStream: 'jio:get-stream',
   getEpg: 'jio:get-epg',
+  getFeatured: 'jio:get-featured',
   assetFetch: 'asset:fetch',
   probeStage1: 'stream:probe-stage1',
   secureSave: 'secure:save-token',

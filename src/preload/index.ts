@@ -57,7 +57,9 @@ const api = {
       channelId: string,
       quality: 'auto' | 'high' | 'medium' | 'low'
     ): Promise<Result<StreamInfo>> => ipcRenderer.invoke(IPC.getStream, channelId, quality),
-    getEpg: (channelId: string): Promise<Result<EpgEntry[]>> => ipcRenderer.invoke(IPC.getEpg, channelId)
+    getEpg: (channelId: string): Promise<Result<EpgEntry[]>> => ipcRenderer.invoke(IPC.getEpg, channelId),
+    getFeatured: (): Promise<Result<Array<{ channelId: string; priority: number }>>> =>
+      ipcRenderer.invoke(IPC.getFeatured)
   },
   secure: {
     saveToken: (token: string): Promise<boolean> => ipcRenderer.invoke(IPC.secureSave, token),

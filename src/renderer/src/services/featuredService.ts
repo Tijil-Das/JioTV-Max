@@ -1,5 +1,6 @@
 import type { Channel, Program } from '@shared/types'
 import { FEATURED_URL, HERO_LAST_KEY } from '@/lib/constants'
+import { getBridge } from '@/services/api'
 import { useChannelStore, type RecentChannel } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
@@ -223,18 +224,62 @@ function byNumber(a: HeroCandidate, b: HeroCandidate): number {
   return a.channel.id.localeCompare(b.channel.id)
 }
 
-/** Deterministic fallback: Settings language, then category priority, then number. */
+const MAJOR_NETWORKS_REGEX =
+  /sports\s*18|sony\s*ten|star\s*sports|dd\s*sports|eurosport|aaj\s*tak|ndtv|abp\s*news|india\s*today|republic|news\s*18\s*india|zee\s*news|times\s*now|wion|colors|star\s*plus|sony\s*sab|set\s*india|sony\s*entertainment|zee\s*tv|star\s*gold|sony\s*max|zee\s*cinema/i
+
+export function getChannelProminence(channel: Channel): number {
+  const name = channel.name.toLowerCase()
+  let score = 0
+  if (channel.category === 'sports') score += 50
+  else if (channel.category === 'news') score += 40
+  else if (channel.category === 'entertainment') score += 20
+  else if (channel.category === 'movies') score += 15
+
+  if (MAJOR_NETWORKS_REGEX.test(name)) score += 60
+  if (channel.quality.includes('HD') || channel.quality.includes('4K')) score += 5
+  return score
+}
+
+/** Deterministic fallback: recents & favorites first, then category priority & major Indian networks. */
 export function fallbackCandidates(context: FeaturedContext): HeroCandidate[] {
   const language = context.language.trim().toLowerCase()
   const preferred = language
     ? context.channels.filter((channel) => channel.language.toLowerCase() === language)
     : []
   const pool = preferred.length > 0 ? preferred : context.channels
+
+  const recentIndex = new Map<string, number>()
+  context.history.forEach((h, idx) => {
+    if (!recentIndex.has(h.channelId)) recentIndex.set(h.channelId, idx)
+  })
+  const favoritesSet = new Set(context.favorites)
+
   return [...pool]
     .sort((a, b) => {
+      // 1. Recently watched channels first
+      const aRecent = recentIndex.has(a.id)
+      const bRecent = recentIndex.has(b.id)
+      if (aRecent && bRecent) return (recentIndex.get(a.id) ?? 0) - (recentIndex.get(b.id) ?? 0)
+      if (aRecent) return -1
+      if (bRecent) return 1
+
+      // 2. Favorites next
+      const aFav = favoritesSet.has(a.id)
+      const bFav = favoritesSet.has(b.id)
+      if (aFav && !bFav) return -1
+      if (!aFav && bFav) return 1
+
+      // 3. Category priority: Sports (0), News (1), Entertainment (2), Movies (3)
       const categoryA = CATEGORY_PRIORITY[a.category] ?? 9
       const categoryB = CATEGORY_PRIORITY[b.category] ?? 9
       if (categoryA !== categoryB) return categoryA - categoryB
+
+      // 4. Prominence within category (major flagship Indian channels over obscure tickers)
+      const promA = getChannelProminence(a)
+      const promB = getChannelProminence(b)
+      if (promA !== promB) return promB - promA
+
+      // 5. Channel number tiebreak
       if (a.number !== b.number) return a.number - b.number
       return a.id.localeCompare(b.id)
     })
@@ -282,6 +327,18 @@ let editorialCache: { data: EditorialEntry[]; fetchedAt: number } | null = null
 const EDITORIAL_TTL_MS = 15 * 60_000
 
 async function fetchEditorial(now: Date): Promise<EditorialEntry[] | null> {
+  const bridge = getBridge()
+  if (bridge?.channels?.getFeatured) {
+    try {
+      const res = await bridge.channels.getFeatured()
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        return res.data
+      }
+    } catch (err) {
+      console.warn('[hero] bridge getFeatured failed', err)
+    }
+  }
+
   if (!FEATURED_URL) return null
   if (editorialCache && now.getTime() - editorialCache.fetchedAt < EDITORIAL_TTL_MS) {
     return editorialCache.data

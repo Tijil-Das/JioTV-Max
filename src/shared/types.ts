@@ -177,6 +177,7 @@ export interface StreamDeckApi {
     fetchAll(): Promise<Result<ChannelFetchPayload>>
     getStream(channelId: string, quality: 'auto' | 'high' | 'medium' | 'low'): Promise<Result<StreamInfo>>
     getEpg(channelId: string): Promise<Result<EpgEntry[]>>
+    getFeatured?(): Promise<Result<Array<{ channelId: string; priority: number }>>>
   }
   secure: {
     saveToken(token: string): Promise<boolean>

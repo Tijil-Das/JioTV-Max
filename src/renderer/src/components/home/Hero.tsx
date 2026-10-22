@@ -411,7 +411,7 @@ export function Hero(): JSX.Element {
                   <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-black/75" />
                   <div className="relative z-10 flex flex-col items-center justify-center gap-2 p-4 text-center">
                     <div className="h-10 w-10 shrink-0 filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                      <ChannelLogo channel={prevChannel} size="cell" priority="visible" />
+                      <ChannelLogo channelId={prevChannel.id} channel={prevChannel} context="cell" priority="visible" />
                     </div>
                     <span className="rounded-[6px] border border-white/10 bg-white/10 px-2 py-0.5 font-sans text-[11px] font-[650] tabular-nums text-[#F4F4F5]">
                       CH {prevChannel.number}
@@ -512,12 +512,9 @@ export function Hero(): JSX.Element {
                         transition={{ duration: 0.2 }}
                         className="flex max-w-[560px] flex-col gap-3"
                       >
-                        {/* 1. Processed logo, max 36px tall and 160px wide, black drop-shadow */}
-                        <div
-                          className="flex h-9 max-w-[160px] items-center"
-                          style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.6))' }}
-                        >
-                          <ChannelLogo channel={activeChannel} size="hero" priority="visible" />
+                        {/* 1. Processed logo, max 40px tall and 180px wide, black drop-shadow */}
+                        <div className="flex h-10 max-w-[180px] items-center">
+                          <ChannelLogo channelId={activeChannel.id} channel={activeChannel} context="hero" priority="visible" />
                         </div>
 
                         {/* 2. Overline: 6px red dot + LIVE NOW (11/600, 0.12em, text-2) + · CH 155 (12/650 tabular text-1) */}
@@ -681,7 +678,7 @@ export function Hero(): JSX.Element {
                                 : 'opacity-60 hover:opacity-100'
                             )}
                           >
-                            <ChannelLogoCell channel={channel} priority="visible" />
+                            <ChannelLogo channelId={channel.id} channel={channel} context="switcher" priority="visible" />
                           </button>
                         </div>
                       )
@@ -711,7 +708,7 @@ export function Hero(): JSX.Element {
                   <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-black/85" />
                   <div className="relative z-10 flex flex-col items-center justify-center gap-2 p-4 text-center">
                     <div className="h-10 w-10 shrink-0 filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                      <ChannelLogo channel={nextChannel} size="cell" priority="visible" />
+                      <ChannelLogo channelId={nextChannel.id} channel={nextChannel} context="cell" priority="visible" />
                     </div>
                     <span className="rounded-[6px] border border-white/10 bg-white/10 px-2 py-0.5 font-sans text-[11px] font-[650] tabular-nums text-[#F4F4F5]">
                       CH {nextChannel.number}

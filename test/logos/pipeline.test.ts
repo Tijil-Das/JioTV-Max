@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   cornerAlphas,
-  inkContrastShare,
   isSolidSlab,
   runLogoPipeline,
   type RgbaImage
@@ -9,7 +8,7 @@ import {
 import { logoFixtures } from './fixtures'
 
 const TILE = 144
-const TARGET_AREA_RATIO = 0.22
+const TARGET_AREA_RATIO = 0.3
 
 function processFixture(name: string) {
   const fixture = logoFixtures.find((item) => item.name === name)
@@ -17,7 +16,7 @@ function processFixture(name: string) {
   return { fixture, result: runLogoPipeline(fixture.image, { tileSize: TILE, channelId: name }) }
 }
 
-describe('Addendum 3 · logo fixtures', () => {
+describe('Addendum 4 §0 & §10 · Pixel-pure logo pipeline', () => {
   it.each(logoFixtures)('$name produces a usable logo', (fixture) => {
     const result = runLogoPipeline(fixture.image, { tileSize: TILE, channelId: fixture.name })
     expect(result.ok).toBe(true)
@@ -32,7 +31,7 @@ describe('Addendum 3 · logo fixtures', () => {
     expect(isSolidSlab(result)).toBe(false)
   })
 
-  it.each(logoFixtures.filter((item) => item.expectedFlags))(
+  it.each(logoFixtures.filter((item) => item.expectedFlags?.length))(
     '$name reports the expected pipeline flags',
     (fixture) => {
       const result = runLogoPipeline(fixture.image, { tileSize: TILE })
@@ -42,24 +41,89 @@ describe('Addendum 3 · logo fixtures', () => {
     }
   )
 
-  it('repairs white and black opaque backgrounds to transparent corners', () => {
-    for (const name of ['white-bg-opaque', 'black-bg-opaque']) {
-      const { result } = processFixture(name)
-      expect(result.image).toBeDefined()
-      const corners = cornerAlphas(result.image!)
-      expect(corners).toEqual([0, 0, 0, 0])
+  /**
+   * Blocking CI test (§0):
+   * Run the pipeline at scale 1 on every fixture. Every pixel not removed
+   * by step 2 must be byte-identical to the source.
+   */
+  it.each(logoFixtures)(
+    '$name: every pixel not removed by step 2 is byte-identical to the source',
+    (fixture) => {
+      const result = runLogoPipeline(fixture.image, { tileSize: TILE })
+      expect(result.ok).toBe(true)
+      const cropped = result.image!
+      const bbox = result.bbox
+      const src = fixture.image
+
+      for (let y = 0; y < cropped.height; y += 1) {
+        for (let x = 0; x < cropped.width; x += 1) {
+          const croppedIdx = (y * cropped.width + x) * 4
+          const srcX = bbox.x + x
+          const srcY = bbox.y + y
+          const srcIdx = (srcY * src.width + srcX) * 4
+
+          // If the pixel was not cleared by step 2 background removal
+          if (cropped.data[croppedIdx + 3] > 0) {
+            expect(
+              cropped.data[croppedIdx],
+              `R at (${x},${y})`
+            ).toBe(src.data[srcIdx])
+            expect(
+              cropped.data[croppedIdx + 1],
+              `G at (${x},${y})`
+            ).toBe(src.data[srcIdx + 1])
+            expect(
+              cropped.data[croppedIdx + 2],
+              `B at (${x},${y})`
+            ).toBe(src.data[srcIdx + 2])
+          }
+        }
+      }
+    }
+  )
+
+  it('Sony Sports-style dark badge renders byte-identically to source', () => {
+    const { fixture, result } = processFixture('dark-filled-badge')
+    expect(result.image).toBeDefined()
+    expect(result.flags).not.toContain('rim')
+    expect(result.flags).not.toContain('knockout')
+    expect(result.flags).not.toContain('lifted-dark')
+
+    const cropped = result.image!
+    const bbox = result.bbox
+    for (let y = 0; y < cropped.height; y += 1) {
+      for (let x = 0; x < cropped.width; x += 1) {
+        const cIdx = (y * cropped.width + x) * 4
+        const sIdx = ((bbox.y + y) * fixture.image.width + (bbox.x + x)) * 4
+        expect(cropped.data[cIdx]).toBe(fixture.image.data[sIdx])
+        expect(cropped.data[cIdx + 1]).toBe(fixture.image.data[sIdx + 1])
+        expect(cropped.data[cIdx + 2]).toBe(fixture.image.data[sIdx + 2])
+        expect(cropped.data[cIdx + 3]).toBe(fixture.image.data[sIdx + 3])
+      }
     }
   })
 
-  it('reaches 3:1 contrast across at least 90% of ink (or uses the rim tier)', () => {
-    for (const { name } of logoFixtures) {
-      const { result } = processFixture(name)
-      if (result.flags.includes('rim')) continue
-      expect(inkContrastShare(result.image!), `${name} contrast share`).toBeGreaterThanOrEqual(0.9)
-    }
+  it('removes near-white opaque backgrounds with transparent corners while preserving interior text', () => {
+    const { fixture, result } = processFixture('white-bg-opaque')
+    expect(result.image).toBeDefined()
+    expect(result.flags).toContain('matted')
+    const corners = cornerAlphas(result.image!)
+    expect(corners).toEqual([0, 0, 0, 0])
+
+    // Interior wordmark bars [17, 17, 17, 255] are intact and byte-identical
+    const cropped = result.image!
+    const bbox = result.bbox
+    const sampleX = 40 - bbox.x
+    const sampleY = 45 - bbox.y
+    const cIdx = (sampleY * cropped.width + sampleX) * 4
+    const sIdx = (45 * fixture.image.width + 40) * 4
+    expect(cropped.data[cIdx]).toBe(fixture.image.data[sIdx])
+    expect(cropped.data[cIdx + 1]).toBe(fixture.image.data[sIdx + 1])
+    expect(cropped.data[cIdx + 2]).toBe(fixture.image.data[sIdx + 2])
+    expect(cropped.data[cIdx + 3]).toBe(255)
   })
 
-  it('lands within ±15% of the 0.22 tile-area target when not clamped', () => {
+  it('lands within ±15% of the 0.30 tile-area target when not clamped', () => {
     for (const { name } of logoFixtures) {
       const { result } = processFixture(name)
       if (result.normalized.clamped || result.normalized.upscaleCapped) continue
@@ -72,12 +136,12 @@ describe('Addendum 3 · logo fixtures', () => {
     }
   })
 
-  it('clamps wide and tall fixtures inside the tile bounds', () => {
+  it('clamps wide and tall fixtures inside the tile bounds (width <= 0.80, height <= 0.66)', () => {
     for (const name of ['wordmark-6-1', 'tall-emblem']) {
       const { result } = processFixture(name)
       expect(result.normalized.clamped).toBe(true)
-      expect(result.normalized.width).toBeLessThanOrEqual(TILE * 0.74 + 0.001)
-      expect(result.normalized.height).toBeLessThanOrEqual(TILE * 0.62 + 0.001)
+      expect(result.normalized.width).toBeLessThanOrEqual(TILE * 0.8 + 0.001)
+      expect(result.normalized.height).toBeLessThanOrEqual(TILE * 0.66 + 0.001)
     }
   })
 
@@ -86,16 +150,15 @@ describe('Addendum 3 · logo fixtures', () => {
     const height = 96
     const data = new Uint8ClampedArray(width * height * 4)
     for (let i = 0; i < data.length; i += 4) {
-      data[i] = 255
-      data[i + 1] = 255
-      data[i + 2] = 255
+      data[i] = 200
+      data[i + 1] = 200
+      data[i + 2] = 200
       data[i + 3] = 255
     }
     const slab: RgbaImage = { data, width, height }
     const result = runLogoPipeline(slab, { tileSize: TILE })
     expect(result.ok).toBe(false)
     expect(result.tier).toBe('monogram')
-    expect(['solid-slab', 'too-light', 'low-ink']).toContain(result.flags.at(-1))
   })
 
   it('honours a monogram override without touching pixels', () => {

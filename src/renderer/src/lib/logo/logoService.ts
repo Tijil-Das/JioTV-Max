@@ -115,13 +115,22 @@ function openDatabase(): Promise<IDBDatabase | null> {
   return databasePromise
 }
 
+const LOGO_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // 6 hours
+
 async function readRecord(key: string): Promise<CachedRecord | null> {
   const db = await openDatabase()
   if (!db) return null
   return new Promise((resolve) => {
     const transaction = db.transaction(STORE, 'readonly')
     const request = transaction.objectStore(STORE).get(key)
-    request.onsuccess = () => resolve((request.result as CachedRecord | undefined) ?? null)
+    request.onsuccess = () => {
+      const record = request.result as CachedRecord | undefined
+      if (!record) return resolve(null)
+      if (record.savedAt && Date.now() - record.savedAt > LOGO_CACHE_MAX_AGE_MS) {
+        return resolve(null) // expired entry, re-process
+      }
+      resolve(record)
+    }
     request.onerror = () => resolve(null)
   })
 }

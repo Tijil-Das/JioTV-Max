@@ -21,7 +21,6 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Modal } from '@/components/ui/Modal'
 import { Button, IconButton } from '@/components/ui/Button'
-import { SegmentedControl } from '@/components/ui/Controls'
 import { BrandMark } from '@/components/ui/BrandMark'
 
 type Step = 'phone' | 'otp' | 'success'
@@ -92,10 +91,27 @@ export function LoginModal(): JSX.Element | null {
 
   useEffect(() => {
     if (step !== 'otp') return
+    const focusFirst = () => {
+      const input = inputsRef.current[0]
+      if (input) {
+        input.focus()
+        input.select()
+      }
+    }
+    focusFirst()
+    const t1 = setTimeout(focusFirst, 50)
+    const t2 = setTimeout(focusFirst, 150)
+    const t3 = setTimeout(focusFirst, 300)
+
     const timer = setInterval(() => {
       setSecondsLeft((value) => (value <= 1 ? 0 : value - 1))
     }, 1000)
-    return () => clearInterval(timer)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      clearInterval(timer)
+    }
   }, [step])
 
   const fail = (message: string) => {
@@ -268,76 +284,55 @@ export function LoginModal(): JSX.Element | null {
                       We sent a six-digit code to <span className="text-white">{masked}</span>.
                     </>
                   ) : (
-                    (reason ?? 'Choose how you want to sign in, then enter your mobile number.')
+                    (reason ?? 'Enter your 10-digit Indian mobile number to sign in.')
                   )}
                 </p>
 
                 {step === 'phone' ? (
-                  <>
-                    <SegmentedControl
-                      ariaLabel="Sign-in mode"
-                      className="mt-6"
-                      value={mode}
-                      onChange={(value) => {
-                        setLocalMode(value)
-                        setError(null)
-                      }}
-                      options={[
-                        { value: 'jio', label: 'JioTV account' },
-                        { value: 'demo', label: 'Demo access' }
-                      ]}
-                    />
-
+                  <div
+                    key={`phone-${shakeToken}`}
+                    className={cn('mt-6', error && 'animate-shake')}
+                  >
+                    <label htmlFor="login-phone" className="text-[12px] font-medium text-text-secondary">
+                      Mobile number
+                    </label>
                     <div
-                      key={`phone-${shakeToken}`}
-                      className={cn('mt-6', error && 'animate-shake')}
+                      className={cn(
+                        'mt-2 flex h-[52px] items-center gap-3 rounded-[12px] border bg-[#111113] px-3.5 transition-colors duration-[120ms]',
+                        error
+                          ? 'border-[#F87171]/50'
+                          : 'border-[rgba(255,255,255,0.08)] focus-within:border-[rgba(255,255,255,0.25)]'
+                      )}
                     >
-                      <label htmlFor="login-phone" className="text-[12px] font-medium text-text-secondary">
-                        Mobile number
-                      </label>
-                      <div
-                        className={cn(
-                          'mt-2 flex h-13 items-center gap-2 rounded-[8px] border bg-[#111113] px-3 transition-colors duration-[120ms]',
-                          error ? 'border-[rgba(225,29,46,0.5)]' : 'border-[rgba(255,255,255,0.07)] focus-within:border-[rgba(225,29,46,0.55)]'
-                        )}
-                      >
-                        <span className="flex items-center gap-1.5 border-r border-white/10 pr-3 text-[13px] text-text-secondary">
-                          <Smartphone className="h-3.5 w-3.5" /> +91
-                        </span>
-                        <input
-                          ref={phoneRef}
-                          id="login-phone"
-                          data-autofocus="true"
-                          value={phone}
-                          onChange={(event) => {
-                            setPhone(sanitizePhone(event.target.value))
-                            setError(null)
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') void requestOtp()
-                          }}
-                          inputMode="tel"
-                          autoComplete="tel-national"
-                          placeholder="98765 43210"
-                          className="h-full flex-1 bg-transparent text-[15px] tracking-wide text-white outline-none placeholder:text-text-secondary"
-                        />
-                        {mode === 'demo' ? (
-                          <button
-                            type="button"
-                            onClick={() => setPhone(DEMO_PHONE)}
-                            className="rounded-[8px] border border-[rgba(255,255,255,0.07)] px-2.5 py-1 text-[12px] text-[#A1A1A6] transition-colors duration-[120ms] hover:border-[rgba(255,255,255,0.14)] hover:text-[#F4F4F5]"
-                          >
-                            Use demo
-                          </button>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-[12px] text-text-secondary">
-                        {mode === 'demo'
-                          ? 'Demo mode accepts any valid Indian number and the code 123456.'
-                          : 'JioTV sends a one-time password to this number by SMS.'}
-                      </p>
+                      <span className="flex items-center gap-2 text-[14px] font-medium text-[#A1A1A6]">
+                        <Smartphone className="h-4 w-4" />
+                        <span>+91</span>
+                      </span>
+                      <div className="h-5 w-px bg-white/10" aria-hidden />
+                      <input
+                        ref={phoneRef}
+                        id="login-phone"
+                        autoFocus
+                        value={phone}
+                        onChange={(event) => {
+                          setPhone(sanitizePhone(event.target.value))
+                          setError(null)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void requestOtp()
+                        }}
+                        inputMode="tel"
+                        autoComplete="tel-national"
+                        placeholder="98765 43210"
+                        className="h-full flex-1 bg-transparent text-[16px] font-[500] tracking-wide text-white outline-none placeholder:text-[#52525B]"
+                      />
                     </div>
-                  </>
+                    <p className="mt-2 text-[12px] text-text-secondary">
+                      {mode === 'demo'
+                        ? 'Demo mode active. Accepts any valid 10-digit number.'
+                        : 'JioTV will send a 6-digit one-time code by SMS.'}
+                    </p>
+                  </div>
                 ) : (
                   <div key={`otp-${shakeToken}`} className={cn('mt-6', error && 'animate-shake')}>
                     <div className="flex gap-2.5">
@@ -347,6 +342,7 @@ export function LoginModal(): JSX.Element | null {
                           ref={(element) => {
                             inputsRef.current[index] = element
                           }}
+                          autoFocus={index === 0}
                           value={digit}
                           onChange={(event) => onDigitChange(index, event.target.value)}
                           onKeyDown={(event) => onDigitKeyDown(index, event)}
@@ -359,12 +355,12 @@ export function LoginModal(): JSX.Element | null {
                           maxLength={1}
                           aria-label={`OTP digit ${index + 1}`}
                           className={cn(
-                            'h-14 w-full rounded-xl border bg-black/25 text-center font-display text-[20px] font-semibold text-white outline-none transition-all duration-200',
+                            'h-14 w-full rounded-xl border bg-[#111113] text-center font-display text-[22px] font-bold text-white outline-none transition-all duration-150',
                             error
-                              ? 'border-[rgba(225,29,46,0.5)]'
-                                : digit
-                                  ? 'border-[rgba(225,29,46,0.4)]'
-                                  : 'border-[rgba(255,255,255,0.07)] focus:border-[rgba(225,29,46,0.55)]'
+                              ? 'border-[#F87171]/60 bg-[#F87171]/[0.04]'
+                              : digit
+                                ? 'border-white/30 bg-white/[0.04]'
+                                : 'border-white/[0.08] focus:border-white/30 focus:bg-white/[0.03]'
                           )}
                         />
                       ))}
@@ -392,15 +388,16 @@ export function LoginModal(): JSX.Element | null {
 
                 <AnimatePresence>
                   {error ? (
-                    <motion.p
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="mt-4 flex items-start gap-2 rounded-[8px] border-l-2 border-[#E11D2E] bg-[#E11D2E]/[0.08] px-3 py-2.5 text-[12px] text-[#F87171]"
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={tween(0.16)}
+                      className="mt-4 flex items-center gap-3 rounded-[10px] border border-[#F87171]/35 bg-[#F87171]/[0.08] p-3 text-[13px] text-[#FCA5A5] shadow-[0_2px_12px_rgba(225,29,46,0.12)] backdrop-blur-sm"
                     >
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      {error}
-                    </motion.p>
+                      <AlertCircle className="h-4 w-4 shrink-0 text-[#F87171]" />
+                      <span className="flex-1 text-left font-[450] leading-snug">{error}</span>
+                    </motion.div>
                   ) : null}
                 </AnimatePresence>
 
@@ -426,7 +423,7 @@ export function LoginModal(): JSX.Element | null {
                       loading={sending}
                       onClick={() => void requestOtp()}
                     >
-                      {mode === 'demo' ? 'Continue with demo' : 'Send code'}
+                      {sending ? 'Sending code…' : 'Send code'}
                     </Button>
                   ) : (
                     <Button
@@ -436,10 +433,40 @@ export function LoginModal(): JSX.Element | null {
                       loading={verifying}
                       onClick={() => void verify()}
                     >
-                      Verify and watch
+                      {verifying ? 'Verifying…' : 'Verify'}
                     </Button>
                   )}
                 </div>
+
+                {step === 'phone' ? (
+                  <div className="mt-4 border-t border-white/[0.06] pt-3 text-center">
+                    {mode === 'jio' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalMode('demo')
+                          setPhone(DEMO_PHONE)
+                          setError(null)
+                        }}
+                        className="text-[12px] text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
+                      >
+                        Don’t have a Jio account? <span className="text-[#E11D2E] hover:underline">Use demo mode</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalMode('jio')
+                          setPhone('')
+                          setError(null)
+                        }}
+                        className="text-[12px] text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
+                      >
+                        Switch back to <span className="text-[#E11D2E] hover:underline">JioTV account</span>
+                      </button>
+                    )}
+                  </div>
+                ) : null}
 
                 <p className="mt-5 text-center text-[12px] leading-relaxed text-text-secondary">
                   By continuing you agree to keep this sign-in on trusted devices only. JioTv Max

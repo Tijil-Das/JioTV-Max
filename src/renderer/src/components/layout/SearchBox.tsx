@@ -100,7 +100,7 @@ export function SearchBox(): JSX.Element {
           'w-[380px] focus-within:w-[500px] transition-[width,border-color,background] duration-[200ms]',
           'bg-[#111113]',
           focused
-            ? 'border-[rgba(225,29,46,0.55)]'
+            ? 'border-[rgba(255,255,255,0.24)]'
             : 'border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)]'
         )}
       >
@@ -135,8 +135,8 @@ export function SearchBox(): JSX.Element {
             <X className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[12px] font-[500] text-[#A1A1A6] lg:flex">
-            ⌃K
+          <span className="hidden shrink-0 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] px-1.5 py-0.5 text-[11px] font-[500] text-[#A1A1A6] lg:flex">
+            Ctrl+K
           </span>
         )}
       </div>

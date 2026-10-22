@@ -30,18 +30,12 @@ export function SplashScreen({ visible }: SplashScreenProps): JSX.Element {
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="flex flex-col items-center gap-5"
           >
-            {/* Rounded App Icon from Icon-Pack/Rounded */}
+            {/* Rounded App Icon */}
             <div className="relative flex h-24 w-24 items-center justify-center">
               <img
                 src={appIcon}
                 alt="JioTv Max logo"
-                className="h-24 w-24 object-contain drop-shadow-[0_8px_32px_rgba(225,29,46,0.45)]"
-              />
-              {/* Soft breathing pulse ring matching the red icon */}
-              <motion.div
-                className="absolute inset-0 rounded-[28px] ring-2 ring-[#E11D2E]"
-                animate={{ opacity: [0.55, 0, 0.55], scale: [1, 1.12, 1] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="h-24 w-24 object-contain"
               />
             </div>
 

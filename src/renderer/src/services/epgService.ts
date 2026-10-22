@@ -8,15 +8,28 @@ import type { AuthMode } from '@shared/types'
  * EPG cache keyed by channel + local day. Demo channels get a deterministic
  * 24-hour schedule; real channels are hydrated lazily from the Jio API.
  */
-const cache = new Map<string, Program[]>()
+const EPG_TTL_MS = 20 * 60_000 // 20 minutes
+
+interface CacheEntry {
+  programs: Program[]
+  fetchedAt: number
+}
+
+const cache = new Map<string, CacheEntry>()
 
 export const epgService = {
   getCached(channelId: string, date = new Date()): Program[] | undefined {
-    return cache.get(`${channelId}-${localDayKey(date)}`)
+    const entry = cache.get(`${channelId}-${localDayKey(date)}`)
+    if (!entry) return undefined
+    if (Date.now() - entry.fetchedAt > EPG_TTL_MS) {
+      cache.delete(`${channelId}-${localDayKey(date)}`)
+      return undefined
+    }
+    return entry.programs
   },
 
   setCached(channelId: string, programs: Program[], date = new Date()): void {
-    cache.set(`${channelId}-${localDayKey(date)}`, programs)
+    cache.set(`${channelId}-${localDayKey(date)}`, { programs, fetchedAt: Date.now() })
   },
 
   initialEpg(channels: Channel[], mode: AuthMode): Record<string, Program[]> {

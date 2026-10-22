@@ -58,6 +58,8 @@ function decodeDataUrl(url: string): AssetFetchPayload | null {
   return { bytes: new Uint8Array(bytes), mimeType, cached: false }
 }
 
+const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // 6 hours
+
 async function readCache(
   directory: string,
   key: string
@@ -67,7 +69,18 @@ async function readCache(
       fs.readFile(path.join(directory, `${key}.bin`)),
       fs.readFile(path.join(directory, `${key}.json`), 'utf8')
     ])
-    const meta = JSON.parse(metaRaw) as { mimeType?: string }
+    const meta = JSON.parse(metaRaw) as { mimeType?: string; savedAt?: string }
+    if (meta.savedAt) {
+      const age = Date.now() - new Date(meta.savedAt).getTime()
+      if (age > CACHE_MAX_AGE_MS) {
+        // Expired cache entry: delete lazily and re-fetch fresh
+        void Promise.allSettled([
+          fs.unlink(path.join(directory, `${key}.bin`)),
+          fs.unlink(path.join(directory, `${key}.json`))
+        ])
+        return null
+      }
+    }
     const copy = new Uint8Array(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
     )

@@ -97,15 +97,20 @@ select,
   -webkit-app-region: no-drag;
 }
 
-button:focus {
-  outline: none;
+button:focus,
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none;
 }
 
-/* Focus ring: 2px red-line, 2px offset — on every interactive element */
 :focus-visible {
-  outline: 2px solid var(--red-line);
-  outline-offset: 2px;
-  box-shadow: none;
+  outline: none;
 }
 
 /* -------------------------------------------------------------------------

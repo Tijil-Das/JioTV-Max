@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { PLAYER_UA, withHdneaCookie, extractHdnea } from './jio-headers'
+import { PLAYER_UA, withHdneaCookie } from './jio-headers'
 
 /**
  * A tiny loopback media relay.
@@ -12,13 +12,22 @@ import { PLAYER_UA, withHdneaCookie, extractHdnea } from './jio-headers'
  * to an ephemeral port and is reachable only from this machine.
  */
 
+type RelayQuality = 'auto' | 'high' | 'medium' | 'low'
+
 interface Session {
+  id: string
   channelId: string
   manifestUrl: string
   licenseUrl?: string
   headers: Record<string, string>
   /** Effective base URL for relative DASH segments after manifest parsing. */
   segmentBase?: string
+  /** Quality tier used to re-resolve the signed playback URL. */
+  quality: RelayQuality
+  /** Increments whenever Jio rotates a signed URL/cookie. */
+  generation: number
+  /** Coalesces concurrent 401/403 refreshes into one playback API call. */
+  refreshPromise: Promise<boolean> | null
 }
 
 /** A registered playback session plus the URLs the renderer should use. */
@@ -28,6 +37,36 @@ export interface RelaySession {
   manifestUrl: string
   licenseUrl?: string
 }
+
+/** Fresh raw upstream stream returned by `JioService` for token refresh. */
+export interface RelayUpstreamSource {
+  manifestUrl: string
+  headers?: Record<string, string>
+  licenseUrl?: string
+}
+
+export type RelayStreamResolver = (
+  channelId: string,
+  quality: RelayQuality
+) => Promise<RelayUpstreamSource | null>
+
+interface CachedSegment {
+  body: Buffer
+  contentType: string
+  contentRange?: string
+  acceptRanges?: string
+  storedAt: number
+}
+
+/**
+ * DVR segments are immutable once published, so re-winding to a segment the
+ * viewer just watched can be served from memory. This also protects short
+ * re-winds from a CDN token that expired a few seconds ago.
+ */
+const SEGMENT_CACHE_TTL_MS = 2 * 60_000
+const SEGMENT_CACHE_MAX_ENTRIES = 80
+const SEGMENT_CACHE_MAX_BYTES = 64 * 1024 * 1024
+const SEGMENT_CACHE_MAX_ITEM_BYTES = 16 * 1024 * 1024
 
 
 const CORS_HEADERS: Record<string, string> = {
@@ -180,13 +219,31 @@ function hlsToken(manifestUrl: string): string {
   }
 }
 
+/**
+ * Replaces (rather than merely adds) the `__hdnea__` token.
+ *
+ * This matters on a retry: Shaka may request a segment URI that contains the
+ * token from the *old* manifest. Adding a second token is a no-op, so the
+ * request would keep failing with 403 until the replacement happens here.
+ */
 function withHlsToken(rawUrl: string, token: string): string {
   if (!token) return rawUrl
   try {
     const parsed = new URL(rawUrl)
-    if (!parsed.searchParams.has('__hdnea__') && !parsed.searchParams.has('hdnea')) {
-      parsed.searchParams.set('__hdnea__', token)
-    }
+    parsed.searchParams.delete('hdnea')
+    parsed.searchParams.set('__hdnea__', token)
+    return parsed.href
+  } catch {
+    return rawUrl
+  }
+}
+
+/** Cache key ignores volatile signed-token parameters. */
+function segmentCacheKey(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl)
+    parsed.searchParams.delete('__hdnea__')
+    parsed.searchParams.delete('hdnea')
     return parsed.href
   } catch {
     return rawUrl
@@ -257,9 +314,17 @@ export class MediaRelay {
   private port = 0
   private lastActiveSessionId: string | null = null
   private readonly sessions = new Map<string, Session>()
+  private readonly segmentCache = new Map<string, CachedSegment>()
+  private segmentCacheBytes = 0
+  private streamResolver: RelayStreamResolver | null = null
 
   get running(): boolean {
     return this.server !== null
+  }
+
+  /** Lets `JioService` re-resolve a signed playback URL on 401/403. */
+  setStreamResolver(resolver: RelayStreamResolver): void {
+    this.streamResolver = resolver
   }
 
   async start(): Promise<void> {
@@ -284,6 +349,8 @@ export class MediaRelay {
 
   async stop(): Promise<void> {
     this.sessions.clear()
+    this.segmentCache.clear()
+    this.segmentCacheBytes = 0
     this.lastActiveSessionId = null
     await new Promise<void>((resolve) => {
       if (!this.server) return resolve()
@@ -301,15 +368,20 @@ export class MediaRelay {
     manifestUrl: string
     licenseUrl?: string
     headers?: Record<string, string>
+    quality?: RelayQuality
   }): RelaySession {
     if (!this.port) throw new Error('Media relay is not running')
     const id = randomUUID()
     this.lastActiveSessionId = id
     this.sessions.set(id, {
+      id,
       channelId: input.channelId,
       manifestUrl: input.manifestUrl,
       licenseUrl: input.licenseUrl,
-      headers: input.headers ?? {}
+      headers: input.headers ?? {},
+      quality: input.quality ?? 'high',
+      generation: 0,
+      refreshPromise: null
     })
     console.log(`[MediaRelay] Registered session ${id} for channel ${input.channelId}`)
     const base = `http://127.0.0.1:${this.port}/stream/${id}`
@@ -320,16 +392,199 @@ export class MediaRelay {
     }
   }
 
+  /** Builds the upstream header set for the session's *current* token. */
+  private buildUpstreamHeaders(session: Session | null): Record<string, string> {
+    const headers: Record<string, string> = { ...(session?.headers ?? {}) }
+    if (session?.channelId) {
+      headers.channelId = session.channelId
+    }
+    if (!headers.srno) {
+      headers.srno = '230203144000'
+    }
+    const token = session ? hlsToken(session.manifestUrl) : ''
+    return token ? withHdneaCookie(headers, token) : headers
+  }
+
+  /**
+   * Jio occasionally rotates `__hdnea__` in a `Set-Cookie` response header.
+   * Persist it so every subsequent segment/license request uses the new token.
+   */
+  private captureRotatedToken(session: Session, upstream: Response): void {
+    const setCookie = upstream.headers.get('set-cookie')
+    if (!setCookie) return
+    const match = setCookie.match(/__hdnea__=([^;]+)/)
+    if (!match?.[1]) return
+
+    let token = match[1].trim()
+    try {
+      token = decodeURIComponent(token)
+    } catch {
+      // Cookie values are usually not percent-encoded; keep the raw value.
+    }
+    if (!token || token === hlsToken(session.manifestUrl)) return
+
+    console.log(`[MediaRelay] Upstream rotated __hdnea__ for ${session.channelId}`)
+    session.headers = withHdneaCookie(session.headers, token)
+    session.manifestUrl = withHlsToken(session.manifestUrl, token)
+    if (session.licenseUrl) session.licenseUrl = withHlsToken(session.licenseUrl, token)
+    session.generation += 1
+  }
+
+  /**
+   * Asks `JioService` for a fresh playback URL after a 401/403.
+   *
+   * Concurrent segment requests that fail at the same moment share one
+   * refresh promise. If a request started *before* another request refreshed
+   * the session it simply retries instead of hitting the playback API again.
+   */
+  private async refreshSession(session: Session, seenGeneration: number): Promise<boolean> {
+    if (session.generation > seenGeneration) return true
+    if (!this.streamResolver) return false
+    if (session.refreshPromise) return session.refreshPromise
+
+    const generationAtStart = session.generation
+    console.log(`[MediaRelay] Token expired for channel ${session.channelId}; refreshing signed URL…`)
+
+    const promise = (async (): Promise<boolean> => {
+      try {
+        const fresh = await this.streamResolver!(session.channelId, session.quality)
+        if (!fresh?.manifestUrl) return false
+        // Another request already refreshed while this call was in flight.
+        if (session.generation !== generationAtStart) return true
+
+        const token = hlsToken(fresh.manifestUrl)
+        session.manifestUrl = fresh.manifestUrl
+        session.headers = token
+          ? withHdneaCookie({ ...session.headers, ...(fresh.headers ?? {}) }, token)
+          : { ...session.headers, ...(fresh.headers ?? {}) }
+        const licenseUrl = fresh.licenseUrl ?? session.licenseUrl
+        session.licenseUrl = licenseUrl && token ? withHlsToken(licenseUrl, token) : licenseUrl
+        session.generation = generationAtStart + 1
+        console.log(
+          `[MediaRelay] Refreshed signed URL for ${session.channelId} (generation ${session.generation})`
+        )
+        return true
+      } catch (error) {
+        console.warn(`[MediaRelay] Token refresh failed for ${session.channelId}:`, error)
+        return false
+      }
+    })()
+
+    session.refreshPromise = promise
+    try {
+      return await promise
+    } finally {
+      if (session.refreshPromise === promise) session.refreshPromise = null
+    }
+  }
+
+  /**
+   * Fetches an upstream URL, and if the CDN answers 401/403 refreshes the
+   * session token and retries the *exact same* request once.
+   */
+  private async fetchWithRefresh(
+    session: Session | null,
+    makeTarget: () => string,
+    init?: { method?: string; body?: Buffer; range?: string }
+  ): Promise<{ upstream: Response; target: string }> {
+    const generation = session?.generation ?? 0
+    let target = makeTarget()
+    let upstream = await fetchUpstream(target, this.buildUpstreamHeaders(session), init)
+    if (session) this.captureRotatedToken(session, upstream)
+
+    if (
+      session &&
+      (upstream.status === 401 || upstream.status === 403) &&
+      (await this.refreshSession(session, generation))
+    ) {
+      try {
+        await upstream.body?.cancel()
+      } catch {
+        // The body was never consumed; failing to cancel only leaks a socket.
+      }
+      target = makeTarget()
+      console.log(
+        `[MediaRelay] Retrying ${target.slice(0, 100)}… with refreshed token (session ${session.channelId})`
+      )
+      upstream = await fetchUpstream(target, this.buildUpstreamHeaders(session), init)
+      this.captureRotatedToken(session, upstream)
+      console.log(`[MediaRelay] Retry upstream status: ${upstream.status}`)
+    }
+
+    return { upstream, target }
+  }
+
+  private readCachedSegment(key: string): CachedSegment | null {
+    const cached = this.segmentCache.get(key)
+    if (!cached) return null
+    if (Date.now() - cached.storedAt > SEGMENT_CACHE_TTL_MS) {
+      this.removeCachedSegment(key)
+      return null
+    }
+    // Refresh LRU order.
+    this.segmentCache.delete(key)
+    this.segmentCache.set(key, cached)
+    return cached
+  }
+
+  private rememberSegment(
+    key: string,
+    body: Buffer,
+    contentType: string,
+    acceptRanges?: string
+  ): void {
+    if (!key || body.byteLength === 0 || body.byteLength > SEGMENT_CACHE_MAX_ITEM_BYTES) return
+    // Never cache manifests, playlists, licenses or text metadata as media.
+    if (/mpegurl|dash\+xml|text\/|json|xml/i.test(contentType)) return
+
+    this.removeCachedSegment(key)
+    this.segmentCache.set(key, {
+      body,
+      contentType: contentType || 'application/octet-stream',
+      acceptRanges: acceptRanges || 'bytes',
+      storedAt: Date.now()
+    })
+    this.segmentCacheBytes += body.byteLength
+
+    while (
+      this.segmentCache.size > SEGMENT_CACHE_MAX_ENTRIES ||
+      this.segmentCacheBytes > SEGMENT_CACHE_MAX_BYTES
+    ) {
+      const oldest = this.segmentCache.keys().next().value as string | undefined
+      if (!oldest) break
+      this.removeCachedSegment(oldest)
+    }
+  }
+
+  private removeCachedSegment(key: string): void {
+    const existing = this.segmentCache.get(key)
+    if (!existing) return
+    this.segmentCache.delete(key)
+    this.segmentCacheBytes = Math.max(0, this.segmentCacheBytes - existing.body.byteLength)
+  }
+
+  private sendCachedSegment(res: ServerResponse, cached: CachedSegment): void {
+    const headers: Record<string, string> = {
+      ...CORS_HEADERS,
+      'Content-Type': cached.contentType,
+      'Content-Length': String(cached.body.byteLength),
+      'Accept-Ranges': cached.acceptRanges ?? 'bytes',
+      'Cache-Control': 'private, max-age=30'
+    }
+    if (cached.contentRange) headers['Content-Range'] = cached.contentRange
+    res.writeHead(200, headers)
+    res.end(cached.body)
+  }
+
   /**
    * Looks up a playback session by id.
    *
    * `/raw` requests carry the id of the session that produced them, so the
    * relay can replay that session's authenticated headers against the CDN.
    */
-  private resolveSession(id: string | null): (Session & { id: string }) | null {
+  private resolveSession(id: string | null): Session | null {
     if (!id) return null
-    const session = this.sessions.get(id)
-    return session ? { ...session, id } : null
+    return this.sessions.get(id) ?? null
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -372,73 +627,81 @@ export class MediaRelay {
       const isKey = /\.p?key(\?|$)/i.test(target) || target.includes('tv.media.jio.com')
       console.log(`[MediaRelay] /raw fetching: ${target.slice(0, 110)}... (session: ${sessionId ?? 'none'}, isKey: ${isKey})`)
 
-      const upstreamHeaders: Record<string, string> = {
-        ...(session?.headers ?? {})
-      }
-      if (session?.channelId) {
-        upstreamHeaders.channelId = session.channelId
-      }
-      if (!upstreamHeaders.srno) {
-        upstreamHeaders.srno = '230203144000'
-      }
+      const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
+      const cacheKey = segmentCacheKey(target)
 
-      const token = session ? hlsToken(session.manifestUrl) : ''
-      let fetchTarget = target
-      if (token) {
-        fetchTarget = withHlsToken(fetchTarget, token)
-        Object.assign(upstreamHeaders, withHdneaCookie(upstreamHeaders, token))
-      }
-
-      const upstream = await fetchUpstream(fetchTarget, upstreamHeaders, {
-        range: typeof req.headers.range === 'string' ? req.headers.range : undefined
-      })
-      console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${fetchTarget.slice(0, 80)}`)
-
-      // Capture upstream rotated __hdnea__ cookie if present
-      const setCookie = upstream.headers.get('set-cookie')
-      if (setCookie && session) {
-        const match = setCookie.match(/__hdnea__=([^;]+)/)
-        if (match) {
-          console.log(`[MediaRelay] Upstream updated __hdnea__ cookie: ${match[1].slice(0, 30)}...`)
-          session.headers = withHdneaCookie(session.headers, match[1])
-          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
+      // Rewinding replays immutable media already fetched once. Serving it
+      // from memory avoids a second CDN call and masks short token expiry.
+      if (!isKey && !range) {
+        const cached = this.readCachedSegment(cacheKey)
+        if (cached) {
+          console.log(`[MediaRelay] /raw cache hit: ${target.slice(0, 90)}…`)
+          this.sendCachedSegment(res, cached)
+          return
         }
       }
 
-      if (!upstream.ok) {
-        console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
-        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
-        res.writeHead(statusToSend, CORS_HEADERS)
-        res.end(`Upstream error (${upstream.status})`)
-        return
-      }
+      try {
+        const { upstream, target: fetchTarget } = await this.fetchWithRefresh(
+          session,
+          () => {
+            const token = session ? hlsToken(session.manifestUrl) : ''
+            return token ? withHlsToken(target, token) : target
+          },
+          { range }
+        )
+        console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${fetchTarget.slice(0, 80)}`)
 
-      if (isKey) {
-        const buf = Buffer.from(await upstream.arrayBuffer())
-        console.log(`[MediaRelay] AES-128 key successfully fetched! Length: ${buf.byteLength} bytes`)
+        if (!upstream.ok) {
+          console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
+          const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
+          res.writeHead(statusToSend, CORS_HEADERS)
+          res.end(`Upstream error (${upstream.status})`)
+          return
+        }
+
+        if (isKey) {
+          const buf = Buffer.from(await upstream.arrayBuffer())
+          console.log(`[MediaRelay] AES-128 key successfully fetched! Length: ${buf.byteLength} bytes`)
+          copyHeaders(upstream.headers, res)
+          res.writeHead(200, CORS_HEADERS)
+          res.end(buf)
+          return
+        }
+
+        const contentType = upstream.headers.get('content-type') ?? ''
+        if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(fetchTarget)) {
+          // Nested HLS playlists must be rewritten too, not passed through raw.
+          const text = await upstream.text()
+          res.writeHead(200, {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            'Cache-Control': 'no-store'
+          })
+          res.end(rewriteHls(text, fetchTarget, req, session?.id ?? ''))
+          return
+        }
+
+        const body = Buffer.from(await upstream.arrayBuffer())
+        if (!range && upstream.status === 200) {
+          this.rememberSegment(
+            cacheKey,
+            body,
+            contentType,
+            upstream.headers.get('accept-ranges') ?? undefined
+          )
+        }
+
         copyHeaders(upstream.headers, res)
-        res.writeHead(200, CORS_HEADERS)
-        res.end(buf)
+        res.writeHead(upstream.status, CORS_HEADERS)
+        res.end(body)
+        return
+      } catch (error) {
+        console.warn(`[MediaRelay] /raw request failed: ${target.slice(0, 110)}`, error)
+        if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
+        res.end('Upstream request failed')
         return
       }
-
-      const contentType = upstream.headers.get('content-type') ?? ''
-      if (contentType.includes('mpegurl') || /\.m3u8(\?|$)/i.test(fetchTarget)) {
-        // Nested HLS playlists must be rewritten too, not passed through raw.
-        const text = await upstream.text()
-        res.writeHead(200, {
-          ...CORS_HEADERS,
-          'Content-Type': 'application/vnd.apple.mpegurl',
-          'Cache-Control': 'no-store'
-        })
-        res.end(rewriteHls(text, fetchTarget, req, session?.id ?? ''))
-        return
-      }
-
-      copyHeaders(upstream.headers, res)
-      res.writeHead(upstream.status, CORS_HEADERS)
-      res.end(Buffer.from(await upstream.arrayBuffer()))
-      return
     }
 
     if (segmentMatch) {
@@ -453,87 +716,123 @@ export class MediaRelay {
       }
       this.lastActiveSessionId = session.id
 
-      let rawRest = rest
-      if (/^https?:\/+[^\/]/i.test(rawRest)) {
-        rawRest = rawRest.replace(/^(https?):\/+([^\/])/, '$1://$2')
-      }
+      // Re-resolved on every retry so a refreshed manifest URL contributes
+      // its new query parameters/token.
+      const buildSegmentTarget = (): string => {
+        let rawRest = rest
+        if (/^https?:\/+[^\/]/i.test(rawRest)) {
+          rawRest = rawRest.replace(/^(https?):\/+([^\/])/, '$1://$2')
+        }
 
-      let target: string
-      if (/^https?:\/\//i.test(rawRest)) {
-        target = rawRest
-      } else if (rawRest.startsWith('bpk-tv/') || rawRest.startsWith('/bpk-tv/')) {
-        const base = session.segmentBase || new URL('.', session.manifestUrl).href
-        const cdnOrigin = new URL(base).origin
-        target = new URL(rawRest.replace(/^\/+/, ''), cdnOrigin + '/').href
-      } else {
-        const base = session.segmentBase || new URL('.', session.manifestUrl).href
-        target = new URL(rawRest, base).href
-      }
+        let target: string
+        if (/^https?:\/\//i.test(rawRest)) {
+          target = rawRest
+        } else if (rawRest.startsWith('bpk-tv/') || rawRest.startsWith('/bpk-tv/')) {
+          const base = session.segmentBase || new URL('.', session.manifestUrl).href
+          const cdnOrigin = new URL(base).origin
+          target = new URL(rawRest.replace(/^\/+/, ''), cdnOrigin + '/').href
+        } else {
+          const base = session.segmentBase || new URL('.', session.manifestUrl).href
+          target = new URL(rawRest, base).href
+        }
 
-      // Preserve query params from incoming request and from session.manifestUrl
-      try {
-        const targetUrl = new URL(target)
-        if (url.search) {
-          for (const [k, v] of url.searchParams.entries()) {
+        // Preserve query params from incoming request and from session.manifestUrl
+        try {
+          const targetUrl = new URL(target)
+          if (url.search) {
+            for (const [k, v] of url.searchParams.entries()) {
+              if (!targetUrl.searchParams.has(k)) targetUrl.searchParams.set(k, v)
+            }
+          }
+          const manifestParsed = new URL(session.manifestUrl)
+          for (const [k, v] of manifestParsed.searchParams.entries()) {
             if (!targetUrl.searchParams.has(k)) targetUrl.searchParams.set(k, v)
           }
+          target = targetUrl.href
+        } catch {
+          // ignore
         }
-        const manifestParsed = new URL(session.manifestUrl)
-        for (const [k, v] of manifestParsed.searchParams.entries()) {
-          if (!targetUrl.searchParams.has(k)) targetUrl.searchParams.set(k, v)
-        }
-        target = targetUrl.href
-      } catch {
-        // ignore
+        return target
       }
 
-      if (!isHttpUrl(target)) {
-        console.warn(`[MediaRelay] Invalid segment target: ${target}`)
+      const targetWithToken = (): string => {
+        const target = buildSegmentTarget()
+        const token = hlsToken(session.manifestUrl)
+        return token ? withHlsToken(target, token) : target
+      }
+
+      const requestedTarget = targetWithToken()
+      if (!isHttpUrl(requestedTarget)) {
+        console.warn(`[MediaRelay] Invalid segment target: ${requestedTarget}`)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid segment')
         return
       }
-      const token = hlsToken(session.manifestUrl)
-      if (token) {
-        target = withHlsToken(target, token)
-      }
-      console.log(`[MediaRelay] /seg fetching: ${target.slice(0, 110)}...`)
-      const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
-      const upstreamHeaders: Record<string, string> = {
-        ...session.headers
-      }
-      if (session.channelId) {
-        upstreamHeaders.channelId = session.channelId
-      }
-      if (!upstreamHeaders.srno) {
-        upstreamHeaders.srno = '230203144000'
-      }
-      if (token) {
-        Object.assign(upstreamHeaders, withHdneaCookie(upstreamHeaders, token))
-      }
-      const upstream = await fetchUpstream(target, upstreamHeaders, { range })
-      console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
 
-      const setCookie = upstream.headers.get('set-cookie')
-      if (setCookie) {
-        const match = setCookie.match(/__hdnea__=([^;]+)/)
-        if (match) {
-          session.headers = withHdneaCookie(session.headers, match[1])
-          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
+      const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
+      const cacheKey = segmentCacheKey(requestedTarget)
+      if (!range) {
+        const cached = this.readCachedSegment(cacheKey)
+        if (cached) {
+          console.log(`[MediaRelay] /seg cache hit: ${cacheKey.slice(0, 100)}…`)
+          this.sendCachedSegment(res, cached)
+          return
         }
       }
 
-      if (!upstream.ok) {
-        console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
-        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
-        res.writeHead(statusToSend, CORS_HEADERS)
-        res.end(`Upstream error (${upstream.status})`)
+      console.log(`[MediaRelay] /seg fetching: ${requestedTarget.slice(0, 110)}...`)
+      try {
+        // Never reject a past segment just because it is behind the live
+        // edge — Jio's CDN keeps the window advertised by timeShiftBufferDepth.
+        const { upstream, target } = await this.fetchWithRefresh(
+          session,
+          targetWithToken,
+          { range }
+        )
+        console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
+
+        if (!upstream.ok) {
+          console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
+          const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
+          res.writeHead(statusToSend, CORS_HEADERS)
+          res.end(`Upstream error (${upstream.status})`)
+          return
+        }
+
+        const body = Buffer.from(await upstream.arrayBuffer())
+        if (!range && upstream.status === 200) {
+          this.rememberSegment(
+            cacheKey,
+            body,
+            upstream.headers.get('content-type') ?? '',
+            upstream.headers.get('accept-ranges') ?? undefined
+          )
+        }
+
+        copyHeaders(upstream.headers, res)
+        res.writeHead(upstream.status, CORS_HEADERS)
+        res.end(body)
+        return
+      } catch (error) {
+        console.warn(`[MediaRelay] /seg request failed: ${requestedTarget.slice(0, 110)}`, error)
+        if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
+        res.end('Upstream request failed')
         return
       }
+    }
 
-      copyHeaders(upstream.headers, res)
-      res.writeHead(upstream.status, CORS_HEADERS)
-      res.end(Buffer.from(await upstream.arrayBuffer()))
+    // /dashtime — used by Shaka's clockSyncUri to sync the live edge from
+    // server time rather than the (potentially skewed) client clock.
+    // Mirrors jiotv_go's /dashtime endpoint exactly.
+    if (url.pathname === '/dashtime') {
+      const now = new Date().toISOString()
+      res.writeHead(200, {
+        ...CORS_HEADERS,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache',
+        'Date': new Date().toUTCString()
+      })
+      res.end(JSON.stringify({ time: now }))
       return
     }
 
@@ -554,24 +853,23 @@ export class MediaRelay {
     }
 
     if (action === 'license') {
-      return this.handleLicense(req, res, { ...session, id })
+      return this.handleLicense(req, res, session)
     }
 
     if (action === 'manifest') {
       console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
       this.lastActiveSessionId = id
-      const upstream = await fetchUpstream(session.manifestUrl, session.headers)
-      console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
-
-      const setCookie = upstream.headers.get('set-cookie')
-      if (setCookie) {
-        const match = setCookie.match(/__hdnea__=([^;]+)/)
-        if (match) {
-          console.log(`[MediaRelay] Manifest rotated __hdnea__ cookie: ${match[1].slice(0, 30)}...`)
-          session.headers = withHdneaCookie(session.headers, match[1])
-          session.manifestUrl = withHlsToken(session.manifestUrl, match[1])
-        }
+      let upstream: Response
+      try {
+        const result = await this.fetchWithRefresh(session, () => session.manifestUrl)
+        upstream = result.upstream
+      } catch (error) {
+        console.warn(`[MediaRelay] /manifest request failed for ${session.channelId}`, error)
+        if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
+        res.end('Upstream manifest request failed')
+        return
       }
+      console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
 
       if (!upstream.ok) {
         console.warn(`[MediaRelay] Upstream manifest error: ${upstream.status}`)
@@ -610,7 +908,7 @@ export class MediaRelay {
   private async handleLicense(
     req: IncomingMessage,
     res: ServerResponse,
-    session: Session & { id: string }
+    session: Session
   ): Promise<void> {
     if (!session.licenseUrl) {
       session.licenseUrl = 'https://tv.media.jio.com/proxy?provider=reliance'
@@ -742,13 +1040,44 @@ export class MediaRelay {
     console.log(`[MediaRelay] /license requesting upstream: ${targetLicenseUrl}`)
     console.log('[MediaRelay] License request headers:', JSON.stringify(licenseHeaders, null, 2))
 
-    const upstream = await fetch(targetLicenseUrl, {
+    const licenseGeneration = session.generation
+    let upstream = await fetch(targetLicenseUrl, {
       method: 'POST',
       headers: licenseHeaders,
       body,
       redirect: 'follow',
       signal: AbortSignal.timeout(20_000)
     })
+
+    // A paused player can hold an old license URL/token long enough for it to
+    // expire. Refresh once and replay the identical challenge bytes.
+    if (
+      (upstream.status === 401 || upstream.status === 403) &&
+      (await this.refreshSession(session, licenseGeneration))
+    ) {
+      const freshToken = hlsToken(session.manifestUrl)
+      if (freshToken) {
+        const refreshedCookies = withHdneaCookie(licenseHeaders, freshToken)
+        const cookie = refreshedCookies.Cookie || refreshedCookies.cookie
+        if (cookie) setHeader('Cookie', cookie)
+      }
+      if (session.headers.accessToken) {
+        setHeader('Authorization', `Bearer ${session.headers.accessToken}`)
+        setHeader('accesstoken', session.headers.accessToken)
+      }
+      if (session.headers.ssotoken) setHeader('ssotoken', session.headers.ssotoken)
+
+      targetLicenseUrl = session.licenseUrl || targetLicenseUrl
+      if (freshToken) targetLicenseUrl = withHlsToken(targetLicenseUrl, freshToken)
+      console.log(`[MediaRelay] Retrying license request with refreshed token: ${targetLicenseUrl}`)
+      upstream = await fetch(targetLicenseUrl, {
+        method: 'POST',
+        headers: licenseHeaders,
+        body,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20_000)
+      })
+    }
 
     console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
 

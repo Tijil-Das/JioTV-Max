@@ -17,6 +17,12 @@ export interface EngineLevel {
   label: string
 }
 
+/** Seekable window advertised by Shaka/HLS, in presentation seconds. */
+export interface MediaSeekRange {
+  start: number
+  end: number
+}
+
 export interface UseMediaPlayerOptions {
   stream: StreamInfo | null
   /** Height requested by the user. 1080 by default per product spec. */
@@ -29,6 +35,11 @@ export interface UseMediaPlayerOptions {
    * so a stale CDN token never causes an infinite reconnect loop.
    */
   onReconnect?: () => Promise<StreamInfo | null>
+  /**
+   * Fired when a rewind lands outside Jio's time-shift window. The engine
+   * automatically jumps back to live; use this for the user-facing toast.
+   */
+  onDvrGap?: () => void
 }
 
 // Backward compatibility alias
@@ -45,6 +56,12 @@ export interface UseMediaPlayerResult {
   retry: () => void
   ready: boolean
   engine: 'hls' | 'shaka' | 'native' | null
+  /** Current DVR window; null until the engine has parsed a manifest. */
+  seekRange: MediaSeekRange | null
+  /** Jump to (a hair behind) the live edge. */
+  goLive: () => void
+  /** Seek within the DVR window, clamped to the current seek range. */
+  seekTo: (time: number) => void
 }
 
 // Backward compatibility alias
@@ -57,9 +74,23 @@ function friendlyMediaError(detail?: string): string {
   return detail || 'The stream could not be played.'
 }
 
-function formatShakaError(error: unknown): { message: string; isFatalNetworkOrDrm: boolean } {
+interface FormattedShakaError {
+  message: string
+  isFatalNetworkOrDrm: boolean
+  isNetwork: boolean
+  code: number
+  httpStatus: number
+}
+
+function formatShakaError(error: unknown): FormattedShakaError {
   if (!error || typeof error !== 'object') {
-    return { message: 'The stream could not be played.', isFatalNetworkOrDrm: false }
+    return {
+      message: 'The stream could not be played.',
+      isFatalNetworkOrDrm: false,
+      isNetwork: false,
+      code: 0,
+      httpStatus: 0
+    }
   }
   const err = error as { category?: number; code?: number; message?: string; data?: unknown[]; detail?: unknown }
   const target = (err.detail && typeof err.detail === 'object' ? err.detail : err) as {
@@ -77,6 +108,17 @@ function formatShakaError(error: unknown): { message: string; isFatalNetworkOrDr
   const isDrm = category === 6 || category === (shaka?.util?.Error?.Category?.DRM ?? 6)
   const isFatalNetworkOrDrm = isNetwork || isDrm
 
+  // BAD_HTTP_STATUS (1001) / HTTP_ERROR (1002) carry the status in `data`.
+  let httpStatus = 0
+  if (Array.isArray(target.data)) {
+    for (const item of target.data) {
+      if (typeof item === 'number' && item >= 400 && item <= 599) {
+        httpStatus = item
+        break
+      }
+    }
+  }
+
   let categoryName = ''
   if (isNetwork) categoryName = 'Network'
   else if (isDrm) categoryName = 'Widevine DRM'
@@ -85,6 +127,10 @@ function formatShakaError(error: unknown): { message: string; isFatalNetworkOrDr
   else if (category === 5) categoryName = 'Streaming'
 
   let desc = String(target.message || '')
+  if (!httpStatus) {
+    const statusMatch = desc.match(/\b(4\d{2}|5\d{2})\b/)
+    if (statusMatch) httpStatus = Number(statusMatch[1])
+  }
   if (code && !desc.includes(String(code))) {
     desc = desc ? `${desc} (Error ${code}${categoryName ? ', ' + categoryName : ''})` : `Error ${code} (${categoryName || 'Playback'})`
   }
@@ -92,20 +138,29 @@ function formatShakaError(error: unknown): { message: string; isFatalNetworkOrDr
   if (isDrm || /drm|widevine|eme|key system|license/i.test(desc)) {
     return {
       message: `Widevine DRM error: ${desc || 'Could not decrypt stream or obtain license.'}`,
-      isFatalNetworkOrDrm: true
+      isFatalNetworkOrDrm: true,
+      isNetwork,
+      code,
+      httpStatus
     }
   }
 
   if (isNetwork || /network|fetch|timeout|cors|403|404|connect/i.test(desc)) {
     return {
       message: `Network error: ${desc || 'Failed to reach stream segment or server.'}`,
-      isFatalNetworkOrDrm: true
+      isFatalNetworkOrDrm: true,
+      isNetwork: true,
+      code,
+      httpStatus
     }
   }
 
   return {
     message: desc || friendlyMediaError(desc),
-    isFatalNetworkOrDrm
+    isFatalNetworkOrDrm,
+    isNetwork,
+    code,
+    httpStatus
   }
 }
 
@@ -119,7 +174,8 @@ export function useMediaPlayer({
   stream,
   initialQuality = 1080,
   onError,
-  onReconnect
+  onReconnect,
+  onDvrGap
 }: UseMediaPlayerOptions): UseMediaPlayerResult {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -136,11 +192,15 @@ export function useMediaPlayer({
   const [reloadKey, setReloadKey] = useState(0)
   const [ready, setReady] = useState(false)
   const [engine, setEngine] = useState<'hls' | 'shaka' | 'native' | null>(null)
+  const [seekRange, setSeekRange] = useState<MediaSeekRange | null>(null)
   const attemptRef = useRef(0)
   const autoAttemptsRef = useRef(0)
   const manualAttemptsRef = useRef(0)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bufferingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pausedAtRef = useRef<number | null>(null)
+  const refreshingOnResumeRef = useRef(false)
+  const seekRangeRef = useRef<MediaSeekRange | null>(null)
 
   // Stable ref so fail() can call the latest onReconnect without being a dep.
   const onReconnectRef = useRef(onReconnect)
@@ -148,8 +208,116 @@ export function useMediaPlayer({
     onReconnectRef.current = onReconnect
   }, [onReconnect])
 
+  const onDvrGapRef = useRef(onDvrGap)
+  useEffect(() => {
+    onDvrGapRef.current = onDvrGap
+  }, [onDvrGap])
+
   // Mutable ref-backed stream so onReconnect can swap it without restarting the effect.
   const pendingStreamRef = useRef<StreamInfo | null>(null)
+
+  /**
+   * Reads the DVR window from Shaka when available, and falls back to the
+   * media element's seekable range (hls.js and native HLS both populate it).
+   */
+  const getLiveSeekRange = useCallback((): MediaSeekRange | null => {
+    const player = shakaRef.current
+    if (player) {
+      try {
+        const range = player.seekRange()
+        if (
+          range &&
+          Number.isFinite(range.start) &&
+          Number.isFinite(range.end) &&
+          range.end > range.start
+        ) {
+          return { start: Math.max(0, range.start), end: range.end }
+        }
+      } catch {
+        // The player can be between unload and destroy during a channel zap.
+      }
+    }
+
+    const video = videoRef.current
+    if (!video) return null
+    const seekable = video.seekable
+    if (seekable && seekable.length > 0) {
+      const start = seekable.start(0)
+      const end = seekable.end(seekable.length - 1)
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+        return { start: Math.max(0, start), end }
+      }
+    }
+    return null
+  }, [])
+
+  const syncSeekRange = useCallback(() => {
+    const next = getLiveSeekRange()
+    const previous = seekRangeRef.current
+    if (!next) {
+      if (previous) {
+        seekRangeRef.current = null
+        setSeekRange(null)
+      }
+      return
+    }
+    if (
+      !previous ||
+      Math.abs(previous.start - next.start) > 0.25 ||
+      Math.abs(previous.end - next.end) > 0.25
+    ) {
+      seekRangeRef.current = next
+      setSeekRange(next)
+    }
+  }, [getLiveSeekRange])
+
+  /** Snap to the live edge, staying 0.5 s behind the absolute edge. */
+  const goLive = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    let edge = 0
+    const player = shakaRef.current
+    if (player) {
+      try {
+        edge = player.seekRange().end
+      } catch {
+        // Fall through to the generic seekable range.
+      }
+    }
+    if (!edge) {
+      edge = getLiveSeekRange()?.end ?? 0
+    }
+    if (!edge || !Number.isFinite(edge)) return
+
+    try {
+      video.currentTime = Math.max(0, edge - 0.5)
+    } catch {
+      return
+    }
+    void video.play().catch(() => undefined)
+    syncSeekRange()
+  }, [getLiveSeekRange, syncSeekRange])
+
+  /** Seek inside the DVR window; never allow a jump past the live edge. */
+  const seekTo = useCallback(
+    (time: number) => {
+      const video = videoRef.current
+      if (!video || !Number.isFinite(time)) return
+      const range = getLiveSeekRange()
+      let target = time
+      if (range) {
+        target = Math.min(Math.max(time, range.start), Math.max(range.start, range.end - 0.25))
+      }
+      try {
+        video.currentTime = Math.max(0, target)
+      } catch {
+        // The media element may not have metadata yet.
+      }
+      syncSeekRange()
+    },
+    [getLiveSeekRange, syncSeekRange]
+  )
 
   const fail = useCallback(
     (message: string, retryable = true) => {
@@ -228,6 +396,9 @@ export function useMediaPlayer({
     setReconnecting(false)
     setReady(false)
     setLevels([])
+    setSeekRange(null)
+    seekRangeRef.current = null
+    pausedAtRef.current = null
     levelsRef.current = []
     desiredRef.current = initialQuality
     // Only run on the channel identity, not on quality changes or token regenerations.
@@ -257,10 +428,111 @@ export function useMediaPlayer({
       bufferingTimer.current = setTimeout(() => setBuffering(true), 400)
     }
 
+    /**
+     * Failsafe for long pauses: Jio tokens can expire while the video element
+     * is paused. Reload the freshly signed relay URL, then seek back to the
+     * exact position the viewer paused at.
+     */
+    const reloadAfterLongPause = async (fresh: StreamInfo, resumeAt: number): Promise<void> => {
+      if (disposed) return
+      console.log(`[useMediaPlayer] Reloading fresh stream at ${resumeAt.toFixed(2)}s after long pause`)
+
+      const player = shakaRef.current
+      if (player) {
+        const licenseUrl =
+          fresh.drm?.licenseUrl || (fresh.url ? new URL('/license', fresh.url).href : '')
+        player.configure({
+          drm: { servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {} },
+          manifest: { dash: { ignoreMinBufferTime: true, autoCorrectDrift: true } },
+          streaming: {
+            useNativeHlsForFairPlay: false,
+            lowLatencyMode: false,
+            inaccurateManifestTolerance: 0,
+            rebufferingGoal: 2,
+            bufferingGoal: 10
+          }
+        })
+        await player.load(fresh.url, resumeAt, 'application/dash+xml')
+        if (disposed) return
+        syncSeekRange()
+        setReady(true)
+        clearBuffering()
+        void video.play().catch((err: unknown) => {
+          console.warn('[useMediaPlayer] play() after pause-reload rejected:', err)
+        })
+        return
+      }
+
+      const hls = hlsRef.current
+      if (hls) {
+        hls.once(HlsEvents.MANIFEST_PARSED, () => {
+          if (disposed) return
+          try {
+            video.currentTime = resumeAt
+          } catch {
+            // The new playlist may no longer contain the old position.
+          }
+          void video.play().catch(() => undefined)
+        })
+        hls.loadSource(fresh.url)
+        hls.startLoad()
+        return
+      }
+
+      // Native HLS.
+      const onMetadata = (): void => {
+        if (disposed) return
+        try {
+          video.currentTime = resumeAt
+        } catch {
+          // Ignore invalid positions on a refreshed playlist.
+        }
+        void video.play().catch(() => undefined)
+      }
+      video.addEventListener('loadedmetadata', onMetadata, { once: true })
+      video.src = fresh.url
+      video.load()
+    }
+
     const onPlaying = () => {
       console.log('[useMediaPlayer] Video event: playing')
       clearBuffering()
       setReady(true)
+    }
+
+    const onPlay = () => {
+      const pausedAt = pausedAtRef.current
+      pausedAtRef.current = null
+      if (!pausedAt || refreshingOnResumeRef.current || disposed) return
+
+      const pausedFor = Date.now() - pausedAt
+      // Below a minute the relay/buffer handles resume transparently; beyond
+      // that, proactively re-resolve the signed URL.
+      if (pausedFor < 60_000) return
+
+      const reconnect = onReconnectRef.current
+      if (!reconnect) return
+
+      const resumeAt = video.currentTime
+      refreshingOnResumeRef.current = true
+      setReconnecting(true)
+      console.log(
+        `[useMediaPlayer] Resumed after ${Math.round(pausedFor / 1000)}s paused; refreshing signed stream`
+      )
+      void reconnect()
+        .then((fresh) => {
+          if (disposed || !fresh) return
+          return reloadAfterLongPause(fresh, resumeAt)
+        })
+        .catch((error: unknown) => {
+          console.warn('[useMediaPlayer] Post-pause stream refresh failed:', error)
+          // The old stream may still be playable thanks to the relay refresh.
+          void video.play().catch(() => undefined)
+        })
+        .finally(() => {
+          refreshingOnResumeRef.current = false
+          if (!disposed) setReconnecting(false)
+        })
     }
     const onWaiting = () => {
       console.log('[useMediaPlayer] Video event: waiting')
@@ -282,6 +554,7 @@ export function useMediaPlayer({
     }
     const onPause = () => {
       console.log('[useMediaPlayer] Video event: pause')
+      pausedAtRef.current = Date.now()
       clearBuffering()
     }
     const onNativeError = () => {
@@ -291,12 +564,22 @@ export function useMediaPlayer({
     }
 
     video.addEventListener('playing', onPlaying)
+    video.addEventListener('play', onPlay)
     video.addEventListener('waiting', onWaiting)
     video.addEventListener('stalled', onStalled)
     video.addEventListener('canplay', onCanPlay)
     video.addEventListener('loadeddata', onLoadedData)
+    video.addEventListener('loadedmetadata', syncSeekRange)
+    video.addEventListener('durationchange', syncSeekRange)
+    video.addEventListener('progress', syncSeekRange)
+    video.addEventListener('seeked', syncSeekRange)
     video.addEventListener('pause', onPause)
     video.addEventListener('error', onNativeError)
+
+    // Shaka updates `seekRange()` as new live segments arrive; poll while the
+    // timer runs so the DVR bar keeps up even without media events.
+    const seekRangeTimer = window.setInterval(syncSeekRange, 1000)
+    syncSeekRange()
 
     const applyInitialHeight = (available: EngineLevel[], select: (index: number | 'auto') => void) => {
       const desired = desiredRef.current
@@ -328,7 +611,9 @@ export function useMediaPlayer({
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 30,
+          // Keep a longer back buffer so pausing then rewinding does not have
+          // to immediately re-fetch everything from the CDN.
+          backBufferLength: 90,
           maxBufferLength: 30,
           capLevelToPlayerSize: false,
           startLevel: -1,
@@ -355,6 +640,7 @@ export function useMediaPlayer({
           levelsRef.current = mapped
           setLevels(mapped)
           setReady(true)
+          syncSeekRange()
 
           const desired = desiredRef.current
           if (desired === 'auto' || typeof desired === 'number') {
@@ -391,6 +677,18 @@ export function useMediaPlayer({
           )
           if (disposed || !data.fatal) return
           if (data.type === ErrorTypes.NETWORK_ERROR) {
+            // A vanished fragment that is behind the live edge means the
+            // broadcaster's time-shift window rolled over. Jump forward
+            // instead of retrying a segment that no longer exists.
+            const httpStatus = data.response?.code ?? 0
+            const range = getLiveSeekRange()
+            const behind = range ? range.end - media.currentTime : 0
+            if ((httpStatus === 404 || httpStatus === 410) && behind > 3) {
+              console.warn('[useMediaPlayer] DVR segment expired; jumping to live')
+              onDvrGapRef.current?.()
+              goLive()
+              return
+            }
             if (localAttempts < 1) {
               localAttempts += 1
               console.log('[useMediaPlayer] Fatal network error: attempting hls.startLoad()')
@@ -472,7 +770,35 @@ export function useMediaPlayer({
               }
             }
           })
+
+          // Response filter: count 403s on segments to detect expired HDNEA tokens.
+          // After MAX_403_FAILURES consecutive failures, throw a Shaka error so
+          // the error handler can surface a meaningful message and trigger reconnect.
+          // Mirrors jiotv_go's player_drm.html response filter.
+          let segmentFail403Count = 0
+          const MAX_403_FAILURES = 2
+          networking.registerResponseFilter((type: unknown, response: { status: number }) => {
+            if (type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
+              if (response.status === 403) {
+                segmentFail403Count++
+                console.warn('[useMediaPlayer] Segment 403 error, count:', segmentFail403Count)
+                if (segmentFail403Count > MAX_403_FAILURES) {
+                  throw new shaka.util.Error(
+                    shaka.util.Error.Severity.CRITICAL,
+                    shaka.util.Error.Category.NETWORK,
+                    shaka.util.Error.Code.HTTP_ERROR,
+                    'Too many 403 errors on segments — token may have expired'
+                  )
+                }
+              }
+            }
+          })
+
+          // Reset 403 counter on successful playback
+          video.addEventListener('playing', () => { segmentFail403Count = 0 }, { once: false })
         }
+
+
 
         player.addEventListener('error', (event: unknown) => {
           if (disposed) return
@@ -480,9 +806,27 @@ export function useMediaPlayer({
           // the main process console-message mirror.
           const rawErr = (event as { detail?: unknown }).detail ?? event
           console.warn('[useMediaPlayer] Shaka error event (raw):', JSON.stringify(rawErr))
-          const { message, isFatalNetworkOrDrm } = formatShakaError(event)
+          const formatted = formatShakaError(event)
+
+          // Rewinding past timeShiftBufferDepth makes the CDN answer 404/410
+          // for a segment Shaka still expected. Jump to live instead of
+          // surfacing a fatal playback error.
+          if (formatted.isNetwork) {
+            const range = getLiveSeekRange()
+            const behind = range ? range.end - video.currentTime : 0
+            if (
+              (formatted.httpStatus === 404 || formatted.httpStatus === 410) &&
+              behind > 3
+            ) {
+              console.warn('[useMediaPlayer] Shaka DVR segment no longer available; jumping to live')
+              onDvrGapRef.current?.()
+              goLive()
+              return
+            }
+          }
+
           // If Shaka Player throws a NETWORK (1) or DRM (6) error, do not automatically retry
-          fail(message, !isFatalNetworkOrDrm)
+          fail(formatted.message, !formatted.isFatalNetworkOrDrm)
         })
 
         player.addEventListener('buffering', (event: unknown) => {
@@ -561,20 +905,48 @@ export function useMediaPlayer({
 
         player.configure({
           drm: drmConfig,
-          manifest: { dash: { ignoreMinBufferTime: true } },
+          manifest: {
+            dash: {
+              // Shaka advertises and honours the MPD's timeShiftBufferDepth
+              // window, which is what makes DVR scrubbing possible.
+              ignoreMinBufferTime: true,
+              autoCorrectDrift: true,
+              // JioTV live MPDs have no UTCTiming element; point Shaka at the
+              // relay's server clock so live-edge is computed from server time
+              // instead of the client clock. A skewed client clock makes Shaka
+              // fetch far more segments than needed while hunting for live edge.
+              // Mirrors jiotv_go's clockSyncUri: "/dashtime".
+              clockSyncUri: (() => { try { const u = new URL(activeStream.url); return `${u.protocol}//${u.host}/dashtime` } catch { return '' } })()
+            }
+          },
           abr: {
             enabled: true,
             defaultBandwidthEstimate: 5_000_000,
             restrictions: { maxHeight: 1080 }
           },
           streaming: {
-            bufferingGoal: 10,
+            useNativeHlsForFairPlay: false,
+            lowLatencyMode: false,
+            // Precise DVR seeking: don't tolerate manifest timing drift.
+            inaccurateManifestTolerance: 0,
+            // JioTV premium streams use very short segments, so a large
+            // buffering goal multiplies segment requests needed before playback
+            // starts. Keep DRM buffer lean; HLS fallback uses original values.
+            // Mirrors jiotv_go: bufferBehind: isDRM ? 2 : 5
+            bufferBehind: activeStream.isDrm ? 2 : 5,
+            bufferingGoal: activeStream.isDrm ? 6 : 30,
             rebufferingGoal: 2,
+            // Leave a half-second guard at the absolute live edge.
+            safeSeekEndOffset: 0.5,
+            // Cap retries: each failed segment would otherwise multiply into
+            // several requests with long backoff — turns a few expired HDNEA
+            // tokens into hundreds of slow segment requests.
+            // Mirrors jiotv_go: maxAttempts: 2, backoffFactor: 2, timeout: 30000
             retryParameters: {
-              maxAttempts: 3,
+              maxAttempts: 2,
               baseDelay: 500,
               backoffFactor: 2,
-              timeout: 20_000
+              timeout: 30_000
             }
           }
         })
@@ -587,6 +959,7 @@ export function useMediaPlayer({
         console.log('[useMediaPlayer] Shaka stream loaded successfully')
         setReady(true)
         clearBuffering()
+        syncSeekRange()
 
         // Populate quality selector using player.getVariantTracks()
         const tracks = player.getVariantTracks()
@@ -659,12 +1032,20 @@ export function useMediaPlayer({
       setEngine(null)
       setBuffering(false)
       setReady(false)
+      setSeekRange(null)
+      seekRangeRef.current = null
       return () => {
+        window.clearInterval(seekRangeTimer)
         video.removeEventListener('playing', onPlaying)
+        video.removeEventListener('play', onPlay)
         video.removeEventListener('waiting', onWaiting)
         video.removeEventListener('stalled', onStalled)
         video.removeEventListener('canplay', onCanPlay)
         video.removeEventListener('loadeddata', onLoadedData)
+        video.removeEventListener('loadedmetadata', syncSeekRange)
+        video.removeEventListener('durationchange', syncSeekRange)
+        video.removeEventListener('progress', syncSeekRange)
+        video.removeEventListener('seeked', syncSeekRange)
         video.removeEventListener('pause', onPause)
         video.removeEventListener('error', onNativeError)
       }
@@ -681,12 +1062,18 @@ export function useMediaPlayer({
     return () => {
       disposed = true
       clearBuffering()
+      window.clearInterval(seekRangeTimer)
       if (retryTimer.current) clearTimeout(retryTimer.current)
       video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('play', onPlay)
       video.removeEventListener('waiting', onWaiting)
       video.removeEventListener('stalled', onStalled)
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('loadeddata', onLoadedData)
+      video.removeEventListener('loadedmetadata', syncSeekRange)
+      video.removeEventListener('durationchange', syncSeekRange)
+      video.removeEventListener('progress', syncSeekRange)
+      video.removeEventListener('seeked', syncSeekRange)
       video.removeEventListener('pause', onPause)
       video.removeEventListener('error', onNativeError)
       hlsRef.current?.destroy()
@@ -756,7 +1143,10 @@ export function useMediaPlayer({
     error,
     retry,
     ready,
-    engine
+    engine,
+    seekRange,
+    goLive,
+    seekTo
   }
 }
 

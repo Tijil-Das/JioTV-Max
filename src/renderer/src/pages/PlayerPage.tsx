@@ -135,13 +135,13 @@ export function PlayerPage(): JSX.Element {
   // signed URL (new hdnea token) instead of the stale relay session.
   const resolveStream = useCallback(async (): Promise<StreamInfo | null> => {
     if (!channel) return null
-    console.log('[PlayerPage] Reconnecting: resolving fresh stream for', channel.id)
+    // console.log('[PlayerPage] Reconnecting: resolving fresh stream for', channel.id)
     try {
       const res = await channelService.getStream(channel, mode, quality)
-      console.log('[PlayerPage] Fresh stream resolved successfully:', res)
+      // console.log('[PlayerPage] Fresh stream resolved successfully:', res)
       return res
     } catch (err) {
-      console.error('[PlayerPage] Fresh stream resolution failed:', err)
+      // console.error('[PlayerPage] Fresh stream resolution failed:', err)
       return null
     }
   }, [channel, mode, quality])
@@ -196,7 +196,7 @@ export function PlayerPage(): JSX.Element {
         : null
     if (handoff) {
       handoffConsumedRef.current = true
-      console.log(`[PlayerPage] Using hero handoff stream for ${channel.id}`)
+      // console.log(`[PlayerPage] Using hero handoff stream for ${channel.id}`)
       setStream(handoff)
       setStreamLoading(false)
       recordRecent(channel.id, 0)
@@ -206,19 +206,19 @@ export function PlayerPage(): JSX.Element {
     }
 
     setStreamLoading(true)
-    console.log(`[PlayerPage] Fetching stream for ${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
+    // console.log(`[PlayerPage] Fetching stream for ${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
     channelService
       .getStream(channel, mode, quality)
       .then((result) => {
         if (cancelled) return
-        console.log(`[PlayerPage] Successfully resolved stream for ${channel.id}:`, result)
+        // console.log(`[PlayerPage] Successfully resolved stream for ${channel.id}:`, result)
         setStream(result)
         setStreamLoading(false)
         recordRecent(channel.id, 0)
       })
       .catch((cause: unknown) => {
         if (cancelled) return
-        console.error(`[PlayerPage] Failed to resolve stream for ${channel.id}:`, cause)
+        // console.error(`[PlayerPage] Failed to resolve stream for ${channel.id}:`, cause)
         setStreamLoading(false)
         checkAndHandleAuthError(cause)
         const error = cause instanceof ApiError ? cause : null
@@ -295,7 +295,7 @@ export function PlayerPage(): JSX.Element {
     if (!media) return
     if (isPlaying) {
       void media.play().catch((err: unknown) => {
-        console.warn('[PlayerPage] media.play() was prevented/blocked:', err)
+        // console.warn('[PlayerPage] media.play() was prevented/blocked:', err)
         setPlaying(false)
       })
     } else {

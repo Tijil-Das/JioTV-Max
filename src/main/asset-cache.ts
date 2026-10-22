@@ -110,7 +110,7 @@ async function writeCache(
       )
     ])
   } catch (error) {
-    console.warn('[asset:fetch] cache write failed', error)
+    // console.warn('[asset:fetch] cache write failed', error)
   }
 }
 

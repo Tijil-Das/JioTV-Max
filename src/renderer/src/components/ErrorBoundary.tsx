@@ -17,7 +17,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // Console only — no remote reporting, no tokens in logs.
-    console.error('StreamDeck renderer error:', error.message, info.componentStack)
+    // console.error('StreamDeck renderer error:', error.message, info.componentStack)
   }
 
   render(): ReactNode {

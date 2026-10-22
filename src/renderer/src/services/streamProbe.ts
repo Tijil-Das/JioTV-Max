@@ -67,7 +67,7 @@ async function stage1(url: string): Promise<boolean> {
   const bridge = getBridge()
   if (bridge) {
     const result = await bridge.streams.probeStage1(url)
-    if (!result.ok) console.warn('[streamProbe] stage 1 failed', result.reason)
+    // if (!result.ok) console.warn('[streamProbe] stage 1 failed', result.reason)
     return result.ok
   }
   // Browser-preview fallback: the real check lives in the main process.
@@ -233,7 +233,7 @@ async function resolveStream(channelId: string): Promise<StreamInfo | null> {
     lastStreams.set(channelId, { stream, at: Date.now() })
     return stream
   } catch (error) {
-    console.warn(`[streamProbe] resolve failed for ${channelId}`, error)
+    // console.warn(`[streamProbe] resolve failed for ${channelId}`, error)
     return null
   }
 }

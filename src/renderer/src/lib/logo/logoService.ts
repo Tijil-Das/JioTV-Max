@@ -108,7 +108,7 @@ function openDatabase(): Promise<IDBDatabase | null> {
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => {
-      console.warn('[logo] IndexedDB unavailable', request.error)
+      // console.warn('[logo] IndexedDB unavailable', request.error)
       resolve(null)
     }
   })
@@ -236,7 +236,7 @@ class LogoWorkerQueue {
       this.pump()
     }
     this.worker.onerror = (event) => {
-      console.warn('[logo] worker error', event.message)
+      // console.warn('[logo] worker error', event.message)
     }
     return this.worker
   }
@@ -302,7 +302,7 @@ async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; mimeType: 
   if (bridge) {
     const result = await bridge.assets.fetch(url)
     if (!result.ok) {
-      console.warn('[logo] asset fetch failed', url, result.error)
+      // console.warn('[logo] asset fetch failed', url, result.error)
       return null
     }
     const raw = result.data.bytes
@@ -327,7 +327,7 @@ async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; mimeType: 
     } else if (raw && Array.isArray((raw as { data?: unknown }).data)) {
       arrayBuffer = new Uint8Array((raw as { data: number[] }).data).buffer
     } else {
-      console.warn('[logo] unrecognized bytes payload type', raw)
+      // console.warn('[logo] unrecognized bytes payload type', raw)
       return null
     }
     return {

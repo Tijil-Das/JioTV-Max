@@ -53,7 +53,7 @@ const rendererTokenStore = new SecureStore('renderer-token.bin')
 let jio: JioService
 
 // Diagnostic: print which electron binary is running so we know if castLabs is active.
-console.log(`[Electron] execPath: ${process.execPath}`)
+// console.log(`[Electron] execPath: ${process.execPath}`)
 
 // castLabs Electron provides a 'components' module for Widevine CDM management.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,7 +73,7 @@ function ensureWidevineCdmInUserData(userDataDir: string): void {
         existsSync(pathJoin(targetBase, d, '_platform_specific', 'win_x64', 'widevinecdm.dll'))
       )
       if (existing.length > 0) {
-        console.log(`[CDM] Widevine CDM already present in userData (${existing[0]})`)
+        // console.log(`[CDM] Widevine CDM already present in userData (${existing[0]})`)
         return
       }
     }
@@ -114,13 +114,13 @@ function ensureWidevineCdmInUserData(userDataDir: string): void {
             }
           }
           const dest = pathJoin(targetBase, cdmVersion)
-          console.log(`[CDM] Copying Widevine CDM v${cdmVersion} to: ${dest}`)
+          // console.log(`[CDM] Copying Widevine CDM v${cdmVersion} to: ${dest}`)
           cpSync(cdmSource, dest, { recursive: true })
           return
         }
       }
     } catch (err) {
-      console.warn(`[CDM] Error checking ${root}:`, err)
+      // console.warn(`[CDM] Error checking ${root}:`, err)
     }
   }
 }
@@ -130,7 +130,7 @@ function ensureWidevineCdmInUserData(userDataDir: string): void {
 // ---------------------------------------------------------------------------
 function tryLoadWidevineCdm(): void {
   if (process.platform !== 'win32') {
-    console.log('[CDM] Non-Windows platform — skipping Chrome CDM loader.')
+    // console.log('[CDM] Non-Windows platform — skipping Chrome CDM loader.')
     return
   }
 
@@ -182,26 +182,26 @@ function tryLoadWidevineCdm(): void {
               /* fallback */
             }
           }
-          console.log(`[CDM] Found Widevine CDM v${cdmVersion} (Chrome ${version}) at: ${cdmPath}`)
+          // console.log(`[CDM] Found Widevine CDM v${cdmVersion} (Chrome ${version}) at: ${cdmPath}`)
           app.commandLine.appendSwitch('widevine-cdm-path', cdmPath)
           app.commandLine.appendSwitch('widevine-cdm-version', cdmVersion)
           return
         }
       }
     } catch (err) {
-      console.warn(`[CDM] Error scanning ${root}:`, err)
+      // console.warn(`[CDM] Error scanning ${root}:`, err)
     }
   }
 
-  console.warn(
-    '[CDM] Widevine CDM not found in Chrome or Edge. ' +
-    'DRM channels will show Error 6001. ' +
-    'Install Google Chrome or switch to @castlabs/electron-releases.'
-  )
+  // console.warn(
+    // '[CDM] Widevine CDM not found in Chrome or Edge. ' +
+    // 'DRM channels will show Error 6001. ' +
+    // 'Install Google Chrome or switch to @castlabs/electron-releases.'
+  // )
 }
 
 if (hasCastLabsComponents) {
-  console.log('[CDM] castLabs Electron detected (components API available).')
+  // console.log('[CDM] castLabs Electron detected (components API available).')
   ensureWidevineCdmInUserData(app.getPath('userData'))
 } else {
   tryLoadWidevineCdm()
@@ -321,7 +321,7 @@ async function createWindow(): Promise<void> {
     const source = sourceId ? sourceId.split('/').pop() : 'renderer'
     const prefix = level === 3 ? '[renderer:error]' : level === 2 ? '[renderer:warn]' : '[renderer]'
     if (/shaka|drm|widevine|eme|license|mediaplayer|6001|6007|1001|1002|cdm|probe/i.test(message)) {
-      console.log(`${prefix} (${source}:${line}) ${message}`)
+      // console.log(`${prefix} (${source}:${line}) ${message}`)
     }
   })
 
@@ -393,7 +393,7 @@ async function createWindow(): Promise<void> {
   }
 
   if (process.env.STREAMDECK_CAPTURE) {
-    console.log('[capture] harness enabled')
+    // console.log('[capture] harness enabled')
     void runCaptureHarness(mainWindow)
   }
 
@@ -420,7 +420,7 @@ async function runCaptureHarness(window: BrowserWindow): Promise<void> {
   const logFile = path.join(outDir, 'streamdeck-capture.log')
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const log = (message: string) => {
-    console.log(message)
+    // console.log(message)
     void fs.appendFile(logFile, `${new Date().toISOString()} ${message}\n`).catch(() => undefined)
   }
 
@@ -614,11 +614,11 @@ app.whenReady().then(async () => {
 
   if (hasCastLabsComponents) {
     try {
-      console.log('[CDM] Waiting for castLabs components.whenReady()...')
+      // console.log('[CDM] Waiting for castLabs components.whenReady()...')
       await electronAny.components.whenReady()
-      console.log('[CDM] castLabs components ready! Status:', JSON.stringify(electronAny.components.status()))
+      // console.log('[CDM] castLabs components ready! Status:', JSON.stringify(electronAny.components.status()))
     } catch (err) {
-      console.warn('[CDM] castLabs components.whenReady warning:', err)
+      // console.warn('[CDM] castLabs components.whenReady warning:', err)
     }
   }
 
@@ -641,7 +641,7 @@ app.whenReady().then(async () => {
   await relay.start()
   jio = new JioService(relay)
   jio.setSessionExpiredHandler((reason) => {
-    console.warn('[Main] Emitting authExpired to renderer:', reason)
+    // console.warn('[Main] Emitting authExpired to renderer:', reason)
     mainWindow?.webContents.send(IPC.authExpired, { reason })
   })
   await jio.init()

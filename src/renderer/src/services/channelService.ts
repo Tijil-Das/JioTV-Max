@@ -40,14 +40,14 @@ export const channelService = {
     mode: AuthMode,
     quality: 'auto' | number
   ): Promise<StreamInfo> {
-    console.log(`[channelService] getStream channel=${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
+    // console.log(`[channelService] getStream channel=${channel.id} (${channel.name}), mode=${mode}, quality=${quality}`)
     if (mode === 'demo') {
       await delay(320)
       if (!channel.streamUrl) {
-        console.warn(`[channelService] demo channel ${channel.id} has no streamUrl`)
+        // console.warn(`[channelService] demo channel ${channel.id} has no streamUrl`)
         throw new ApiError('This demo channel has no stream attached.', 'NO_STREAM')
       }
-      console.log(`[channelService] demo stream URL:`, channel.streamUrl)
+      // console.log(`[channelService] demo stream URL:`, channel.streamUrl)
       return {
         channelId: channel.id,
         url: channel.streamUrl,
@@ -60,18 +60,18 @@ export const channelService = {
     }
     const bridge = getBridge()
     if (!bridge) {
-      console.error('[channelService] No bridge available (running in web browser?)')
+      // console.error('[channelService] No bridge available (running in web browser?)')
       throw new ApiError('Playback is available in the desktop app only.', 'NO_BRIDGE')
     }
     const result = await bridge.channels.getStream(channel.id, qualityToJio(quality))
     if (!result.ok) {
-      console.error(`[channelService] bridge.channels.getStream error:`, result.error, result.code)
+      // console.error(`[channelService] bridge.channels.getStream error:`, result.error, result.code)
       if (result.code !== 'NOT_ENTITLED') {
         checkAndHandleAuthError(result)
       }
       throw new ApiError(result.error, result.code, result.retryable)
     }
-    console.log(`[channelService] bridge.channels.getStream success:`, result.data)
+    // console.log(`[channelService] bridge.channels.getStream success:`, result.data)
     return result.data
   },
 

@@ -415,14 +415,14 @@ export function useMediaPlayer({
     }
     if (manualAttemptsRef.current >= 3) {
       const msg = 'Maximum retry attempts reached (3/3). Could not load this channel.'
-      console.warn('[useMediaPlayer]', msg)
+      // console.warn('[useMediaPlayer]', msg)
       setError(msg)
       setReconnecting(false)
       onError?.(msg)
       return
     }
     manualAttemptsRef.current += 1
-    console.log(`[useMediaPlayer] Manual retry attempt ${manualAttemptsRef.current}/3`)
+    // console.log(`[useMediaPlayer] Manual retry attempt ${manualAttemptsRef.current}/3`)
     autoAttemptsRef.current = 0
     attemptRef.current += 1
     setError(null)
@@ -491,7 +491,7 @@ export function useMediaPlayer({
      */
     const reloadAfterLongPause = async (fresh: StreamInfo, resumeAt: number): Promise<void> => {
       if (disposed) return
-      console.log(`[useMediaPlayer] Reloading fresh stream at ${resumeAt.toFixed(2)}s after long pause`)
+      // console.log(`[useMediaPlayer] Reloading fresh stream at ${resumeAt.toFixed(2)}s after long pause`)
 
       const player = shakaRef.current
       if (player) {
@@ -519,7 +519,7 @@ export function useMediaPlayer({
         setReady(true)
         clearBuffering()
         void video.play().catch((err: unknown) => {
-          console.warn('[useMediaPlayer] play() after pause-reload rejected:', err)
+          // console.warn('[useMediaPlayer] play() after pause-reload rejected:', err)
         })
         return
       }
@@ -559,7 +559,7 @@ export function useMediaPlayer({
     let lastStallAt = 0
 
     const onPlaying = () => {
-      console.log('[useMediaPlayer] Video event: playing')
+      // console.log('[useMediaPlayer] Video event: playing')
       clearBuffering()
       setReady(true)
       if (desiredRef.current === 'auto' && stallCountInAuto >= 2 && shakaRef.current) {
@@ -570,7 +570,7 @@ export function useMediaPlayer({
             const currentTracks = p.getVariantTracks()
             const best = pickBestVariantTrack(currentTracks)
             if (best) {
-              console.log('[useMediaPlayer] Auto mode: network stabilized, restoring to highest resolution (1080p)')
+              // console.log('[useMediaPlayer] Auto mode: network stabilized, restoring to highest resolution (1080p)')
               p.selectVariantTrack(best, false)
               if (best.height) setActiveHeight(best.height)
               stallCountInAuto = 0
@@ -596,16 +596,16 @@ export function useMediaPlayer({
       const resumeAt = video.currentTime
       refreshingOnResumeRef.current = true
       setReconnecting(true)
-      console.log(
-        `[useMediaPlayer] Resumed after ${Math.round(pausedFor / 1000)}s paused; refreshing signed stream`
-      )
+      // console.log(
+        // `[useMediaPlayer] Resumed after ${Math.round(pausedFor / 1000)}s paused; refreshing signed stream`
+      // )
       void reconnect()
         .then((fresh) => {
           if (disposed || !fresh) return
           return reloadAfterLongPause(fresh, resumeAt)
         })
         .catch((error: unknown) => {
-          console.warn('[useMediaPlayer] Post-pause stream refresh failed:', error)
+          // console.warn('[useMediaPlayer] Post-pause stream refresh failed:', error)
           // The old stream may still be playable thanks to the relay refresh.
           void video.play().catch(() => undefined)
         })
@@ -615,7 +615,7 @@ export function useMediaPlayer({
         })
     }
     const onWaiting = () => {
-      console.log('[useMediaPlayer] Video event: waiting')
+      // console.log('[useMediaPlayer] Video event: waiting')
       showBufferingSoon()
       if (desiredRef.current === 'auto' && shakaRef.current) {
         const now = performance.now()
@@ -633,7 +633,7 @@ export function useMediaPlayer({
           const active = currentTracks.find((t: { active?: boolean }) => t.active)
           const currentHeight = active?.height || 1080
           if (currentHeight > 720) {
-            console.warn('[useMediaPlayer] Auto mode: repeated stalls detected, stepping down to 720p without degrading audio')
+            // console.warn('[useMediaPlayer] Auto mode: repeated stalls detected, stepping down to 720p without degrading audio')
             const fallback = pickBestVariantTrack(currentTracks, 720)
             if (fallback) {
               p.selectVariantTrack(fallback, false)
@@ -644,26 +644,26 @@ export function useMediaPlayer({
       }
     }
     const onStalled = () => {
-      console.log('[useMediaPlayer] Video event: stalled')
+      // console.log('[useMediaPlayer] Video event: stalled')
       showBufferingSoon()
     }
     const onCanPlay = () => {
-      console.log('[useMediaPlayer] Video event: canplay')
+      // console.log('[useMediaPlayer] Video event: canplay')
       clearBuffering()
       setReady(true)
     }
     const onLoadedData = () => {
-      console.log('[useMediaPlayer] Video event: loadeddata')
+      // console.log('[useMediaPlayer] Video event: loadeddata')
       clearBuffering()
       setReady(true)
     }
     const onPause = () => {
-      console.log('[useMediaPlayer] Video event: pause')
+      // console.log('[useMediaPlayer] Video event: pause')
       pausedAtRef.current = Date.now()
       clearBuffering()
     }
     const onNativeError = () => {
-      console.error('[useMediaPlayer] Video event: native error', video.error)
+      // console.error('[useMediaPlayer] Video event: native error', video.error)
       if (!stream) return
       fail('The video could not be decoded. Try another quality or channel.', false)
     }
@@ -734,37 +734,37 @@ export function useMediaPlayer({
           // If no video frame has been presented for more than 2 seconds
           if (timeSinceFrame > 2000) {
             freezeConsecutiveCount++
-            console.warn(
-              `[useMediaPlayer] Video graphics freeze detected: audio advanced ${timeAdvanced.toFixed(2)}s, but 0 video frames for ${(timeSinceFrame / 1000).toFixed(1)}s (tick ${freezeConsecutiveCount})`
-            )
+            // console.warn(
+              // `[useMediaPlayer] Video graphics freeze detected: audio advanced ${timeAdvanced.toFixed(2)}s, but 0 video frames for ${(timeSinceFrame / 1000).toFixed(1)}s (tick ${freezeConsecutiveCount})`
+            // )
 
             if (freezeConsecutiveCount === 1) {
               // Level 1: Micro-seek nudge to kick Chromium decoder out of the stalled decode state
               try {
                 video.currentTime = video.currentTime + 0.02
               } catch (e) {
-                console.warn('[useMediaPlayer] Micro-seek nudge failed:', e)
+                // console.warn('[useMediaPlayer] Micro-seek nudge failed:', e)
               }
             } else if (freezeConsecutiveCount === 2) {
               // Level 2: Engine-level recovery
               if (hlsRef.current) {
-                console.warn('[useMediaPlayer] Recovering HLS from video freeze via recoverMediaError()')
+                // console.warn('[useMediaPlayer] Recovering HLS from video freeze via recoverMediaError()')
                 try {
                   hlsRef.current.recoverMediaError()
                 } catch (e) {
-                  console.warn('[useMediaPlayer] hls.recoverMediaError failed:', e)
+                  // console.warn('[useMediaPlayer] hls.recoverMediaError failed:', e)
                 }
               } else if (shakaRef.current) {
-                console.warn('[useMediaPlayer] Recovering Shaka from video freeze via retryStreaming()')
+                // console.warn('[useMediaPlayer] Recovering Shaka from video freeze via retryStreaming()')
                 try {
                   void shakaRef.current.retryStreaming()
                 } catch (e) {
-                  console.warn('[useMediaPlayer] shaka.retryStreaming failed:', e)
+                  // console.warn('[useMediaPlayer] shaka.retryStreaming failed:', e)
                 }
               }
             } else if (freezeConsecutiveCount >= 3) {
               // Level 3: Jump forward to live edge
-              console.warn('[useMediaPlayer] Video freeze persisted; jumping to live edge')
+              // console.warn('[useMediaPlayer] Video freeze persisted; jumping to live edge')
               goLive()
               freezeConsecutiveCount = 0
             }
@@ -799,7 +799,7 @@ export function useMediaPlayer({
       const media = video
       if (!activeStream) return
       setEngine('hls')
-      console.log('[useMediaPlayer] setupHls for URL:', activeStream.url)
+      // console.log('[useMediaPlayer] setupHls for URL:', activeStream.url)
       if (Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
@@ -829,10 +829,10 @@ export function useMediaPlayer({
         let mediaRecoveryAttempts = 0
 
         hls.on(HlsEvents.MANIFEST_LOADING, () => {
-          console.log('[useMediaPlayer] HlsEvent: MANIFEST_LOADING')
+          // console.log('[useMediaPlayer] HlsEvent: MANIFEST_LOADING')
         })
         hls.on(HlsEvents.MANIFEST_LOADED, (_event, data) => {
-          console.log(`[useMediaPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
+          // console.log(`[useMediaPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
         })
         hls.on(HlsEvents.MANIFEST_PARSED, () => {
           if (disposed) return
@@ -842,7 +842,7 @@ export function useMediaPlayer({
             bitrate: level.bitrate ?? 0,
             label: level.height ? `${level.height}p` : level.name || `Level ${index + 1}`
           }))
-          console.log('[useMediaPlayer] HlsEvent: MANIFEST_PARSED - hls.levels:', mapped)
+          // console.log('[useMediaPlayer] HlsEvent: MANIFEST_PARSED - hls.levels:', mapped)
           levelsRef.current = mapped
           setLevels(mapped)
           setReady(true)
@@ -887,7 +887,7 @@ export function useMediaPlayer({
             }
           }
           void media.play().catch((err: unknown) => {
-            console.warn('[useMediaPlayer] Autoplay play() rejected in MANIFEST_PARSED:', err)
+            // console.warn('[useMediaPlayer] Autoplay play() rejected in MANIFEST_PARSED:', err)
             clearBuffering()
           })
         })
@@ -907,7 +907,7 @@ export function useMediaPlayer({
           if (eligibleIdxs.length > 0) {
             const minAllowedIdx = eligibleIdxs.reduce((min, curr) => (curr.idx < min.idx ? curr : min)).idx
             if (hls.autoLevelEnabled && data.level < minAllowedIdx) {
-              console.log(`[useMediaPlayer] Guarding HLS Auto quality: preventing drop below ${targetFloor}p (attempted ${data.level})`)
+              // console.log(`[useMediaPlayer] Guarding HLS Auto quality: preventing drop below ${targetFloor}p (attempted ${data.level})`)
               hls.nextLevel = minAllowedIdx
             }
           }
@@ -915,24 +915,24 @@ export function useMediaPlayer({
 
         hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
           if (disposed) return
-          console.log(`[useMediaPlayer] HlsEvent: LEVEL_SWITCHED to ${data.level}`)
+          // console.log(`[useMediaPlayer] HlsEvent: LEVEL_SWITCHED to ${data.level}`)
           setActiveLevel(hls.autoLevelEnabled ? 'auto' : data.level)
           const levelObj = hls.levels[data.level]
           if (levelObj?.height) setActiveHeight(levelObj.height)
         })
 
         hls.on(HlsEvents.ERROR, (_event, data) => {
-          console.warn(
-            '[useMediaPlayer] Hls error:',
-            data.type,
-            data.details,
-            'fatal:',
-            data.fatal,
-            data.response?.code,
-            data.response?.text
-          )
+          // console.warn(
+            // '[useMediaPlayer] Hls error:',
+            // data.type,
+            // data.details,
+            // 'fatal:',
+            // data.fatal,
+            // data.response?.code,
+            // data.response?.text
+          // )
           if (data.details === ErrorDetails.BUFFER_STALLED_ERROR) {
-            console.warn('[useMediaPlayer] Non-fatal buffer stalled error; nudging video...')
+            // console.warn('[useMediaPlayer] Non-fatal buffer stalled error; nudging video...')
             if (media && !media.paused) {
               media.currentTime += 0.05
             }
@@ -955,14 +955,14 @@ export function useMediaPlayer({
             const range = getLiveSeekRange()
             const behind = range ? range.end - media.currentTime : 0
             if ((httpStatus === 404 || httpStatus === 410) && behind > 3) {
-              console.warn('[useMediaPlayer] DVR segment expired; jumping to live')
+              // console.warn('[useMediaPlayer] DVR segment expired; jumping to live')
               onDvrGapRef.current?.()
               goLive()
               return
             }
             if (localAttempts < 1) {
               localAttempts += 1
-              console.log('[useMediaPlayer] Fatal network error: attempting hls.startLoad()')
+              // console.log('[useMediaPlayer] Fatal network error: attempting hls.startLoad()')
               showBufferingSoon()
               hls.startLoad()
               return
@@ -971,7 +971,7 @@ export function useMediaPlayer({
           } else if (data.type === ErrorTypes.MEDIA_ERROR) {
             if (mediaRecoveryAttempts < 3) {
               mediaRecoveryAttempts += 1
-              console.log(`[useMediaPlayer] Fatal media error: attempting hls.recoverMediaError() (attempt ${mediaRecoveryAttempts}/3)`)
+              // console.log(`[useMediaPlayer] Fatal media error: attempting hls.recoverMediaError() (attempt ${mediaRecoveryAttempts}/3)`)
               hls.recoverMediaError()
               return
             }
@@ -989,16 +989,16 @@ export function useMediaPlayer({
         hls.attachMedia(media)
         hls.loadSource(activeStream.url)
       } else if (media.canPlayType('application/vnd.apple.mpegurl')) {
-        console.log('[useMediaPlayer] Native HLS supported, loading:', activeStream.url)
+        // console.log('[useMediaPlayer] Native HLS supported, loading:', activeStream.url)
         setEngine('native')
         media.src = activeStream.url
         setReady(true)
         void media.play().catch((err: unknown) => {
-          console.warn('[useMediaPlayer] Native play() rejected:', err)
+          // console.warn('[useMediaPlayer] Native play() rejected:', err)
           clearBuffering()
         })
       } else {
-        console.error('[useMediaPlayer] HLS playback is not supported on this system')
+        // console.error('[useMediaPlayer] HLS playback is not supported on this system')
         fail('HLS playback is not supported on this system.', false)
       }
     }
@@ -1006,11 +1006,11 @@ export function useMediaPlayer({
     const setupShaka = async () => {
       if (!activeStream) return
       setEngine('shaka')
-      console.log('[useMediaPlayer] Setting up Shaka Player for URL:', activeStream.url)
+      // console.log('[useMediaPlayer] Setting up Shaka Player for URL:', activeStream.url)
 
       try {
         if (!shaka.Player.isBrowserSupported()) {
-          console.error('[useMediaPlayer] MPEG-DASH / DRM is not supported by browser/engine')
+          // console.error('[useMediaPlayer] MPEG-DASH / DRM is not supported by browser/engine')
           fail('This system does not support MPEG-DASH playback.', false)
           return
         }
@@ -1052,7 +1052,7 @@ export function useMediaPlayer({
             if (type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
               if (response.status === 403) {
                 segmentFail403Count++
-                console.warn('[useMediaPlayer] Segment 403 error, count:', segmentFail403Count)
+                // console.warn('[useMediaPlayer] Segment 403 error, count:', segmentFail403Count)
                 if (segmentFail403Count > MAX_403_FAILURES) {
                   throw new shaka.util.Error(
                     shaka.util.Error.Severity.CRITICAL,
@@ -1076,7 +1076,7 @@ export function useMediaPlayer({
           // Log full Shaka error structure so category/code are visible in both DevTools and
           // the main process console-message mirror.
           const rawErr = (event as { detail?: unknown }).detail ?? event
-          console.warn('[useMediaPlayer] Shaka error event (raw):', JSON.stringify(rawErr))
+          // console.warn('[useMediaPlayer] Shaka error event (raw):', JSON.stringify(rawErr))
           const formatted = formatShakaError(event)
 
           // Rewinding past timeShiftBufferDepth makes the CDN answer 404/410
@@ -1089,7 +1089,7 @@ export function useMediaPlayer({
               (formatted.httpStatus === 404 || formatted.httpStatus === 410) &&
               behind > 3
             ) {
-              console.warn('[useMediaPlayer] Shaka DVR segment no longer available; jumping to live')
+              // console.warn('[useMediaPlayer] Shaka DVR segment no longer available; jumping to live')
               onDvrGapRef.current?.()
               goLive()
               return
@@ -1123,7 +1123,7 @@ export function useMediaPlayer({
           if (disposed) return
           const tracks = player.getVariantTracks()
           const activeTrack = tracks.find((t: { active?: boolean }) => t.active)
-          console.log('[useMediaPlayer] Shaka adaptation switched track:', activeTrack?.height, activeTrack?.bandwidth)
+          // console.log('[useMediaPlayer] Shaka adaptation switched track:', activeTrack?.height, activeTrack?.bandwidth)
         })
 
         // Probe Widevine CDM — try robustness levels from strict → permissive.
@@ -1149,15 +1149,15 @@ export function useMediaPlayer({
               ])
               workingRobustness = robustness
               cdmAvailable = true
-              console.log(`[useMediaPlayer] Widevine CDM probe: AVAILABLE (robustness="${robustness}") ✓`)
+              // console.log(`[useMediaPlayer] Widevine CDM probe: AVAILABLE (robustness="${robustness}") ✓`)
               break
             } catch {
-              console.log(`[useMediaPlayer] Widevine CDM probe: robustness="${robustness}" rejected, trying next…`)
+              // console.log(`[useMediaPlayer] Widevine CDM probe: robustness="${robustness}" rejected, trying next…`)
             }
           }
 
           if (!cdmAvailable) {
-            console.error('[useMediaPlayer] Widevine CDM probe: ALL levels FAILED. CDM not loaded.')
+            // console.error('[useMediaPlayer] Widevine CDM probe: ALL levels FAILED. CDM not loaded.')
             fail(
               'Widevine CDM could not be initialised. ' +
                 'If Google Chrome is installed, restart the app — it loads Widevine from Chrome automatically. ' +
@@ -1238,24 +1238,24 @@ export function useMediaPlayer({
           const tracks = player.getVariantTracks()
           const active = tracks.find((t: { active?: boolean }) => t.active)
           if (active?.height) {
-            console.log(`[useMediaPlayer] Shaka ABR switched to ${active.height}p (video: ${active.videoBandwidth}, audio: ${active.audioBandwidth})`)
+            // console.log(`[useMediaPlayer] Shaka ABR switched to ${active.height}p (video: ${active.videoBandwidth}, audio: ${active.audioBandwidth})`)
             setActiveHeight(active.height)
           }
         })
 
-        console.log('[useMediaPlayer] Loading DASH stream:', activeStream.url)
+        // console.log('[useMediaPlayer] Loading DASH stream:', activeStream.url)
 
         await player.load(activeStream.url, null, 'application/dash+xml')
         if (disposed) return
 
-        console.log('[useMediaPlayer] Shaka stream loaded successfully')
+        // console.log('[useMediaPlayer] Shaka stream loaded successfully')
         setReady(true)
         clearBuffering()
         syncSeekRange()
 
         // Populate quality selector using player.getVariantTracks()
         const tracks = player.getVariantTracks()
-        console.log(`[useMediaPlayer] Shaka loaded with ${tracks.length} variant tracks`)
+        // console.log(`[useMediaPlayer] Shaka loaded with ${tracks.length} variant tracks`)
 
         const byHeight = new Map<number, EngineLevel>()
         for (const track of tracks) {
@@ -1306,16 +1306,16 @@ export function useMediaPlayer({
         })
 
         void video.play().catch((err: unknown) => {
-          console.warn('[useMediaPlayer] Shaka play() rejected:', err)
+          // console.warn('[useMediaPlayer] Shaka play() rejected:', err)
           clearBuffering()
         })
       } catch (cause) {
         if (disposed) return
         // Shaka errors are objects — stringify so the full category/code/data is visible in logs.
         try {
-          console.error('[useMediaPlayer] Shaka setup failed:', JSON.stringify(cause))
+          // console.error('[useMediaPlayer] Shaka setup failed:', JSON.stringify(cause))
         } catch {
-          console.error('[useMediaPlayer] Shaka setup failed (non-serializable):', cause)
+          // console.error('[useMediaPlayer] Shaka setup failed (non-serializable):', cause)
         }
         const { message, isFatalNetworkOrDrm, httpStatus } = formatShakaError(cause)
         if (

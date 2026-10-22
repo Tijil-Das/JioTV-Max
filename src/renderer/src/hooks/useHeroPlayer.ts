@@ -283,7 +283,7 @@ export function useHeroPlayer({
             })
 
             player.addEventListener('error', (event: unknown) => {
-              console.warn('[useHeroPlayer] Shaka error event:', event)
+              // console.warn('[useHeroPlayer] Shaka error event:', event)
               if (slotsRef.current[index] !== slot) return
               destroySlot(index)
             })
@@ -294,7 +294,7 @@ export function useHeroPlayer({
             if (!pausedRef.current) playSlot(index)
             trackFrame()
           } catch (err) {
-            console.warn('[useHeroPlayer] Shaka stream load failed:', err)
+            // console.warn('[useHeroPlayer] Shaka stream load failed:', err)
             if (slotsRef.current[index] !== slot) return
             destroySlot(index)
           }
@@ -324,7 +324,7 @@ export function useHeroPlayer({
               // fall through to failure
             }
           }
-          console.warn('[useHeroPlayer] HLS fatal error:', data)
+          // console.warn('[useHeroPlayer] HLS fatal error:', data)
           destroySlot(index)
         })
         hls.on(HlsEvents.FRAG_BUFFERED, () => {

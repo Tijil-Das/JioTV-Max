@@ -485,7 +485,7 @@ export class MediaRelay {
           }
         }
       } catch (err) {
-        console.warn('[MediaRelay] Failed to auto-fetch Jio channel list for logos:', err)
+        // console.warn('[MediaRelay] Failed to auto-fetch Jio channel list for logos:', err)
       }
     })()
     return this.channelFetchingPromise
@@ -544,7 +544,7 @@ export class MediaRelay {
     if (this.server) return
     this.server = createServer((req, res) => {
       void this.handle(req, res).catch((error: unknown) => {
-        console.error('[MediaRelay] Uncaught handler error:', error)
+        // console.error('[MediaRelay] Uncaught handler error:', error)
         if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
         res.end(error instanceof Error ? error.message : 'Relay error')
       })
@@ -554,7 +554,7 @@ export class MediaRelay {
       this.server!.listen(0, '127.0.0.1', () => {
         const address = this.server!.address()
         this._port = typeof address === 'object' && address ? address.port : 0
-        console.log(`[MediaRelay] Server running on 127.0.0.1:${this._port}`)
+        // console.log(`[MediaRelay] Server running on 127.0.0.1:${this._port}`)
         resolve()
       })
     })
@@ -596,7 +596,7 @@ export class MediaRelay {
       generation: 0,
       refreshPromise: null
     })
-    console.log(`[MediaRelay] Registered session ${id} for channel ${input.channelId}`)
+    // console.log(`[MediaRelay] Registered session ${id} for channel ${input.channelId}`)
     const base = `http://127.0.0.1:${this._port}/stream/${id}`
     return {
       id,
@@ -636,7 +636,7 @@ export class MediaRelay {
     }
     if (!token || token === hlsToken(session.manifestUrl)) return
 
-    console.log(`[MediaRelay] Upstream rotated __hdnea__ for ${session.channelId}`)
+    // console.log(`[MediaRelay] Upstream rotated __hdnea__ for ${session.channelId}`)
     session.headers = withHdneaCookie(session.headers, token)
     session.manifestUrl = withHlsToken(session.manifestUrl, token)
     if (session.licenseUrl) session.licenseUrl = withHlsToken(session.licenseUrl, token)
@@ -656,7 +656,7 @@ export class MediaRelay {
     if (session.refreshPromise) return session.refreshPromise
 
     const generationAtStart = session.generation
-    console.log(`[MediaRelay] Token expired for channel ${session.channelId}; refreshing signed URL…`)
+    // console.log(`[MediaRelay] Token expired for channel ${session.channelId}; refreshing signed URL…`)
 
     const promise = (async (): Promise<boolean> => {
       try {
@@ -675,12 +675,12 @@ export class MediaRelay {
         const licenseUrl = fresh.licenseUrl ?? session.licenseUrl
         session.licenseUrl = licenseUrl && token ? withHlsToken(licenseUrl, token) : licenseUrl
         session.generation = generationAtStart + 1
-        console.log(
-          `[MediaRelay] Refreshed signed URL for ${session.channelId} (generation ${session.generation})`
-        )
+        // console.log(
+//           `[MediaRelay] Refreshed signed URL for ${session.channelId} (generation ${session.generation})`
+        // )
         return true
       } catch (error) {
-        console.warn(`[MediaRelay] Token refresh failed for ${session.channelId}:`, error)
+        // console.warn(`[MediaRelay] Token refresh failed for ${session.channelId}:`, error)
         return false
       }
     })()
@@ -718,14 +718,14 @@ export class MediaRelay {
         // The body was never consumed; failing to cancel only leaks a socket.
       }
       target = makeTarget()
-      console.log(
-        `[MediaRelay] Retrying ${target.slice(0, 100)}… with refreshed token (session ${session.channelId})`
-      )
+      // console.log(
+//         `[MediaRelay] Retrying ${target.slice(0, 100)}… with refreshed token (session ${session.channelId})`
+      // )
       upstream = await fetchUpstream(target, this.buildUpstreamHeaders(session), init)
       this.captureRotatedToken(session, upstream)
-      console.log(`[MediaRelay] Retry upstream status: ${upstream.status}`)
+      // console.log(`[MediaRelay] Retry upstream status: ${upstream.status}`)
     } else if (session && (upstream.status === 401 || upstream.status === 403)) {
-      console.warn(`[MediaRelay] Upstream returned HTTP ${upstream.status} for ${session.channelId}`)
+      // console.warn(`[MediaRelay] Upstream returned HTTP ${upstream.status} for ${session.channelId}`)
     }
 
     return { upstream, target }
@@ -823,7 +823,7 @@ export class MediaRelay {
       const id = directLicenseMatch[1] || url.searchParams.get('s') || this.lastActiveSessionId
       const session = this.resolveSession(id)
       if (!session) {
-        console.warn(`[MediaRelay] Unknown license session: ${id}`)
+        // console.warn(`[MediaRelay] Unknown license session: ${id}`)
         res.writeHead(404, CORS_HEADERS)
         res.end('Unknown license session')
         return
@@ -834,7 +834,7 @@ export class MediaRelay {
     if (raw) {
       const target = url.searchParams.get('u')
       if (!target || !isHttpUrl(target)) {
-        console.warn('[MediaRelay] /raw invalid target:', target)
+        // console.warn('[MediaRelay] /raw invalid target:', target)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid target')
         return
@@ -842,7 +842,7 @@ export class MediaRelay {
       const sessionId = url.searchParams.get('s')
       const session = this.resolveSession(sessionId)
       const isKey = /\.p?key(\?|$)/i.test(target) || target.includes('tv.media.jio.com')
-      console.log(`[MediaRelay] /raw fetching: ${target.slice(0, 110)}... (session: ${sessionId ?? 'none'}, isKey: ${isKey})`)
+      // console.log(`[MediaRelay] /raw fetching: ${target.slice(0, 110)}... (session: ${sessionId ?? 'none'}, isKey: ${isKey})`)
 
       const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
       const cacheKey = segmentCacheKey(target)
@@ -852,7 +852,7 @@ export class MediaRelay {
       if (!isKey && !range) {
         const cached = this.readCachedSegment(cacheKey)
         if (cached) {
-          console.log(`[MediaRelay] /raw cache hit: ${target.slice(0, 90)}…`)
+          // console.log(`[MediaRelay] /raw cache hit: ${target.slice(0, 90)}…`)
           this.sendCachedSegment(res, cached)
           return
         }
@@ -867,10 +867,10 @@ export class MediaRelay {
           },
           { range }
         )
-        console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${fetchTarget.slice(0, 80)}`)
+        // console.log(`[MediaRelay] /raw upstream status: ${upstream.status} for ${fetchTarget.slice(0, 80)}`)
 
         if (!upstream.ok) {
-          console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
+          // console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
           const isAuth = upstream.status === 401 || upstream.status === 403
           const statusToSend = isAuth ? 401 : upstream.status
           res.writeHead(statusToSend, {
@@ -883,7 +883,7 @@ export class MediaRelay {
 
         if (isKey) {
           const buf = Buffer.from(await upstream.arrayBuffer())
-          console.log(`[MediaRelay] AES-128 key successfully fetched! Length: ${buf.byteLength} bytes`)
+          // console.log(`[MediaRelay] AES-128 key successfully fetched! Length: ${buf.byteLength} bytes`)
           copyHeaders(upstream.headers, res)
           res.writeHead(200, CORS_HEADERS)
           res.end(buf)
@@ -929,7 +929,7 @@ export class MediaRelay {
           })
 
           nodeStream.on('error', (err) => {
-            console.warn('[MediaRelay] /raw stream error:', err)
+            // console.warn('[MediaRelay] /raw stream error:', err)
             if (!res.writableEnded) res.end()
           })
 
@@ -941,7 +941,7 @@ export class MediaRelay {
         res.end(body)
         return
       } catch (error) {
-        console.warn(`[MediaRelay] /raw request failed: ${target.slice(0, 110)}`, error)
+        // console.warn(`[MediaRelay] /raw request failed: ${target.slice(0, 110)}`, error)
         if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
         res.end('Upstream request failed')
         return
@@ -953,7 +953,7 @@ export class MediaRelay {
       const rest = segmentMatch[3]
       const session = this.resolveSession(segId)
       if (!session) {
-        console.warn(`[MediaRelay] Unknown segment session: ${segId}`)
+        // console.warn(`[MediaRelay] Unknown segment session: ${segId}`)
         res.writeHead(404, CORS_HEADERS)
         res.end('Unknown segment session')
         return
@@ -1007,7 +1007,7 @@ export class MediaRelay {
 
       const requestedTarget = targetWithToken()
       if (!isHttpUrl(requestedTarget)) {
-        console.warn(`[MediaRelay] Invalid segment target: ${requestedTarget}`)
+        // console.warn(`[MediaRelay] Invalid segment target: ${requestedTarget}`)
         res.writeHead(400, CORS_HEADERS)
         res.end('Invalid segment')
         return
@@ -1018,13 +1018,13 @@ export class MediaRelay {
       if (!range) {
         const cached = this.readCachedSegment(cacheKey)
         if (cached) {
-          console.log(`[MediaRelay] /seg cache hit: ${cacheKey.slice(0, 100)}…`)
+          // console.log(`[MediaRelay] /seg cache hit: ${cacheKey.slice(0, 100)}…`)
           this.sendCachedSegment(res, cached)
           return
         }
       }
 
-      console.log(`[MediaRelay] /seg fetching: ${requestedTarget.slice(0, 110)}...`)
+      // console.log(`[MediaRelay] /seg fetching: ${requestedTarget.slice(0, 110)}...`)
       try {
         // Never reject a past segment just because it is behind the live
         // edge — Jio's CDN keeps the window advertised by timeShiftBufferDepth.
@@ -1033,10 +1033,10 @@ export class MediaRelay {
           targetWithToken,
           { range }
         )
-        console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
+        // console.log(`[MediaRelay] /seg upstream status: ${upstream.status}`)
 
         if (!upstream.ok) {
-          console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
+          // console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
           const isAuth = upstream.status === 401 || upstream.status === 403
           const statusToSend = isAuth ? 401 : upstream.status
           res.writeHead(statusToSend, {
@@ -1074,7 +1074,7 @@ export class MediaRelay {
           })
 
           nodeStream.on('error', (err) => {
-            console.warn('[MediaRelay] /seg stream error:', err)
+            // console.warn('[MediaRelay] /seg stream error:', err)
             if (!res.writableEnded) res.end()
           })
 
@@ -1086,7 +1086,7 @@ export class MediaRelay {
         res.end(body)
         return
       } catch (error) {
-        console.warn(`[MediaRelay] /seg request failed: ${requestedTarget.slice(0, 110)}`, error)
+        // console.warn(`[MediaRelay] /seg request failed: ${requestedTarget.slice(0, 110)}`, error)
         if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
         res.end('Upstream request failed')
         return
@@ -1172,7 +1172,7 @@ export class MediaRelay {
             .png()
             .toBuffer()
         } catch (normErr) {
-          console.warn('[MediaRelay] sharp normalization skipped/failed:', normErr)
+          // console.warn('[MediaRelay] sharp normalization skipped/failed:', normErr)
           contentType = upstream.headers.get('content-type') || 'image/png'
         }
 
@@ -1198,7 +1198,7 @@ export class MediaRelay {
     }
 
     if (!streamMatch) {
-      console.warn(`[MediaRelay] Not found: ${url.pathname}`)
+      // console.warn(`[MediaRelay] Not found: ${url.pathname}`)
       res.writeHead(404, CORS_HEADERS)
       res.end('Not found')
       return
@@ -1207,7 +1207,7 @@ export class MediaRelay {
     const [, id, action] = streamMatch
     const session = this.sessions.get(id)
     if (!session) {
-      console.warn(`[MediaRelay] Unknown playback session: ${id}`)
+      // console.warn(`[MediaRelay] Unknown playback session: ${id}`)
       res.writeHead(404, CORS_HEADERS)
       res.end('Unknown playback session')
       return
@@ -1218,22 +1218,22 @@ export class MediaRelay {
     }
 
     if (action === 'manifest') {
-      console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
+      // console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
       this.lastActiveSessionId = id
       let upstream: Response
       try {
         const result = await this.fetchWithRefresh(session, () => session.manifestUrl)
         upstream = result.upstream
       } catch (error) {
-        console.warn(`[MediaRelay] /manifest request failed for ${session.channelId}`, error)
+        // console.warn(`[MediaRelay] /manifest request failed for ${session.channelId}`, error)
         if (!res.headersSent) res.writeHead(502, CORS_HEADERS)
         res.end('Upstream manifest request failed')
         return
       }
-      console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
+      // console.log(`[MediaRelay] /manifest upstream status: ${upstream.status} (${upstream.headers.get('content-type')})`)
 
       if (!upstream.ok) {
-        console.warn(`[MediaRelay] Upstream manifest error: ${upstream.status}`)
+        // console.warn(`[MediaRelay] Upstream manifest error: ${upstream.status}`)
         const isAuth = upstream.status === 401 || upstream.status === 403
         const statusToSend = isAuth ? 401 : upstream.status
         res.writeHead(statusToSend, {
@@ -1406,8 +1406,8 @@ export class MediaRelay {
       // Non-fatal if CDN rejects HEAD
     }
 
-    console.log(`[MediaRelay] /license requesting upstream: ${targetLicenseUrl}`)
-    console.log('[MediaRelay] License request headers:', JSON.stringify(licenseHeaders, null, 2))
+    // console.log(`[MediaRelay] /license requesting upstream: ${targetLicenseUrl}`)
+    // console.log('[MediaRelay] License request headers:', JSON.stringify(licenseHeaders, null, 2))
 
     const licenseGeneration = session.generation
     let upstream = await fetch(targetLicenseUrl, {
@@ -1438,7 +1438,7 @@ export class MediaRelay {
 
       targetLicenseUrl = session.licenseUrl || targetLicenseUrl
       if (freshToken) targetLicenseUrl = withHlsToken(targetLicenseUrl, freshToken)
-      console.log(`[MediaRelay] Retrying license request with refreshed token: ${targetLicenseUrl}`)
+      // console.log(`[MediaRelay] Retrying license request with refreshed token: ${targetLicenseUrl}`)
       upstream = await fetch(targetLicenseUrl, {
         method: 'POST',
         headers: licenseHeaders,
@@ -1448,13 +1448,13 @@ export class MediaRelay {
       })
     }
 
-    console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
+    // console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
 
     if (!upstream.ok) {
-      console.warn(`[MediaRelay] /license upstream error (HTTP ${upstream.status})`)
+      // console.warn(`[MediaRelay] /license upstream error (HTTP ${upstream.status})`)
       try {
         const textPreview = await upstream.clone().text()
-        console.warn(`[MediaRelay] /license upstream error body (HTTP ${upstream.status}):`, textPreview.slice(0, 500))
+        // console.warn(`[MediaRelay] /license upstream error body (HTTP ${upstream.status}):`, textPreview.slice(0, 500))
       } catch {
         /* ignore */
       }

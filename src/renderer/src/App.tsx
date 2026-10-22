@@ -143,7 +143,7 @@ export default function App(): JSX.Element {
             }
           }
         } catch (err) {
-          console.warn('[bootstrap] hero preloading error', err)
+          // console.warn('[bootstrap] hero preloading error', err)
         }
       }
 
@@ -168,7 +168,7 @@ export default function App(): JSX.Element {
     const bridge = getBridge()
     if (!bridge?.auth?.onExpired) return
     const unsubscribe = bridge.auth.onExpired(({ reason }) => {
-      console.warn('[App] Main process reported auth expiration:', reason)
+      // console.warn('[App] Main process reported auth expiration:', reason)
       triggerAuthExpired(reason)
     })
     return unsubscribe

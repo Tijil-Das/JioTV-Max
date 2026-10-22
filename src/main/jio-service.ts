@@ -233,7 +233,7 @@ export class JioService {
   }
 
   notifySessionExpired(reason: string): void {
-    console.warn(`[JioService] Session expired: ${reason}`)
+    // console.warn(`[JioService] Session expired: ${reason}`)
     this.onSessionExpiredCallback?.(reason)
   }
 
@@ -252,7 +252,7 @@ export class JioService {
     this.relay.setStreamResolver(async (channelId, quality) => {
       const resolved = await this.resolveUpstreamStream(channelId, quality)
       if (!resolved.ok) {
-        console.warn(`[JioService] Relay token refresh failed for ${channelId}: ${resolved.error}`)
+        // console.warn(`[JioService] Relay token refresh failed for ${channelId}: ${resolved.error}`)
         if (isTokenOrAuthError(resolved.code) || isTokenOrAuthError(resolved.error)) {
           void this.logout()
           this.notifySessionExpired('Your streaming session has expired. Please sign in again.')
@@ -482,14 +482,14 @@ export class JioService {
           })
         })
         if (!response.ok) {
-          console.warn(`[JioService] refreshAccessToken HTTP ${response.status}`)
+          // console.warn(`[JioService] refreshAccessToken HTTP ${response.status}`)
           if (
             response.status === 400 ||
             response.status === 401 ||
             response.status === 403 ||
             response.status === 410
           ) {
-            console.warn('[JioService] Refresh token rejected or expired. Terminating session.')
+            // console.warn('[JioService] Refresh token rejected or expired. Terminating session.')
             await this.logout()
             this.notifySessionExpired('Your JioTV session has expired. Please sign in again.')
           }
@@ -497,7 +497,7 @@ export class JioService {
         }
         const parsed = (body ?? {}) as Record<string, unknown>
         if (typeof parsed.authToken !== 'string' || !parsed.authToken) {
-          console.warn('[JioService] refreshAccessToken did not return an authToken')
+          // console.warn('[JioService] refreshAccessToken did not return an authToken')
           await this.logout()
           this.notifySessionExpired('Your JioTV session is invalid. Please sign in again.')
           return false
@@ -506,7 +506,7 @@ export class JioService {
         await this.persist()
         return true
       } catch (err) {
-        console.warn('[JioService] refreshAccessToken network error:', err)
+        // console.warn('[JioService] refreshAccessToken network error:', err)
         return false
       } finally {
         this.refreshing = null
@@ -573,7 +573,7 @@ export class JioService {
         const { response, body } = await requestJson(attempt.url, { headers: attempt.headers })
         if (!response.ok) {
           if (attempt.url === API.channelsAuthed && (response.status === 401 || response.status === 403)) {
-            console.warn('[JioService] Authed channels endpoint rejected session. Attempting refresh.')
+            // console.warn('[JioService] Authed channels endpoint rejected session. Attempting refresh.')
             const refreshed = await this.refreshAccessToken()
             if (!refreshed) {
               await this.logout()
@@ -818,9 +818,9 @@ export class JioService {
     channelId: string,
     quality: JioQuality
   ): Promise<Result<ResolvedUpstream>> {
-    console.log(`[JioService] Resolving upstream stream for channelId=${channelId}, quality=${quality}`)
+    // console.log(`[JioService] Resolving upstream stream for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
-      console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
+      // console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
       return {
         ok: false,
         error: 'Sign in with your JioTV number to watch live channels.',
@@ -854,11 +854,11 @@ export class JioService {
     try {
       let { response, body: parsedBody } = await requestOnce()
       if ((response.status === 401 || response.status === 403) && (await this.refreshAccessToken())) {
-        console.log('[JioService] Playback token refreshed after 401/403, retrying requestOnce')
-        ;({ response, body: parsedBody } = await requestOnce())
+        // console.log('[JioService] Playback token refreshed after 401/403, retrying requestOnce')
+        // ;({ response, body: parsedBody } = await requestOnce())
       }
       const parsed = (parsedBody ?? {}) as PlaybackResponse
-      console.log(`[JioService] Playback API response status: ${response.status}, code: ${parsed.code ?? 'none'}`)
+      // console.log(`[JioService] Playback API response status: ${response.status}, code: ${parsed.code ?? 'none'}`)
 
       // 1. Check for subscription pack locks first before treating as an account-level auth failure
       const isSubscriptionLock =
@@ -869,7 +869,7 @@ export class JioService {
         )
 
       if (isSubscriptionLock) {
-        console.warn(`[JioService] Channel subscription lock (code ${parsed.code}): ${parsed.message}`)
+        // console.warn(`[JioService] Channel subscription lock (code ${parsed.code}): ${parsed.message}`)
         return {
           ok: false,
           error: parsed.message || 'This channel is not available on your Jio account.',
@@ -887,7 +887,7 @@ export class JioService {
         isTokenOrAuthError(errorMessage(parsedBody, response.status))
 
       if (isAuthFailure) {
-        console.warn(`[JioService] Playback API rejected token (HTTP ${response.status}, code ${parsed.code}): ${parsed.message}`)
+        // console.warn(`[JioService] Playback API rejected token (HTTP ${response.status}, code ${parsed.code}): ${parsed.message}`)
         await this.logout()
         const reason = 'Your JioTV session has expired. Please sign in again.'
         this.notifySessionExpired(reason)
@@ -899,7 +899,7 @@ export class JioService {
       }
 
       if (!response.ok) {
-        console.warn(`[JioService] Playback API returned HTTP ${response.status}:`, parsedBody)
+        // console.warn(`[JioService] Playback API returned HTTP ${response.status}:`, parsedBody)
         return {
           ok: false,
           error: errorMessage(parsedBody, response.status),
@@ -909,9 +909,9 @@ export class JioService {
       }
 
       const selected = this.pickStreamUrl(parsed, quality)
-      console.log(`[JioService] Picked stream: url=${selected.url ? selected.url.slice(0, 90) + '...' : '(none)'}, type=${selected.type}, isDrm=${selected.isDrm}`)
+      // console.log(`[JioService] Picked stream: url=${selected.url ? selected.url.slice(0, 90) + '...' : '(none)'}, type=${selected.type}, isDrm=${selected.isDrm}`)
       if (!selected.url) {
-        console.warn('[JioService] No playable stream found in response')
+        // console.warn('[JioService] No playable stream found in response')
         return {
           ok: false,
           error: parsed.message || 'JioTV did not return a playable stream for this channel.',
@@ -923,7 +923,7 @@ export class JioService {
       // one quality tier, so look through every URL the API returned and keep
       // the token that goes with the stream we picked.
       const hdnea = extractHdnea(selected.url) || this.findHdnea(parsed)
-      console.log(`[JioService] hdnea token found: ${hdnea ? 'yes' : 'no'}`)
+      // console.log(`[JioService] hdnea token found: ${hdnea ? 'yes' : 'no'}`)
 
       // The CDN requires the Android *player* agent and `Accept: */*`.
       // `authenticatedHeaders()` carries `okhttp/4.12.0` + `application/json`
@@ -954,7 +954,7 @@ export class JioService {
         }
       }
     } catch (error) {
-      console.error('[JioService] resolveUpstreamStream caught error:', error)
+      // console.error('[JioService] resolveUpstreamStream caught error:', error)
       await sleep(150)
       return {
         ok: false,
@@ -972,7 +972,7 @@ export class JioService {
     channelId: string,
     quality: JioQuality = 'high'
   ): Promise<Result<StreamInfo>> {
-    console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
+    // console.log(`[JioService] getStream requested for channelId=${channelId}, quality=${quality}`)
     const resolved = await this.resolveUpstreamStream(channelId, quality)
     if (!resolved.ok) return resolved
 

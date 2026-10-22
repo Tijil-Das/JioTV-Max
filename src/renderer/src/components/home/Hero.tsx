@@ -202,7 +202,7 @@ export function Hero(): JSX.Element {
   }, [verifiedKey])
 
   const handleFailure = useCallback((channelId: string) => {
-    console.warn(`[hero] player stream issue on ${channelId}`)
+    // console.warn(`[hero] player stream issue on ${channelId}`)
   }, [])
 
   // ---- Resolve the URL for the active channel through the player path ------
@@ -231,7 +231,7 @@ export function Hero(): JSX.Element {
         }
       })
       .catch((err) => {
-        console.warn(`[hero] getStream error on ${currentActiveId}:`, err)
+        // console.warn(`[hero] getStream error on ${currentActiveId}:`, err)
       })
     return () => {
       cancelled = true
@@ -454,16 +454,24 @@ export function Hero(): JSX.Element {
 
   return (
     <div
-      className="relative z-0 flex flex-col items-center justify-center pt-[72px] pb-8 px-4 sm:px-8 md:px-12 transition-[margin] duration-300 ease-out bg-[#0A0A0B]"
+      className="relative z-0 flex flex-col items-center justify-center pt-[72px] pb-8 px-1 sm:px-2 md:px-4 transition-[margin] duration-300 ease-out bg-[#0A0A0B] overflow-visible"
       style={{ marginBottom: 0 }}
     >
       <div
-        className="w-full grid transition-[grid-template-rows] duration-300 ease-out"
+        className={cn(
+          'w-full grid transition-[grid-template-rows] duration-300 ease-out',
+          expanded ? 'overflow-visible' : 'overflow-hidden'
+        )}
         style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
         aria-hidden={!expanded}
       >
-        <div className="min-h-0 overflow-hidden w-full flex items-center justify-center">
-          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px]">
+        <div
+          className={cn(
+            'min-h-0 w-full flex items-center justify-center',
+            expanded ? 'overflow-visible' : 'overflow-hidden'
+          )}
+        >
+          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px] px-1 sm:px-2 overflow-visible">
             {/* Left Channel Skip Arrow (in free space to the left of the video container) */}
             {verifiedOrdered.length > 1 ? (
               <button

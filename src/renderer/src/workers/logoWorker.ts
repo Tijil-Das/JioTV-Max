@@ -77,7 +77,7 @@ workerScope.onmessage = (event) => {
 
       if (!result.ok || !result.image) {
         const { image: _image, ...serializable } = result
-        if (!result.ok) console.warn(request.channelId, result.reason ?? 'logo rejected')
+        // if (!result.ok) console.warn(request.channelId, result.reason ?? 'logo rejected')
         workerScope.postMessage({ id: request.id, ok: false, result: serializable })
         return
       }
@@ -93,7 +93,7 @@ workerScope.onmessage = (event) => {
       workerScope.postMessage({ id: request.id, ok: true, result: serializable, blob: png })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'logo decode failed'
-      console.warn(request.channelId, message)
+      // console.warn(request.channelId, message)
       workerScope.postMessage({ id: request.id, ok: false, error: message })
     }
   })()

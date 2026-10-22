@@ -489,7 +489,7 @@ async function fetchEditorial(now: Date): Promise<EditorialEntry[] | null> {
         return res.data
       }
     } catch (err) {
-      console.warn('[hero] bridge getFeatured failed', err)
+      // console.warn('[hero] bridge getFeatured failed', err)
     }
   }
 
@@ -514,10 +514,10 @@ async function fetchEditorial(now: Date): Promise<EditorialEntry[] | null> {
     return clean
   } catch (error) {
     if (editorialCache) {
-      console.warn('[hero] editorial feed stale', error)
+      // console.warn('[hero] editorial feed stale', error)
       return editorialCache.data
     }
-    console.warn('[hero] editorial feed unavailable', error)
+    // console.warn('[hero] editorial feed unavailable', error)
     return null
   } finally {
     clearTimeout(timer)

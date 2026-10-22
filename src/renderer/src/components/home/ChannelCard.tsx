@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Heart } from 'lucide-react'
@@ -6,10 +6,10 @@ import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
 import { getNowNext, getProgress } from '@/lib/time'
+import { initials } from '@/lib/color'
 import { useNow } from '@/hooks/useNow'
 import { useChannelStore } from '@/store/useChannelStore'
-import { useDarkLogo } from '@/hooks/useDarkLogo'
-import { ChannelLogo } from '@/components/ui/ChannelLogo'
+import { useRelayStore } from '@/store/useRelayStore'
 
 interface ChannelCardProps {
   channel: Channel
@@ -43,7 +43,9 @@ export const ChannelCard = memo(function ChannelCard({
   const favorites = useChannelStore((state) => state.favorites)
   const toggleFavorite = useChannelStore((state) => state.toggleFavorite)
   const isFavorite = favorites.includes(channel.id)
-  const isDarkLogo = useDarkLogo(channel.logoUrl)
+  const relayBase = useRelayStore((state) => state.relayBase)
+  const [imgError, setImgError] = useState(false)
+  const logoSrc = relayBase ? `${relayBase}/logo/${channel.id}` : `/logo/${channel.id}`
 
   const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
   const progress = current ? getProgress(current, now) : 0
@@ -80,18 +82,22 @@ export const ChannelCard = memo(function ChannelCard({
             'group-focus-within:outline group-focus-within:outline-2 group-focus-within:outline-offset-2 group-focus-within:outline-[var(--red-line)]'
           )}
         >
-          {/* Logo container: fixed 1:1 optical square, flex-centered with safe-zone padding */}
-          <div className="relative flex aspect-square h-full w-full items-center justify-center p-3">
-            <div
-              className={cn(
-                'flex h-full w-full items-center justify-center transition-colors duration-200',
-                isDarkLogo
-                  ? 'rounded-lg bg-white/95 p-2 shadow-inner border border-white/20'
-                  : 'bg-transparent'
-              )}
-            >
-              <ChannelLogo channel={channel} context="tile" className="h-full w-full" />
-            </div>
+          {/* Logo container: fixed 1:1 optical square, overflow: hidden, p-3 safe-zone padding */}
+          <div className="relative aspect-square w-full overflow-hidden p-3 flex items-center justify-center">
+            {imgError ? (
+              <span className="font-sans font-[650] text-[20px] text-[#A1A1A6] select-none">
+                {initials(channel.name)}
+              </span>
+            ) : (
+              <img
+                src={logoSrc}
+                alt={channel.name}
+                loading="lazy"
+                decoding="async"
+                onError={() => setImgError(true)}
+                className="w-full h-full object-contain pointer-events-none select-none"
+              />
+            )}
           </div>
 
           {/* Number chip (top-left, inset 8px): 20px tall, padding 0 7px, radius 6px */}

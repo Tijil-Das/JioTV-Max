@@ -16,7 +16,7 @@ function contentSecurityPolicy(): Plugin {
     "default-src 'self' app:",
     "script-src 'self' app:",
     "style-src 'self' app: 'unsafe-inline'",
-    "img-src 'self' app: data: blob: https:",
+    "img-src 'self' app: data: blob: https: http://127.0.0.1:* http://localhost:*",
     "media-src 'self' app: blob: data: https: http://127.0.0.1:* http://localhost:*",
     "connect-src 'self' app: https: http://127.0.0.1:* http://localhost:*",
     "font-src 'self' app: data:",

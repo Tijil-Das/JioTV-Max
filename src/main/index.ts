@@ -254,6 +254,23 @@ async function createWindow(): Promise<void> {
   if (state.maximized) mainWindow.maximize()
   Menu.setApplicationMenu(null)
 
+  // Route any relative /logo/* requests directly to local MediaRelay
+  mainWindow.webContents.session.webRequest.onBeforeRequest(
+    { urls: ['http://localhost:*/*/logo/*', 'http://127.0.0.1:*/*/logo/*', 'http://localhost:*/logo/*', 'http://127.0.0.1:*/logo/*', 'app://*/logo/*'] },
+    (details, callback) => {
+      try {
+        const u = new URL(details.url)
+        if (u.pathname.startsWith('/logo')) {
+          callback({ redirectURL: `http://127.0.0.1:${relay.port}${u.pathname}${u.search}` })
+          return
+        }
+      } catch {
+        // ignore
+      }
+      callback({})
+    }
+  )
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
   })
@@ -574,6 +591,10 @@ app.whenReady().then(async () => {
     // app://bundle/index.html  → pathname = /bundle/index.html → strip to index.html
     // app://bundle/assets/foo  → strip to assets/foo
     const withoutBundle = pathname.replace(/^\/+bundle\/+/, '').replace(/^\/+/, '')
+    if (withoutBundle.startsWith('logo/')) {
+      const search = new URL(request.url).search
+      return net.fetch(`http://127.0.0.1:${relay.port}/${withoutBundle}${search}`)
+    }
     const relative = !withoutBundle || withoutBundle === '/' ? 'index.html' : withoutBundle
     const targetFile = path.normalize(path.join(__dirname, '../renderer', relative))
     return net.fetch(pathToFileURL(targetFile).toString())

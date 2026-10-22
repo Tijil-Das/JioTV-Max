@@ -548,6 +548,7 @@ export class JioService {
           continue
         }
         this.channelCache = { channels, at: Date.now() }
+        this.relay.registerChannels(channels)
         return { ok: true, data: channels }
       } catch (error) {
         lastError =

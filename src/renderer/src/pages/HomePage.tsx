@@ -88,6 +88,7 @@ export function HomePage(): JSX.Element {
   const source = useChannelStore((state) => state.source)
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
   const mode = useSettingsStore((state) => state.mode)
+  const showHero = useSettingsStore((state) => state.showHero)
 
   const recentlyWatched = useMemo(() => {
     const byId = new Map(channels.map((channel) => [channel.id, channel]))
@@ -171,7 +172,7 @@ export function HomePage(): JSX.Element {
         </>
       ) : (
         <>
-          <Hero />
+          {showHero ? <Hero /> : <div className="pt-[88px]" />}
 
           {error ? (
             <div className="mx-8 mt-6 flex items-center gap-3 rounded-2xl border border-warning/25 bg-warning/[0.07] px-4 py-3">

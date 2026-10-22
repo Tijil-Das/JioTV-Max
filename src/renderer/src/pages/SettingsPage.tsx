@@ -74,6 +74,8 @@ export function SettingsPage(): JSX.Element {
   const setAutoplay = useSettingsStore((state) => state.setAutoplay)
   const livePreviewOnHome = useSettingsStore((state) => state.livePreviewOnHome)
   const setLivePreviewOnHome = useSettingsStore((state) => state.setLivePreviewOnHome)
+  const showHero = useSettingsStore((state) => state.showHero)
+  const setShowHero = useSettingsStore((state) => state.setShowHero)
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop)
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop)
   const recentSearches = useSettingsStore((state) => state.recentSearches)
@@ -192,6 +194,14 @@ export function SettingsPage(): JSX.Element {
             onChange={setAutoplay}
             label="Autoplay when opening a channel"
             description="Start playback immediately instead of showing the paused frame."
+          />
+
+          <Toggle
+            id="show-hero"
+            checked={showHero}
+            onChange={setShowHero}
+            label="Show Hero section"
+            description="Display the featured channel hero carousel with live streaming at the top of Home."
           />
 
           <Toggle

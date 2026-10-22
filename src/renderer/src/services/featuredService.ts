@@ -1,6 +1,7 @@
 import type { Channel, Program } from '@shared/types'
 import { FEATURED_URL, HERO_LAST_KEY } from '@/lib/constants'
 import { getBridge } from '@/services/api'
+import { popularityEngine } from '@/services/popularityEngine'
 import { useChannelStore, type RecentChannel } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
@@ -532,35 +533,34 @@ function historyFromRecents(recents: RecentChannel[]): HeroHistoryEntry[] {
 }
 
 export const featuredService = {
-  async getHeroCandidates(now: Date = new Date()): Promise<HeroCandidate[]> {
+  async getHeroCandidates(_now: Date = new Date()): Promise<HeroCandidate[]> {
     const channelState = useChannelStore.getState()
-    const settings = useSettingsStore.getState()
     const allChannels = channelState.channels
 
     if (!allChannels || allChannels.length === 0) return []
 
-    // 1. Strictly filter out regional channels, non-sports regional languages, and junk tickers
-    const eligibleChannels = allChannels.filter(isHeroEligibleChannel)
-    const pool = eligibleChannels.length > 0 ? eligibleChannels : allChannels
-
-    // 2. Fetch editorial feed and filter entries to eligible channels only
-    const rawEditorial = await fetchEditorial(now)
-    const eligibleIds = new Set(pool.map((c) => c.id))
-    const editorial = rawEditorial ? rawEditorial.filter((e) => eligibleIds.has(e.channelId)) : null
-
-    // 3. Rank eligible candidates
-    const ranked = rankHeroCandidates({
-      channels: pool,
-      epg: channelState.epg,
-      favorites: channelState.favorites,
-      history: historyFromRecents(channelState.recents),
-      language: settings.language,
-      now,
-      editorial
+    // 1. Rank marquee Sports & News channels using the multi-factor PopularityEngine
+    const ranked = popularityEngine.rankChannels(allChannels, channelState.epg, {
+      allowedLanguages: ['English', 'Hindi'],
+      topN: 5
     })
 
-    // 4. Curate top 5 slots: Top 3 Sports HD + Top 2 High-Quality News HD (deduplicating SD feeds)
-    return curateHeroCandidates(ranked)
+    if (ranked.length > 0) {
+      return ranked.map((r) => ({
+        channel: r.channel,
+        score: r.score,
+        sources: { popularity: r.score }
+      }))
+    }
+
+    // Fallback if no channels match the strict filter
+    const eligibleChannels = allChannels.filter(isHeroEligibleChannel)
+    const pool = eligibleChannels.length > 0 ? eligibleChannels : allChannels
+    return pool.slice(0, 5).map((channel) => ({
+      channel,
+      score: getChannelProminence(channel),
+      sources: {}
+    }))
   }
 }
 

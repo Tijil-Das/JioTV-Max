@@ -74,7 +74,7 @@ async function stage1(url: string): Promise<boolean> {
   try {
     const response = await fetch(url)
     const text = await response.text()
-    return response.ok && text.trimStart().startsWith('#EXTM3U')
+    return response.ok && (text.trimStart().startsWith('#EXTM3U') || text.includes('<MPD'))
   } catch {
     return false
   }
@@ -240,12 +240,15 @@ async function resolveStream(channelId: string): Promise<StreamInfo | null> {
 
 async function verifyInternal(channelId: string, stream: StreamInfo | null): Promise<boolean> {
   const resolved = stream ?? (await resolveStream(channelId))
-  if (!resolved || resolved.isDrm) return false
-  if (resolved.type !== 'hls') return false
+  if (!resolved) return false
   const stage1Ok = await stage1(resolved.url)
   if (!stage1Ok) return false
-  const stage2Ok = await stage2(channelId, resolved, TOTAL_TIMEOUT_MS)
-  return stage2Ok
+  // For standard non-DRM HLS streams, run stage2 video frame progress check
+  if (resolved.type === 'hls' && !resolved.isDrm) {
+    return await stage2(channelId, resolved, TOTAL_TIMEOUT_MS)
+  }
+  // DASH and DRM streams are verified via stage 1 manifest accessibility
+  return true
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, channelId: string): Promise<T | false> {
@@ -319,6 +322,10 @@ export const streamProbe = {
   lastStream(channelId: string): StreamInfo | null {
     const entry = lastStreams.get(channelId)
     return entry ? entry.stream : null
+  },
+
+  setStreamHandoff(channelId: string, stream: StreamInfo): void {
+    lastStreams.set(channelId, { stream, at: Date.now() })
   },
 
   /** Destroys every hidden probe player immediately (hero handoff). */

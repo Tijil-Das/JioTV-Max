@@ -13,6 +13,8 @@ interface SettingsState {
   autoplay: boolean
   /** Play muted live previews on the Home hero (Addendum 3 §8). Default on. */
   livePreviewOnHome: boolean
+  /** Show the featured channel hero section on Home. Default on. */
+  showHero: boolean
   alwaysOnTop: boolean
   parentalEnabled: boolean
   parentalPinHash: string
@@ -23,6 +25,7 @@ interface SettingsState {
   setReduceMotion: (value: boolean) => void
   setAutoplay: (value: boolean) => void
   setLivePreviewOnHome: (value: boolean) => void
+  setShowHero: (value: boolean) => void
   setAlwaysOnTop: (value: boolean) => void
   setParental: (enabled: boolean, hash?: string) => void
   addRecentSearch: (term: string) => void
@@ -38,6 +41,7 @@ export const useSettingsStore = create<SettingsState>()(
       reduceMotion: false,
       autoplay: true,
       livePreviewOnHome: true,
+      showHero: true,
       alwaysOnTop: false,
       parentalEnabled: false,
       parentalPinHash: '',
@@ -48,6 +52,7 @@ export const useSettingsStore = create<SettingsState>()(
       setReduceMotion: (reduceMotion) => set({ reduceMotion }),
       setAutoplay: (autoplay) => set({ autoplay }),
       setLivePreviewOnHome: (livePreviewOnHome) => set({ livePreviewOnHome }),
+      setShowHero: (showHero) => set({ showHero }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),
       setParental: (parentalEnabled, parentalPinHash) =>
         set((state) => ({

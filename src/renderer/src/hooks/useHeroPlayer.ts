@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Hls, { Events as HlsEvents, ErrorTypes } from 'hls.js'
+// @ts-ignore - shaka-player ambient
+import shaka from 'shaka-player'
 import type { StreamInfo } from '@shared/types'
 import { applyHeroLevelCaps, createHeroHls } from '@/services/streamProbe'
 
 /**
  * Addendum 3 §8 · two A/B video slots for the live hero.
  *
- * Only two hls.js instances can exist at once. A new stream loads into the
- * idle slot; once it has painted, the slots crossfade for 400ms and the
- * outgoing instance is destroyed. The watchdog removes a channel after a
- * stall, a frame-progress gap, or an unrecoverable fatal error.
+ * Supports both HLS (hls.js) and MPEG-DASH / Widevine DRM (shaka-player)
+ * with muted live autoplay.
  */
 
 interface UseHeroPlayerOptions {
@@ -22,6 +22,7 @@ interface UseHeroPlayerOptions {
 
 interface SlotState {
   hls: Hls | null
+  shaka: shaka.Player | null
   url: string | null
   channelId: string | null
   frames: number
@@ -36,6 +37,7 @@ interface SlotState {
 function emptySlot(): SlotState {
   return {
     hls: null,
+    shaka: null,
     url: null,
     channelId: null,
     frames: 0,
@@ -78,6 +80,13 @@ export function useHeroPlayer({
     const slot = slotsRef.current[index]
     slot.listeners.abort()
     if (slot.revealTimer !== null) window.clearTimeout(slot.revealTimer)
+    if (slot.shaka) {
+      try {
+        void slot.shaka.destroy()
+      } catch {
+        // already destroyed
+      }
+    }
     if (slot.hls) {
       try {
         slot.hls.destroy()
@@ -96,7 +105,11 @@ export function useHeroPlayer({
       }
     }
     const other = index === 0 ? 1 : 0
-    if (index === activeSlotRef.current && slotsRef.current[other].hls === null) {
+    if (
+      index === activeSlotRef.current &&
+      slotsRef.current[other].hls === null &&
+      slotsRef.current[other].shaka === null
+    ) {
       setOpacity([0, 0])
     }
   }, [videoRefs])
@@ -139,8 +152,7 @@ export function useHeroPlayer({
       const slot = slotsRef.current[index]
       slot.url = incoming.url
       slot.channelId = incomingChannelId
-      const hls = createHeroHls()
-      slot.hls = hls
+      video.muted = true
 
       const trackFrame = (): void => {
         // Ignore callbacks from a slot that was torn down mid-flight.
@@ -163,31 +175,6 @@ export function useHeroPlayer({
         }
       }
 
-      hls.on(HlsEvents.MANIFEST_PARSED, () => {
-        applyHeroLevelCaps(hls)
-        if (!pausedRef.current) playSlot(index)
-      })
-      hls.on(HlsEvents.LEVEL_LOADED, () => {
-        if (video.currentTime === 0) seekLive(index)
-      })
-      hls.on(HlsEvents.ERROR, (_event, data) => {
-        if (!data.fatal) return
-        if (data.type === ErrorTypes.MEDIA_ERROR && !slot.recoveryAttempted) {
-          slot.recoveryAttempted = true
-          try {
-            hls.recoverMediaError()
-            return
-          } catch {
-            // fall through to failure
-          }
-        }
-        destroySlot(index)
-        onFailureRef.current(incomingChannelId)
-      })
-      hls.on(HlsEvents.FRAG_BUFFERED, () => {
-        slot.stalledSince = 0
-      })
-
       video.addEventListener('waiting', () => {
         if (slotsRef.current[index] !== slot) return
         slot.stalledSince = performance.now()
@@ -198,15 +185,107 @@ export function useHeroPlayer({
         slot.lastFrameAt = performance.now()
       }, { signal: slot.listeners.signal })
 
-      hls.loadSource(incoming.url)
-      hls.attachMedia(video)
-      if (video.requestVideoFrameCallback) {
-        video.requestVideoFrameCallback(() => trackFrame())
+      const isDash = incoming.type === 'dash' || /\.mpd(?:[?#]|$)/i.test(incoming.url)
+
+      if (isDash && typeof shaka !== 'undefined' && shaka.Player?.isBrowserSupported?.()) {
+        const player = new shaka.Player()
+        slot.shaka = player
+
+        void (async () => {
+          try {
+            await player.attach(video)
+            video.muted = true
+
+            const licenseUrl =
+              incoming.drm?.licenseUrl ||
+              (incoming.url ? new URL('/license', incoming.url).href : '')
+
+            const networking = player.getNetworkingEngine()
+            if (networking) {
+              networking.registerRequestFilter(
+                (type: unknown, request: { headers: Record<string, string> }) => {
+                  if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+                    request.headers['Origin'] = 'https://www.jiotv.com'
+                    request.headers['Referer'] = 'https://www.jiotv.com/'
+                    request.headers['User-Agent'] =
+                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    if (incoming.drm?.headers) {
+                      Object.assign(request.headers, incoming.drm.headers)
+                    }
+                  }
+                }
+              )
+            }
+
+            player.configure({
+              drm: {
+                servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {}
+              },
+              abr: {
+                enabled: true,
+                restrictions: { maxHeight: 720 }
+              },
+              streaming: {
+                bufferingGoal: incoming.isDrm ? 6 : 12,
+                bufferBehind: incoming.isDrm ? 2 : 5
+              }
+            })
+
+            player.addEventListener('error', () => {
+              if (slotsRef.current[index] !== slot) return
+              destroySlot(index)
+              onFailureRef.current(incomingChannelId)
+            })
+
+            await player.load(incoming.url, null, 'application/dash+xml')
+            if (slotsRef.current[index] !== slot) return
+            trackFrame()
+            if (!pausedRef.current) playSlot(index)
+          } catch {
+            if (slotsRef.current[index] !== slot) return
+            destroySlot(index)
+            onFailureRef.current(incomingChannelId)
+          }
+        })()
       } else {
-        video.addEventListener('timeupdate', function loop() {
-          trackFrame()
-          video.addEventListener('timeupdate', loop, { once: true })
+        const hls = createHeroHls()
+        slot.hls = hls
+
+        hls.on(HlsEvents.MANIFEST_PARSED, () => {
+          applyHeroLevelCaps(hls)
+          if (!pausedRef.current) playSlot(index)
         })
+        hls.on(HlsEvents.LEVEL_LOADED, () => {
+          if (video.currentTime === 0) seekLive(index)
+        })
+        hls.on(HlsEvents.ERROR, (_event, data) => {
+          if (!data.fatal) return
+          if (data.type === ErrorTypes.MEDIA_ERROR && !slot.recoveryAttempted) {
+            slot.recoveryAttempted = true
+            try {
+              hls.recoverMediaError()
+              return
+            } catch {
+              // fall through to failure
+            }
+          }
+          destroySlot(index)
+          onFailureRef.current(incomingChannelId)
+        })
+        hls.on(HlsEvents.FRAG_BUFFERED, () => {
+          slot.stalledSince = 0
+        })
+
+        hls.loadSource(incoming.url)
+        hls.attachMedia(video)
+        if (video.requestVideoFrameCallback) {
+          video.requestVideoFrameCallback(() => trackFrame())
+        } else {
+          video.addEventListener('timeupdate', function loop() {
+            trackFrame()
+            video.addEventListener('timeupdate', loop, { once: true })
+          })
+        }
       }
     },
     [destroySlot, playSlot, seekLive, videoRefs]

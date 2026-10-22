@@ -310,6 +310,57 @@ function copyHeaders(from: Headers, to: ServerResponse): void {
   }
 }
 
+const DEMO_CHANNEL_LOGOS: Record<string, string> = {
+  '101': 'Star_Sports_1_HD.png',
+  '102': 'Star_Sports_2.png',
+  '103': 'Star_Sports_Select_1_HD.png',
+  '104': 'Sony_Ten_1_HD.png',
+  '105': 'Sony_Ten_2.png',
+  '106': 'DD_Sports.png',
+  '107': 'EuroSport_HD.png',
+  '108': 'Sports_18_1_HD.png',
+  '109': 'Star_Movies_HD.png',
+  '110': 'Sony_Max.png',
+  '111': 'Zee_Cinema_HD.png',
+  '112': 'and_pictures.png',
+  '113': 'Movies_Now_HD.png',
+  '114': 'Star_Gold_HD.png',
+  '115': 'Star_Plus_HD.png',
+  '116': 'Zee_TV_HD.png',
+  '117': 'Colors_HD.png',
+  '118': 'Sony_SAB.png',
+  '119': 'SET_HD.png',
+  '120': 'and_TV_HD.png',
+  '121': 'NDTV_24x7.png',
+  '122': 'Aaj_Tak.png',
+  '123': 'Republic_Bharat.png',
+  '124': 'India_Today.png',
+  '125': 'CNBC_TV18.png',
+  '126': 'WION.png',
+  '127': 'BBC_World_News.png',
+  '128': 'Cartoon_Network_HD_Plus.png',
+  '129': 'Pogo.png',
+  '130': 'Nick_HD_Plus.png',
+  '131': 'Disney_Channel.png',
+  '132': 'Discovery_Kids.png',
+  '133': 'Sun_TV_HD.png',
+  '134': 'Asianet_HD.png',
+  '135': 'Star_Vijay_HD.png',
+  '136': 'Zee_Marathi.png',
+  '137': 'Star_Jalsha_HD.png',
+  '138': 'Gemini_TV_HD.png',
+  // Common slug aliases
+  'eurosport': 'EuroSport_HD.png',
+  'eurosport-hd': 'EuroSport_HD.png',
+  'sony-ten-3-hd': 'Sony_Ten_3_HD.png',
+  'sony-ten-3': 'Sony_Ten_3_HD.png',
+  '166': 'Sony_Ten_3_HD.png',
+  'sony-sab': 'Sony_SAB.png',
+  'colors-hd': 'Colors_HD.png',
+  'aaj-tak': 'Aaj_Tak.png',
+  'ndtv-24x7': 'NDTV_24x7.png'
+}
+
 export class MediaRelay {
   private server: Server | null = null
   private _port = 0
@@ -320,6 +371,9 @@ export class MediaRelay {
   private readonly segmentCache = new Map<string, CachedSegment>()
   private segmentCacheBytes = 0
   private streamResolver: RelayStreamResolver | null = null
+  private readonly channelLogos = new Map<string, string>()
+  private readonly normalizedLogoCache = new Map<string, Buffer>()
+  private channelFetchingPromise: Promise<void> | null = null
 
   get running(): boolean {
     return this.server !== null
@@ -328,6 +382,122 @@ export class MediaRelay {
   /** Lets `JioService` re-resolve a signed playback URL on 401/403. */
   setStreamResolver(resolver: RelayStreamResolver): void {
     this.streamResolver = resolver
+  }
+
+  /** Registers channel catalog entries so /logo/:channelId can look up original logos. */
+  registerChannels(channels: Array<{ id: string | number; number?: number; name?: string; logoUrl?: string }>): void {
+    for (const ch of channels) {
+      if (ch.logoUrl) {
+        const logo = ch.logoUrl.trim()
+        const fullUrl = /^https?:\/\//i.test(logo)
+          ? logo
+          : `https://jiotv.catchup.cdn.jio.com/dare_images/images/${logo}`
+        this.channelLogos.set(String(ch.id).toLowerCase(), fullUrl)
+        if (ch.number) this.channelLogos.set(String(ch.number), fullUrl)
+        if (ch.name) {
+          const normName = ch.name.toLowerCase().trim()
+          this.channelLogos.set(normName, fullUrl)
+          this.channelLogos.set(normName.replace(/\s+/g, '-'), fullUrl)
+        }
+      }
+    }
+  }
+
+  private async ensureChannelsLoaded(): Promise<void> {
+    if (this.channelFetchingPromise) return this.channelFetchingPromise
+    this.channelFetchingPromise = (async () => {
+      try {
+        const res = await fetch(
+          'https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=315',
+          {
+            headers: {
+              'User-Agent': 'okhttp/4.9.0',
+              Accept: 'application/json'
+            }
+          }
+        )
+        if (!res.ok) return
+        const json = (await res.json()) as {
+          result?: Array<{
+            channel_id?: number | string
+            channel_name?: string
+            logoUrl?: string
+            channel_logo?: string
+            logo?: string
+          }>
+        }
+        if (Array.isArray(json?.result)) {
+          for (const item of json.result) {
+            const id = String(item.channel_id ?? '').trim()
+            const logo = String(item.logoUrl ?? item.channel_logo ?? item.logo ?? '').trim()
+            const name = String(item.channel_name ?? '').trim()
+            if (id && logo) {
+              const logoUrl = /^https?:\/\//i.test(logo)
+                ? logo
+                : `https://jiotv.catchup.cdn.jio.com/dare_images/images/${logo}`
+              this.channelLogos.set(id.toLowerCase(), logoUrl)
+              if (name) {
+                const normName = name.toLowerCase().trim()
+                this.channelLogos.set(normName, logoUrl)
+                this.channelLogos.set(normName.replace(/\s+/g, '-'), logoUrl)
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[MediaRelay] Failed to auto-fetch Jio channel list for logos:', err)
+      }
+    })()
+    return this.channelFetchingPromise
+  }
+
+  private async resolveLogoTarget(channelId?: string, queryUrl?: string, queryFile?: string): Promise<string | null> {
+    if (queryUrl) return queryUrl
+    if (queryFile) return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${queryFile}`
+    if (!channelId) return null
+
+    const cleanId = decodeURIComponent(channelId).trim()
+    const lower = cleanId.toLowerCase()
+
+    // 1. In-memory registered channels
+    if (this.channelLogos.has(lower)) return this.channelLogos.get(lower)!
+    if (cleanId.startsWith('ch-')) {
+      const numPart = cleanId.slice(3)
+      if (this.channelLogos.has(numPart)) return this.channelLogos.get(numPart)!
+      if (DEMO_CHANNEL_LOGOS[numPart]) {
+        return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${DEMO_CHANNEL_LOGOS[numPart]}`
+      }
+    }
+
+    // 2. Demo dictionary
+    if (DEMO_CHANNEL_LOGOS[lower]) {
+      return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${DEMO_CHANNEL_LOGOS[lower]}`
+    }
+    if (DEMO_CHANNEL_LOGOS[cleanId]) {
+      return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${DEMO_CHANNEL_LOGOS[cleanId]}`
+    }
+
+    // 3. Direct filename or full URL passed as channelId
+    if (/\.(png|jpe?g|webp|svg)$/i.test(cleanId) || /^https?:\/\//i.test(cleanId)) {
+      return /^https?:\/\//i.test(cleanId)
+        ? cleanId
+        : `https://jiotv.catchup.cdn.jio.com/dare_images/images/${cleanId}`
+    }
+
+    // 4. Fetch catalogue if not loaded
+    if (this.channelLogos.size === 0) {
+      await this.ensureChannelsLoaded()
+      if (this.channelLogos.has(lower)) return this.channelLogos.get(lower)!
+      if (this.channelLogos.has(cleanId)) return this.channelLogos.get(cleanId)!
+    }
+
+    // 5. Intelligent title-cased fallback to Jio CDN filename
+    const formatted = cleanId
+      .replace(/^ch-/, '')
+      .split(/[-_\s]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join('_')
+    return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${formatted}.png`
   }
 
   async start(): Promise<void> {
@@ -839,18 +1009,32 @@ export class MediaRelay {
       return
     }
 
-    // /logo — proxy Jio's channel logo CDN images to avoid CORS and normalize dimensions with sharp.
-    // Accepts ?url=<full_url> or ?file=<filename> (bare name like "Colors_HD.png")
-    if (url.pathname === '/logo') {
-      const logoUrl = url.searchParams.get('url') || ''
-      const logoFile = url.searchParams.get('file') || ''
-      const target = logoUrl || (logoFile
-        ? `https://jiotv.catchup.cdn.jio.com/dare_images/images/${logoFile}`
-        : '')
+    // /logo or /logo/:channelId — proxy Jio's channel logo CDN images and normalize with sharp
+    // to a uniform 256x256 square canvas with transparent padding.
+    const logoMatch = url.pathname.match(/^\/logo(?:\/([^/?#]+))?$/)
+    if (logoMatch) {
+      const channelId = logoMatch[1] ? decodeURIComponent(logoMatch[1]) : ''
+      const queryUrl = url.searchParams.get('url') || ''
+      const queryFile = url.searchParams.get('file') || ''
+
+      const target = await this.resolveLogoTarget(channelId, queryUrl, queryFile)
 
       if (!target) {
         res.writeHead(400, CORS_HEADERS)
-        res.end('Missing url or file param')
+        res.end('Missing channelId, url, or file param')
+        return
+      }
+
+      // Check in-memory cache for fast sub-millisecond delivery
+      const cached = this.normalizedLogoCache.get(target)
+      if (cached) {
+        res.writeHead(200, {
+          ...CORS_HEADERS,
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=604800, immutable',
+          'Content-Length': String(cached.length)
+        })
+        res.end(cached)
         return
       }
 
@@ -876,7 +1060,7 @@ export class MediaRelay {
           finalBuffer = await sharp(originalBuffer)
             .resize(256, 256, {
               fit: 'contain',
-              background: { r: 0, g: 0, b: 0, alpha: 0 }
+              background: { r: 0, g: 0, b: 0, alpha: 0 } // transparent padding
             })
             .png()
             .toBuffer()
@@ -885,10 +1069,17 @@ export class MediaRelay {
           contentType = upstream.headers.get('content-type') || 'image/png'
         }
 
+        if (this.normalizedLogoCache.size < 2000) {
+          this.normalizedLogoCache.set(target, finalBuffer)
+          if (channelId) {
+            this.normalizedLogoCache.set(channelId.toLowerCase(), finalBuffer)
+          }
+        }
+
         res.writeHead(200, {
           ...CORS_HEADERS,
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=86400',
+          'Cache-Control': 'public, max-age=604800, immutable',
           'Content-Length': String(finalBuffer.length)
         })
         res.end(finalBuffer)

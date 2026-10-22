@@ -74,8 +74,7 @@ export function TopBar(): JSX.Element {
         <div className="no-drag flex h-full shrink-0 items-center gap-3">
           <SearchBox />
           <ProfileMenu />
-          <div className="mx-1 h-4 w-px bg-white/[0.08]" aria-hidden />
-          <WindowControls />
+          <WindowControls className="ml-1" />
         </div>
       </div>
     </div>

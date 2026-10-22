@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Copy, Minus, Square, X } from 'lucide-react'
 import { getBridge } from '@/services/api'
 import { cn } from '@/lib/cn'
 
@@ -7,10 +6,43 @@ interface WindowControlsProps {
   className?: string
 }
 
+function WindowsMinimizeIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <path d="M0 9.5H10" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
+function WindowsMaximizeIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" strokeWidth="1" fill="none" />
+    </svg>
+  )
+}
+
+function WindowsRestoreIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <path d="M2.5 2.5V0.5H9.5V7.5H7.5" stroke="currentColor" strokeWidth="1" fill="none" />
+      <rect x="0.5" y="2.5" width="7" height="7" stroke="currentColor" strokeWidth="1" fill="none" />
+    </svg>
+  )
+}
+
+function WindowsCloseIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
 /**
-  * Custom window controls (Minimize, Maximize / Restore, Close) matching
-  * modern Windows 11 fluent styling with dark glass aesthetics.
-  */
+ * Standard Windows 11 / Windows 10 caption buttons (Minimize, Maximize / Restore, Close)
+ * using the official Windows glyph geometry and interactions.
+ */
 export function WindowControls({ className }: WindowControlsProps): JSX.Element {
   const [maximized, setMaximized] = useState(false)
   const bridge = getBridge()
@@ -18,8 +50,15 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
   useEffect(() => {
     if (!bridge) return
     void bridge.isMaximized().then(setMaximized).catch(() => undefined)
-    const off = bridge.onMaximizedChange((val) => setMaximized(val))
-    return () => off()
+    const offMax = bridge.onMaximizedChange((val) => setMaximized(val))
+    const offFs = bridge.onFullscreenChange?.((val) => {
+      if (val) setMaximized(true)
+      else void bridge.isMaximized().then(setMaximized).catch(() => undefined)
+    })
+    return () => {
+      offMax()
+      offFs?.()
+    }
   }, [bridge])
 
   const handleMinimize = (): void => {
@@ -39,33 +78,29 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
       <button
         type="button"
         title="Minimize"
-        aria-label="Minimize window"
+        aria-label="Minimize"
         onClick={handleMinimize}
-        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
+        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]"
       >
-        <Minus className="h-3.5 w-3.5" />
+        <WindowsMinimizeIcon />
       </button>
       <button
         type="button"
-        title={maximized ? 'Restore' : 'Maximize'}
-        aria-label={maximized ? 'Restore window' : 'Maximize window'}
+        title={maximized ? 'Restore Down' : 'Maximize'}
+        aria-label={maximized ? 'Restore Down' : 'Maximize'}
         onClick={handleMaximize}
-        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.07] hover:text-[#F4F4F5]"
+        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]"
       >
-        {maximized ? (
-          <Copy className="h-3 w-3 -scale-x-100" />
-        ) : (
-          <Square className="h-3 w-3" />
-        )}
+        {maximized ? <WindowsRestoreIcon /> : <WindowsMaximizeIcon />}
       </button>
       <button
         type="button"
         title="Close"
-        aria-label="Close window"
+        aria-label="Close"
         onClick={handleClose}
-        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-[#E11D2E] hover:text-white"
+        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-[#E81123] hover:text-white active:bg-[#C4101E]"
       >
-        <X className="h-4 w-4" />
+        <WindowsCloseIcon />
       </button>
     </div>
   )

@@ -301,10 +301,22 @@ async function createWindow(): Promise<void> {
   const sendFullscreen = (val: boolean): void => {
     mainWindow?.webContents.send(IPC.fullscreenChanged, val)
   }
-  mainWindow.on('enter-full-screen', () => sendFullscreen(true))
-  mainWindow.on('leave-full-screen', () => sendFullscreen(false))
-  mainWindow.on('enter-html-full-screen', () => sendFullscreen(true))
-  mainWindow.on('leave-html-full-screen', () => sendFullscreen(false))
+  mainWindow.on('enter-full-screen', () => {
+    sendFullscreen(true)
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, true)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    sendFullscreen(false)
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, mainWindow?.isMaximized() ?? false)
+  })
+  mainWindow.on('enter-html-full-screen', () => {
+    sendFullscreen(true)
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, true)
+  })
+  mainWindow.on('leave-html-full-screen', () => {
+    sendFullscreen(false)
+    mainWindow?.webContents.send(IPC.windowMaximizedChanged, mainWindow?.isMaximized() ?? false)
+  })
 
   mainWindow.on('maximize', () => {
     mainWindow?.webContents.send(IPC.windowMaximizedChanged, true)
@@ -463,6 +475,12 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.windowMaximize, (): boolean => {
     if (!mainWindow) return false
+    if (mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false)
+      mainWindow.webContents.send(IPC.fullscreenChanged, false)
+      mainWindow.webContents.send(IPC.windowMaximizedChanged, mainWindow.isMaximized())
+      return mainWindow.isMaximized()
+    }
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize()
       return false
@@ -477,7 +495,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.windowIsMaximized, (): boolean => {
-    return mainWindow?.isMaximized() ?? false
+    return Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen())
   })
 
   ipcMain.handle(IPC.setAlwaysOnTop, (_event, value: boolean): boolean => {

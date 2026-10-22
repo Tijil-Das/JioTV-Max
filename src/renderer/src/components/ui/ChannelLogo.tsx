@@ -3,7 +3,7 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
-import { useLogoScaling } from '@/hooks/useLogoScaling'
+import { useDarkLogo } from '@/hooks/useDarkLogo'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -136,8 +136,7 @@ export const ChannelLogo = memo(function ChannelLogo({
     return () => cancelAnimationFrame(frame)
   }, [logo])
 
-  const logoScale = useLogoScaling(logo?.objectUrl || channel?.logoUrl)
-
+  const isDarkLogo = useDarkLogo(logo?.objectUrl || channel?.logoUrl)
   const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
 
   // Inner logo content
@@ -199,12 +198,11 @@ export const ChannelLogo = memo(function ChannelLogo({
             alt=""
             draggable={false}
             decoding="async"
-            className="pointer-events-none block h-full w-full object-contain transition-transform duration-300"
+            className="pointer-events-none block h-full w-full object-contain object-center"
             style={{
               imageRendering: 'auto',
-              transform: `scale(${logoScale})`,
               opacity: faded ? 1 : 0,
-              transition: 'opacity 300ms ease, transform 300ms ease'
+              transition: 'opacity 300ms ease'
             }}
           />
         )
@@ -212,13 +210,16 @@ export const ChannelLogo = memo(function ChannelLogo({
     </span>
   )
 
-  // Context "cell" and "switcher": 56 × 56 plate (Addendum 4 §2/§5)
+  // Context "cell" and "switcher": 56 × 56 plate with safe-zone padding and dynamic contrast
   if (isCell) {
+    const isDark = !showMonogram && isDarkLogo
     return (
       <span
         className={cn(
-          'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px]',
-          'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
+          'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] p-2 transition-colors duration-200',
+          isDark
+            ? 'border border-white/20 bg-white/95 shadow-inner'
+            : 'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
           className
         )}
       >

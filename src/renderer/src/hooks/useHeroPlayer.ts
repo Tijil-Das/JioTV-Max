@@ -151,16 +151,10 @@ export function useHeroPlayer({
         if (!slot.firstFrame) {
           slot.firstFrame = true
           const outgoing = index === 0 ? 1 : 0
-          const outgoingLoaded = slotsRef.current[outgoing].hls !== null
           activeSlotRef.current = index
-          setOpacity(index === 0 ? [1, outgoingLoaded ? 1 : 0] : [outgoingLoaded ? 1 : 0, 1])
-          const duration = everPlayedRef.current ? 400 : 500
+          setOpacity(index === 0 ? [1, 0] : [0, 1])
           everPlayedRef.current = true
-          slot.revealTimer = window.setTimeout(() => {
-            slot.revealTimer = null
-            setOpacity(index === 0 ? [1, 0] : [0, 1])
-            if (outgoingLoaded) destroySlot(outgoing)
-          }, duration)
+          destroySlot(outgoing)
         }
         if (video.requestVideoFrameCallback) {
           video.requestVideoFrameCallback(() => trackFrame())
@@ -233,7 +227,10 @@ export function useHeroPlayer({
       const timer = window.setTimeout(() => destroySlot(outgoing), 400)
       return () => window.clearTimeout(timer)
     }
-    const incoming = activeSlotRef.current === 0 ? 1 : 0
+    const outgoing = activeSlotRef.current
+    const incoming = outgoing === 0 ? 1 : 0
+    destroySlot(outgoing)
+    setOpacity([0, 0])
     loadSlot(incoming, stream, channelId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream?.url, channelId, enabled, destroyAll, loadSlot, destroySlot])

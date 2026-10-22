@@ -288,6 +288,7 @@ export function Hero(): JSX.Element {
   // ---- Interaction ---------------------------------------------------------
   const select = useCallback((id: string) => {
     setUserPaused(false)
+    setActiveStream(null)
     setActiveId(id)
   }, [])
 
@@ -443,8 +444,8 @@ export function Hero(): JSX.Element {
                 ) : null}
               </div>
 
-              {/* A/B video slots: max two hls instances, crossfade, full contain */}
-              <div className="absolute inset-0" aria-hidden>
+              {/* A/B video slots: padded from top, sides and bottom */}
+              <div className="absolute inset-0 pt-[72px] pb-6 px-6 md:px-10" aria-hidden>
                 {[0, 1].map((slot) => (
                   <video
                     key={slot}
@@ -456,24 +457,24 @@ export function Hero(): JSX.Element {
                     disableRemotePlayback
                     tabIndex={-1}
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
+                    className="pointer-events-none h-full w-full object-contain object-center"
                     style={{
                       opacity: opacity[slot],
-                      transition: 'opacity 500ms ease'
+                      transition: 'opacity 300ms ease'
                     }}
                   />
                 ))}
               </div>
 
-              {/* Scrims: brighten up (fade to 20% opacity) on hero hover */}
+              {/* Scrims: brighten up on hover without wiping out the vignette effect */}
               <div
-                className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300 ease-out group-hover/hero:opacity-20"
+                className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300 ease-out group-hover/hero:opacity-60"
                 aria-hidden
               >
                 <div
-                  className="absolute inset-x-0 top-0 h-[100px]"
+                  className="absolute inset-x-0 top-0 h-[120px]"
                   style={{
-                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)'
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)'
                   }}
                 />
                 <div
@@ -484,10 +485,17 @@ export function Hero(): JSX.Element {
                   }}
                 />
                 <div
-                  className="absolute inset-x-0 bottom-0 h-[180px]"
+                  className="absolute inset-x-0 bottom-0 h-[200px]"
                   style={{
                     background:
                       'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)'
+                  }}
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.65) 100%)'
                   }}
                 />
                 <div className="absolute inset-0 bg-black/10" />

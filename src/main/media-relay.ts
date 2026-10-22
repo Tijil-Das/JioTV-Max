@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import sharp from 'sharp'
 import { PLAYER_UA, withHdneaCookie } from './jio-headers'
 
 /**
@@ -838,7 +839,7 @@ export class MediaRelay {
       return
     }
 
-    // /logo — proxy Jio's channel logo CDN images to avoid CORS.
+    // /logo — proxy Jio's channel logo CDN images to avoid CORS and normalize dimensions with sharp.
     // Accepts ?url=<full_url> or ?file=<filename> (bare name like "Colors_HD.png")
     if (url.pathname === '/logo') {
       const logoUrl = url.searchParams.get('url') || ''
@@ -861,15 +862,36 @@ export class MediaRelay {
             'Referer': 'https://jiotv.com/'
           }
         })
-        const body = Buffer.from(await upstream.arrayBuffer())
-        const ct = upstream.headers.get('content-type') || 'image/png'
-        res.writeHead(upstream.ok ? 200 : 404, {
+        if (!upstream.ok) {
+          res.writeHead(upstream.status, CORS_HEADERS)
+          res.end('Logo not found')
+          return
+        }
+
+        const originalBuffer = Buffer.from(await upstream.arrayBuffer())
+        let finalBuffer = originalBuffer
+        let contentType = 'image/png'
+
+        try {
+          finalBuffer = await sharp(originalBuffer)
+            .resize(256, 256, {
+              fit: 'contain',
+              background: { r: 0, g: 0, b: 0, alpha: 0 }
+            })
+            .png()
+            .toBuffer()
+        } catch (normErr) {
+          console.warn('[MediaRelay] sharp normalization skipped/failed:', normErr)
+          contentType = upstream.headers.get('content-type') || 'image/png'
+        }
+
+        res.writeHead(200, {
           ...CORS_HEADERS,
-          'Content-Type': ct,
+          'Content-Type': contentType,
           'Cache-Control': 'public, max-age=86400',
-          'Content-Length': String(body.length)
+          'Content-Length': String(finalBuffer.length)
         })
-        res.end(body)
+        res.end(finalBuffer)
       } catch (err) {
         res.writeHead(502, CORS_HEADERS)
         res.end('Logo fetch failed')

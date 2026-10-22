@@ -8,6 +8,9 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/ensure-castlabs.mjs",
+    "prepare": "node scripts/ensure-castlabs.mjs",
+    "setup:wv": "node scripts/ensure-castlabs.mjs",
+    "predev:wv": "node scripts/ensure-castlabs.mjs",
     "dev": "electron-vite dev",
     "dev:wv": "node scripts/dev-wv.mjs",
     "dev:web": "vite --config vite.web.config.ts --port 5173",

@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Heart, Lock, Play } from 'lucide-react'
+import { Heart } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
@@ -27,7 +27,6 @@ interface ChannelCardProps {
  * Size: --tile: clamp(144px, 11.6vw, 176px). 1:1, radius 16px.
  * Plate: fill #0E0E10, 1px rgba(255,255,255,0.07) border.
  * Number chip: 20px tall, padding 0 7px, radius 6px, fill rgba(255,255,255,0.10).
- * Premium channels show a 10px lock glyph at 70% opacity inside the chip.
  * Hover scale applies to whole tile only. Logo is never scaled separately.
  */
 export const ChannelCard = memo(function ChannelCard({
@@ -85,19 +84,8 @@ export const ChannelCard = memo(function ChannelCard({
           </div>
 
           {/* Number chip (top-left, inset 8px): 20px tall, padding 0 7px, radius 6px */}
-          <span className="pointer-events-none absolute left-2 top-2 z-20 flex h-5 items-center gap-1 rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.10)] px-[7px] font-sans text-[12px] font-[650] tabular-nums leading-none text-[#F4F4F5]">
+          <span className="pointer-events-none absolute left-2 top-2 z-20 flex h-5 items-center rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.10)] px-[7px] font-sans text-[12px] font-[650] tabular-nums leading-none text-[#F4F4F5]">
             <span>{channel.number}</span>
-            {channel.isPremium ? (
-              <Lock className="h-[10px] w-[10px] opacity-70" aria-label="Premium lock" />
-            ) : null}
-          </span>
-
-          {/* Hover play affordance (bottom-right, inset 8px, 32px solid white circle) */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white text-black opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-          >
-            <Play className="ml-[1px] h-3.5 w-3.5 fill-black" strokeWidth={0} />
           </span>
 
           {/* EPG progress line (bottom edge) */}

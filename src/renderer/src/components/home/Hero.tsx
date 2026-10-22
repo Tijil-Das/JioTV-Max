@@ -11,7 +11,6 @@ import { useHeroPlayer } from '@/hooks/useHeroPlayer'
 import { channelService } from '@/services/channelService'
 import {
   featuredService,
-  loadHeroLast,
   saveHeroLast,
   type HeroCandidate
 } from '@/services/featuredService'
@@ -183,8 +182,7 @@ export function Hero(): JSX.Element {
     }
     setActiveId((previous) => {
       if (previous && verifiedOrdered.includes(previous)) return previous
-      const remembered = loadHeroLast().find((id) => verifiedOrdered.includes(id))
-      return remembered ?? verifiedOrdered[0]
+      return verifiedOrdered[0]
     })
     saveHeroLast(verifiedOrdered)
   }, [verifiedKey])

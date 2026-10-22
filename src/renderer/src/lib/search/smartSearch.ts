@@ -1,10 +1,10 @@
-import type { Channel, Program } from '@shared/types'
+import type { Channel, ChannelCategory, ChannelQuality, Program } from '@shared/types'
 
 // ---------------------------------------------------------------------------
 // Dictionaries: Numbers, Words, Roman Numerals, Acronyms, and Categories
 // ---------------------------------------------------------------------------
 
-const NUMBER_WORD_MAP: Record<string, string> = {
+export const NUMBER_WORD_MAP: Record<string, string> = {
   zero: '0',
   one: '1',
   first: '1',
@@ -42,7 +42,7 @@ const NUMBER_WORD_MAP: Record<string, string> = {
   twentyfour: '24'
 }
 
-const DIGIT_TO_WORDS: Record<string, string[]> = {
+export const DIGIT_TO_WORDS: Record<string, string[]> = {
   '0': ['zero'],
   '1': ['one', 'first', 'i'],
   '2': ['two', 'second', 'ii'],
@@ -61,7 +61,7 @@ const DIGIT_TO_WORDS: Record<string, string[]> = {
 }
 
 /** Common Indian broadcast channel shortcodes and acronyms. */
-const ACRONYM_MAP: Record<string, string[]> = {
+export const ACRONYM_MAP: Record<string, string[]> = {
   ss1: ['star', 'sports', '1'],
   ss2: ['star', 'sports', '2'],
   ss3: ['star', 'sports', '3'],
@@ -88,23 +88,133 @@ const ACRONYM_MAP: Record<string, string[]> = {
 }
 
 /** Category and genre colloquial search synonyms. */
-const CATEGORY_SYNONYMS: Record<string, string[]> = {
-  sports: ['sport', 'khel', 'cricket', 'football', 'wrestling', 'match', 'game'],
-  news: ['samachar', 'khabar', 'bulletin', 'media', 'headlines'],
-  movies: ['movie', 'cinema', 'film', 'filam', 'picture', 'talkies'],
-  music: ['songs', 'song', 'gaana', 'gaan', 'sangeet', 'tracks'],
-  kids: ['cartoon', 'bachhe', 'bachpan', 'anime'],
-  entertainment: ['drama', 'serial', 'serials', 'show', 'shows', 'dailysoap'],
-  lifestyle: ['food', 'travel', 'living', 'cooking'],
-  infotainment: ['knowledge', 'wildlife', 'science', 'nature', 'documentary'],
-  devotional: ['bhakti', 'spiritual', 'puja', 'darshan', 'prayer', 'bhajan']
+export const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  sports: [
+    'sport',
+    'khel',
+    'cricket',
+    'football',
+    'wrestling',
+    'match',
+    'game',
+    'kabaddi',
+    'isl',
+    'ipl',
+    'wpl',
+    'tennis',
+    'badminton',
+    'wwe',
+    'raw',
+    'smackdown',
+    'f1',
+    'racing',
+    'athletics'
+  ],
+  news: [
+    'samachar',
+    'khabar',
+    'bulletin',
+    'media',
+    'headlines',
+    'breaking',
+    'taza',
+    'business',
+    'market',
+    'stock',
+    'bizz',
+    'politics',
+    'debate'
+  ],
+  movies: [
+    'movie',
+    'cinema',
+    'film',
+    'filam',
+    'picture',
+    'talkies',
+    'action',
+    'thriller',
+    'blockbuster',
+    'bollywood',
+    'hollywood',
+    'tollywood'
+  ],
+  music: [
+    'songs',
+    'song',
+    'gaana',
+    'gaan',
+    'sangeet',
+    'tracks',
+    'geet',
+    'dhun',
+    'beats',
+    'pop',
+    'rock',
+    'dj',
+    'hits'
+  ],
+  kids: [
+    'cartoon',
+    'bachhe',
+    'bachpan',
+    'anime',
+    'animation',
+    'pogo',
+    'disney',
+    'hungama',
+    'chhota',
+    'bheem',
+    'motu',
+    'patlu'
+  ],
+  entertainment: [
+    'drama',
+    'serial',
+    'serials',
+    'show',
+    'shows',
+    'dailysoap',
+    'natak',
+    'kahani',
+    'dharavahik',
+    'comedy',
+    'reality'
+  ],
+  lifestyle: ['food', 'travel', 'living', 'cooking', 'khana', 'rasoi', 'recipe', 'fashion', 'health'],
+  infotainment: [
+    'knowledge',
+    'wildlife',
+    'science',
+    'nature',
+    'documentary',
+    'discovery',
+    'animal',
+    'planet',
+    'history',
+    'space'
+  ],
+  devotional: [
+    'bhakti',
+    'spiritual',
+    'puja',
+    'darshan',
+    'prayer',
+    'bhajan',
+    'aarti',
+    'katha',
+    'satsang',
+    'gurbani',
+    'islamic',
+    'christian'
+  ]
 }
 
 /** Language aliases and abbreviations. */
-const LANGUAGE_ALIASES: Record<string, string[]> = {
-  hindi: ['hin', 'hind'],
-  english: ['eng'],
-  tamil: ['tam'],
+export const LANGUAGE_ALIASES: Record<string, string[]> = {
+  hindi: ['hin', 'hind', 'hindustani'],
+  english: ['eng', 'angrezi'],
+  tamil: ['tam', 'thamizh'],
   telugu: ['tel'],
   kannada: ['kan'],
   malayalam: ['mal'],
@@ -118,29 +228,248 @@ const LANGUAGE_ALIASES: Record<string, string[]> = {
   oriya: ['odia', 'ori']
 }
 
+/** Broadcaster network and media group mapping. */
+export const BROADCASTER_NETWORKS: Record<
+  string,
+  { aliases: string[]; channelKeywords: string[] }
+> = {
+  sony: {
+    aliases: ['sony', 'spni', 'sony pictures', 'culver max'],
+    channelKeywords: ['sony', 'sab', 'max', 'pal', 'yay', 'wah', 'pix', 'ten', 'earth']
+  },
+  star: {
+    aliases: ['star', 'disney star', 'disney', 'star india'],
+    channelKeywords: [
+      'star',
+      'plus',
+      'bharat',
+      'gold',
+      'utsav',
+      'sports',
+      'jalsha',
+      'pravah',
+      'vijay',
+      'maa',
+      'suvarna',
+      'asianet',
+      'hungama',
+      'disney'
+    ]
+  },
+  zee: {
+    aliases: ['zee', 'essel', 'zee entertainment'],
+    channelKeywords: [
+      'zee',
+      'cinema',
+      'talkies',
+      'chitramandir',
+      'zing',
+      'zest',
+      'cafe',
+      'andtv',
+      '&tv',
+      'andpictures',
+      '&pictures',
+      '&flix',
+      '&xplor'
+    ]
+  },
+  colors: {
+    aliases: ['colors', 'viacom', 'viacom18', 'network18', 'tv18'],
+    channelKeywords: [
+      'colors',
+      'rishtey',
+      'cineplex',
+      'mtv',
+      'beats',
+      'vh1',
+      'nickelodeon',
+      'nick',
+      'sonic',
+      'comedy central',
+      'news18',
+      'cnbc',
+      'cnn news18'
+    ]
+  },
+  times: {
+    aliases: ['times', 'times network', 'bennett coleman'],
+    channelKeywords: ['times now', 'et now', 'mirror now', 'zoom']
+  },
+  indiatoday: {
+    aliases: ['india today', 'tv today', 'aaj tak'],
+    channelKeywords: ['aaj tak', 'india today', 'good news today', 'tez']
+  },
+  ndtv: {
+    aliases: ['ndtv'],
+    channelKeywords: ['ndtv']
+  },
+  dd: {
+    aliases: ['dd', 'doordarshan', 'prasar bharati'],
+    channelKeywords: [
+      'dd',
+      'doordarshan',
+      'national',
+      'news',
+      'sports',
+      'bharati',
+      'kisan',
+      'retro',
+      'urdu',
+      'india',
+      'yadagiri',
+      'saptagiri',
+      'chandana',
+      'sahyadri'
+    ]
+  },
+  sun: {
+    aliases: ['sun', 'sun network', 'sun tv network'],
+    channelKeywords: ['sun', 'ktv', 'gemini', 'surya', 'udaya']
+  },
+  etv: {
+    aliases: ['etv', 'eenadu'],
+    channelKeywords: ['etv']
+  },
+  abp: {
+    aliases: ['abp', 'abp network'],
+    channelKeywords: ['abp']
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Known TV vocabulary for compound word splitting (e.g. "sonythree" -> "sony three")
 // ---------------------------------------------------------------------------
 
 const KNOWN_WORDS: string[] = [
   // Numbers
-  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'eleven', 'twelve', 'eighteen', 'twentyfour',
-  'first', 'second', 'third', 'fourth', 'fifth',
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'eighteen',
+  'twentyfour',
+  'first',
+  'second',
+  'third',
+  'fourth',
+  'fifth',
   // Quality
-  'hd', 'sd', 'fhd', 'uhd', '4k',
+  'hd',
+  'sd',
+  'fhd',
+  'uhd',
+  '4k',
   // Common TV brands & terms
-  'sony', 'star', 'zee', 'colors', 'sports', 'sport', 'ten', 'max', 'sab', 'pal', 'yay',
-  'wah', 'cinemax', 'cinema', 'cineplex', 'movies', 'movie', 'film', 'filam', 'music',
-  'news', 'khabar', 'samachar', 'india', 'today', 'ndtv', 'abp', 'aaj', 'tak', 'tez',
-  'dd', 'doordarshan', 'national', 'bharati', 'urdu', 'punjabi', 'bengali', 'bangla',
-  'marathi', 'gujarati', 'tamil', 'telugu', 'kannada', 'malayalam', 'bhojpuri', 'oriya',
-  'plus', 'gold', 'bharat', 'utsav', 'action', 'classic', 'jalwa', 'mastiii', 'zoom',
-  'zing', 'pogo', 'cartoon', 'network', 'hungama', 'disney', 'nick', 'sonic', 'discovery',
-  'animal', 'planet', 'nat', 'geo', 'geographic', 'tlc', 'history', 'travel', 'food',
-  'living', 'lifestyle', 'tv', 'enter', 'entertainment', 'rishtey', 'ananda', 'majha',
-  'asmit', 'asmita', 'ganga', 'sanjha', 'bharatvarsh', 'bizz', 'prime', 'times', 'now',
-  'et', 'mirror', 'cnbc', 'aawaz', 'bazaar', 'wion', 'republic', 'live', 'super', 'select'
+  'sony',
+  'star',
+  'zee',
+  'colors',
+  'sports',
+  'sport',
+  'ten',
+  'max',
+  'sab',
+  'pal',
+  'yay',
+  'wah',
+  'cinemax',
+  'cinema',
+  'cineplex',
+  'movies',
+  'movie',
+  'film',
+  'filam',
+  'music',
+  'news',
+  'khabar',
+  'samachar',
+  'india',
+  'today',
+  'ndtv',
+  'abp',
+  'aaj',
+  'tak',
+  'tez',
+  'dd',
+  'doordarshan',
+  'national',
+  'bharati',
+  'urdu',
+  'punjabi',
+  'bengali',
+  'bangla',
+  'marathi',
+  'gujarati',
+  'tamil',
+  'telugu',
+  'kannada',
+  'malayalam',
+  'bhojpuri',
+  'oriya',
+  'plus',
+  'gold',
+  'bharat',
+  'utsav',
+  'action',
+  'classic',
+  'jalwa',
+  'mastiii',
+  'zoom',
+  'zing',
+  'pogo',
+  'cartoon',
+  'network',
+  'hungama',
+  'disney',
+  'nick',
+  'sonic',
+  'discovery',
+  'animal',
+  'planet',
+  'nat',
+  'geo',
+  'geographic',
+  'tlc',
+  'history',
+  'travel',
+  'food',
+  'living',
+  'lifestyle',
+  'tv',
+  'enter',
+  'entertainment',
+  'rishtey',
+  'ananda',
+  'majha',
+  'asmit',
+  'asmita',
+  'ganga',
+  'sanjha',
+  'bharatvarsh',
+  'bizz',
+  'prime',
+  'times',
+  'now',
+  'et',
+  'mirror',
+  'cnbc',
+  'aawaz',
+  'bazaar',
+  'wion',
+  'republic',
+  'live',
+  'super',
+  'select'
 ]
 
 const KNOWN_WORDS_SET = new Set(KNOWN_WORDS)
@@ -187,7 +516,7 @@ export function splitCompoundWords(token: string): string[] {
 /**
  * Returns true if needle characters appear in haystack in sequential order.
  */
-function isSubsequence(needle: string, haystack: string): boolean {
+export function isSubsequence(needle: string, haystack: string): boolean {
   if (!needle || !haystack) return false
   let nIdx = 0
   for (let hIdx = 0; hIdx < haystack.length && nIdx < needle.length; hIdx++) {
@@ -228,37 +557,85 @@ export function tokenize(text: string): string[] {
 }
 
 /**
- * Standard Levenshtein distance for fuzzy typo matching.
+ * Damerau-Levenshtein distance for fuzzy typo matching with transposition support.
+ * Treats swapped adjacent characters (e.g. "snoy" -> "sony", "stra" -> "star") as 1 operation.
  */
-function levenshtein(a: string, b: string): number {
-  if (Math.abs(a.length - b.length) > 2) return 99
+export function damerauLevenshtein(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a) return b.length
+  if (!b) return a.length
+  if (Math.abs(a.length - b.length) > 3) return 99
+
   const m = a.length
   const n = b.length
-  const d: number[] = new Array(n + 1).fill(0)
-  for (let j = 0; j <= n; j++) d[j] = j
+  const d: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+
+  for (let i = 0; i <= m; i++) d[i][0] = i
+  for (let j = 0; j <= n; j++) d[0][j] = j
 
   for (let i = 1; i <= m; i++) {
-    let prev = d[0]
-    d[0] = i
     for (let j = 1; j <= n; j++) {
-      const temp = d[j]
-      if (a[i - 1] === b[j - 1]) {
-        d[j] = prev
-      } else {
-        d[j] = Math.min(prev + 1, d[j] + 1, d[j - 1] + 1)
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1, // deletion
+        d[i][j - 1] + 1, // insertion
+        d[i - 1][j - 1] + cost // substitution
+      )
+      // Transposition
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + cost)
       }
-      prev = temp
     }
   }
-  return d[n]
+
+  return d[m][n]
 }
 
 /**
- * Tests if a query token matches a channel token.
- * Handles exact matches, number-word equivalences ("10" <-> "ten", "3" <-> "three"),
- * prefixes ("son" -> "sony"), and typo tolerance.
+ * Generates a phonetic sound-alike representation for Indian TV queries.
+ * Normalizes common vowel elongations, consonant variations, and suffixes.
+ * (e.g. "soni" -> "sn", "sony" -> "sn", "staar" -> "str", "zeee" -> "s", "kalars" -> "klrs").
  */
-function matchToken(
+export function phoneticKey(word: string): string {
+  if (!word) return ''
+  let s = word.toLowerCase().trim()
+  s = s.replace(/ph/g, 'f')
+  s = s.replace(/kh/g, 'k')
+  s = s.replace(/gh/g, 'g')
+  s = s.replace(/sh/g, 's')
+  s = s.replace(/ch/g, 'c')
+  s = s.replace(/ee/g, 'i')
+  s = s.replace(/oo/g, 'u')
+  s = s.replace(/ou/g, 'u')
+  s = s.replace(/ai/g, 'e')
+  s = s.replace(/ay/g, 'e')
+  s = s.replace(/ck/g, 'k')
+  s = s.replace(/qu/g, 'k')
+  s = s.replace(/c(?=[eiy])/g, 's')
+  s = s.replace(/c/g, 'k')
+  s = s.replace(/q/g, 'k')
+  s = s.replace(/x/g, 'ks')
+  s = s.replace(/z/g, 's')
+  s = s.replace(/j/g, 'z')
+  s = s.replace(/[yw]$/g, 'i')
+  // Collapse duplicate letters: "staar" -> "star"
+  s = s.replace(/(.)\1+/g, '$1')
+  // Remove vowels after the first character
+  if (s.length > 1) {
+    const first = s[0]
+    const rest = s.slice(1).replace(/[aeiou]/g, '')
+    s = first + rest
+  }
+  return s
+}
+
+/**
+ * Tests if a query token matches a target token.
+ * Handles exact matches, number-word equivalences ("10" <-> "ten", "3" <-> "three"),
+ * phonetic sound-alikes ("soni" <-> "sony"), prefixes ("son" -> "sony"),
+ * and Damerau-Levenshtein typo tolerance.
+ */
+export function matchToken(
   qToken: string,
   cToken: string
 ): { matched: boolean; score: number } {
@@ -268,7 +645,6 @@ function matchToken(
   }
 
   // 2. Number-to-word and word-to-number equivalence
-  // e.g. "10" matches "ten", "three" matches "3", "3" matches "three"
   const qNum = NUMBER_WORD_MAP[qToken] ?? qToken
   const cNum = NUMBER_WORD_MAP[cToken] ?? cToken
   if (
@@ -281,15 +657,24 @@ function matchToken(
     return { matched: true, score: 95 }
   }
 
-  // 3. Prefix matching (e.g. "son" in "sony", "star" in "starsports")
+  // 3. Phonetic match (sound-alike)
+  if (qToken.length >= 3 && cToken.length >= 3) {
+    const qKey = phoneticKey(qToken)
+    const cKey = phoneticKey(cToken)
+    if (qKey.length >= 2 && qKey === cKey) {
+      return { matched: true, score: 90 }
+    }
+  }
+
+  // 4. Prefix matching (e.g. "son" in "sony", "star" in "starsports")
   if (qToken.length >= 2 && cToken.startsWith(qToken)) {
     const ratio = qToken.length / cToken.length
     return { matched: true, score: 75 + Math.round(ratio * 20) }
   }
 
-  // 4. Typo tolerance (1 typo for 4-6 chars, 2 typos for 7+ chars)
-  if (qToken.length >= 4 && cToken.length >= 4) {
-    const dist = levenshtein(qToken, cToken)
+  // 5. Typo tolerance with Damerau-Levenshtein (transposition support)
+  if (qToken.length >= 3 && cToken.length >= 3) {
+    const dist = damerauLevenshtein(qToken, cToken)
     const maxAllowed = qToken.length >= 7 ? 2 : 1
     if (dist <= maxAllowed) {
       return { matched: true, score: 65 - dist * 15 }
@@ -297,6 +682,86 @@ function matchToken(
   }
 
   return { matched: false, score: 0 }
+}
+
+// ---------------------------------------------------------------------------
+// Structured Filter Parsing
+// ---------------------------------------------------------------------------
+
+export interface ParsedFilters {
+  cleanQuery: string
+  targetChannelNumber?: string
+  language?: string
+  category?: ChannelCategory
+  quality?: ChannelQuality
+  isLive?: boolean
+  isPremium?: boolean
+  broadcaster?: string
+}
+
+/**
+ * Extracts structured prefix parameters from query (e.g. "ch:162", "lang:hindi", "cat:sports", "quality:hd").
+ * Also detects natural channel number indicators like "ch 162", "channel 162", "#162".
+ */
+export function parseQueryFilters(rawQuery: string): ParsedFilters {
+  let clean = rawQuery.trim().toLowerCase()
+  const result: ParsedFilters = { cleanQuery: clean }
+
+  // 1. Channel number prefix forms: "ch 162", "channel 162", "#162", "ch:162", "no 162"
+  const chNumberRegex = /^(?:ch(?:annel)?|no|number|#)[\s:]*(\d+)$/i
+  const chMatch = clean.match(chNumberRegex)
+  if (chMatch) {
+    result.targetChannelNumber = chMatch[1]
+    result.cleanQuery = chMatch[1]
+    return result
+  }
+
+  // 2. Inline channel number tags: "ch:162" or "channel:162"
+  clean = clean.replace(/\b(?:ch|channel|number):(\d+)\b/gi, (_, num) => {
+    result.targetChannelNumber = num
+    return ''
+  })
+
+  // 3. Language tag: "lang:hindi" or "language:tamil"
+  clean = clean.replace(/\b(?:lang|language):([a-z]+)\b/gi, (_, lang) => {
+    result.language = lang
+    return ''
+  })
+
+  // 4. Category tag: "cat:sports", "category:news", "genre:movies"
+  clean = clean.replace(/\b(?:cat|category|genre):([a-z]+)\b/gi, (_, cat) => {
+    result.category = cat as ChannelCategory
+    return ''
+  })
+
+  // 5. Quality tag: "quality:hd", "q:4k"
+  clean = clean.replace(/\b(?:quality|q):(hd|sd|fhd|4k)\b/gi, (_, q) => {
+    result.quality = q.toUpperCase() as ChannelQuality
+    return ''
+  })
+
+  // 6. Live / Premium tags: "is:live", "is:premium", "is:free"
+  if (/\bis:live\b/i.test(clean)) {
+    result.isLive = true
+    clean = clean.replace(/\bis:live\b/gi, '')
+  }
+  if (/\bis:premium\b/i.test(clean)) {
+    result.isPremium = true
+    clean = clean.replace(/\bis:premium\b/gi, '')
+  }
+  if (/\bis:free\b/i.test(clean)) {
+    result.isPremium = false
+    clean = clean.replace(/\bis:free\b/gi, '')
+  }
+
+  // 7. Broadcaster tag: "net:sony", "network:star"
+  clean = clean.replace(/\b(?:net|network|broadcaster):([a-z0-9]+)\b/gi, (_, net) => {
+    result.broadcaster = net
+    return ''
+  })
+
+  result.cleanQuery = clean.trim().replace(/\s+/g, ' ')
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -309,55 +774,142 @@ export interface ScoredChannel {
   matchedReason?: string
 }
 
+export interface SmartSearchOptions {
+  category?: ChannelCategory | 'all'
+  language?: string
+  quality?: ChannelQuality | 'all'
+  isPremium?: boolean
+  isLive?: boolean
+  includeUpcomingHours?: number
+  limit?: number
+  boostFavorites?: string[]
+  boostRecent?: string[]
+}
+
+export interface ChannelScoreContext {
+  epgProgram?: Program
+  upcomingPrograms?: Program[]
+  now?: Date
+  options?: SmartSearchOptions
+}
+
+/**
+ * Formats a Date or ISO timestamp into a concise user-facing time (e.g. "8:30 PM").
+ */
+function formatShortTime(isoOrDate: string | Date): string {
+  try {
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Computes the smart search relevance score of a channel against user query.
+ * Backward compatible: contextOrEpg can be a single Program or a ChannelScoreContext object.
  */
 export function scoreChannel(
   channel: Channel,
   rawQuery: string,
-  epgProgram?: Program
+  contextOrEpg?: Program | ChannelScoreContext
 ): ScoredChannel {
   const query = rawQuery.trim().toLowerCase()
   if (!query) return { channel, score: 0 }
 
-  const queryTokens = tokenize(query)
-  if (queryTokens.length === 0) return { channel, score: 0 }
+  // Extract structured filters from query
+  const filters = parseQueryFilters(query)
+  const cleanQuery = filters.cleanQuery || query
+
+  // Normalize context
+  let currentProgram: Program | undefined
+  let upcomingPrograms: Program[] | undefined
+  let now = new Date()
+  let options: SmartSearchOptions | undefined
+
+  if (contextOrEpg) {
+    if ('title' in contextOrEpg && typeof contextOrEpg.title === 'string') {
+      currentProgram = contextOrEpg as Program
+    } else {
+      const ctx = contextOrEpg as ChannelScoreContext
+      currentProgram = ctx.epgProgram
+      upcomingPrograms = ctx.upcomingPrograms
+      if (ctx.now) now = ctx.now
+      options = ctx.options
+    }
+  }
+
+  // Apply hard filters if requested in options
+  if (options?.category && options.category !== 'all' && channel.category !== options.category) {
+    return { channel, score: 0 }
+  }
+  if (options?.language && channel.language.toLowerCase() !== options.language.toLowerCase()) {
+    return { channel, score: 0 }
+  }
+  if (options?.quality && options.quality !== 'all') {
+    const hasQuality = channel.quality?.some((q) => q.toUpperCase() === options!.quality)
+    if (!hasQuality) return { channel, score: 0 }
+  }
+  if (options?.isPremium !== undefined && channel.isPremium !== options.isPremium) {
+    return { channel, score: 0 }
+  }
+  if (options?.isLive !== undefined && channel.isLive !== options.isLive) {
+    return { channel, score: 0 }
+  }
+
+  const queryTokens = tokenize(cleanQuery)
+  if (queryTokens.length === 0 && !filters.targetChannelNumber) {
+    return { channel, score: 0 }
+  }
 
   let score = 0
   let matchedReason: string | undefined
 
   const channelNumberStr = channel.number.toString()
   const channelNameTokens = tokenize(channel.name)
+  const channelDescTokens = channel.description ? tokenize(channel.description) : []
   const channelLangTokens = tokenize(channel.language || '')
   const channelCatTokens = tokenize(channel.category || '')
-  const programTokens = epgProgram ? tokenize(epgProgram.title) : []
+  const currentProgTokens = currentProgram ? tokenize(currentProgram.title) : []
+  const currentDescTokens = currentProgram?.description ? tokenize(currentProgram.description) : []
 
-  // Check if query is purely numeric (channel number search)
-  const isNumericQuery = /^\d+$/.test(query)
-  if (isNumericQuery) {
-    if (channelNumberStr === query) {
-      // Direct exact channel number match -> top priority
+  // Track multi-parameter matched dimensions for synergy scoring
+  const matchedDimensions = new Set<'number' | 'name' | 'language' | 'category' | 'quality' | 'broadcaster' | 'epg'>()
+
+  // -------------------------------------------------------------------------
+  // 1. Channel Number Matching
+  // -------------------------------------------------------------------------
+  const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : undefined)
+  if (targetNum) {
+    if (channelNumberStr === targetNum) {
       score += 2000
       matchedReason = `Channel ${channel.number}`
-    } else if (channelNumberStr.startsWith(query)) {
-      score += 1200 - (channelNumberStr.length - query.length) * 50
+      matchedDimensions.add('number')
+    } else if (channelNumberStr.startsWith(targetNum)) {
+      score += 1200 - (channelNumberStr.length - targetNum.length) * 50
+      matchedDimensions.add('number')
     }
   }
 
-  // Exact full name match
+  // -------------------------------------------------------------------------
+  // 2. Exact & Prefix Name Matching
+  // -------------------------------------------------------------------------
   const rawCleanName = channel.name.toLowerCase().trim()
-  if (rawCleanName === query) {
+  if (rawCleanName === cleanQuery) {
     score += 1500
     matchedReason = 'Exact name match'
-  } else if (rawCleanName.startsWith(query)) {
+    matchedDimensions.add('name')
+  } else if (rawCleanName.startsWith(cleanQuery)) {
     score += 1100
+    matchedDimensions.add('name')
   }
 
-  // Check acronym expansion (e.g. user typed "ss1" or "st3")
-  const acronymExpansion = ACRONYM_MAP[query]
+  // -------------------------------------------------------------------------
+  // 3. Acronym & Token Matching against Channel Name
+  // -------------------------------------------------------------------------
+  const acronymExpansion = ACRONYM_MAP[cleanQuery]
   const effectiveQueryTokens = acronymExpansion ?? queryTokens
 
-  // Match query tokens against channel name tokens
   let nameMatches = 0
   let nameMatchScoreTotal = 0
   let lastMatchedChannelIndex = -1
@@ -385,103 +937,234 @@ export function scoreChannel(
     }
   }
 
-  // If tokens matched in channel name:
   if (nameMatches > 0) {
+    matchedDimensions.add('name')
     const fractionMatched = nameMatches / effectiveQueryTokens.length
-    // Base name score
     score += nameMatchScoreTotal * 3 * fractionMatched
 
-    // Bonus if ALL query tokens matched channel name tokens
-    // (e.g. "sony 3" matches "Sony Ten 3 HD", "sony 10 three" matches "Sony Ten 3 HD")
     if (nameMatches === effectiveQueryTokens.length) {
       score += 600
-      // In-order sequence bonus
       if (inOrderCount === nameMatches) {
         score += 150
       }
     }
   }
 
-  // Collapsed substring and subsequence matching (e.g. "sony3" or "sonythree" in "sonyten3")
-  const collapsedQuery = queryTokens
-    .map((t) => NUMBER_WORD_MAP[t] ?? t)
-    .join('')
-  const collapsedChannel = channelNameTokens
-    .map((t) => NUMBER_WORD_MAP[t] ?? t)
-    .join('')
+  // -------------------------------------------------------------------------
+  // 4. Collapsed Substring and Subsequence Matching
+  // -------------------------------------------------------------------------
+  const collapsedQuery = queryTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
+  const collapsedChannel = channelNameTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
 
   if (collapsedQuery.length >= 3) {
     if (collapsedChannel.includes(collapsedQuery)) {
       score += 450
+      matchedDimensions.add('name')
     } else if (isSubsequence(collapsedQuery, collapsedChannel)) {
       score += 250
+      matchedDimensions.add('name')
     }
   }
 
-  // Match language tokens (e.g. "hindi", "tamil", "english")
+  // -------------------------------------------------------------------------
+  // 5. Broadcaster Network Intent
+  // -------------------------------------------------------------------------
+  const broadcasterTarget = filters.broadcaster
+  for (const [netKey, netData] of Object.entries(BROADCASTER_NETWORKS)) {
+    const isTarget =
+      broadcasterTarget === netKey ||
+      queryTokens.some((t) => netData.aliases.some((a) => a === t || matchToken(t, a).matched))
+    if (isTarget) {
+      const matchesNetwork = netData.channelKeywords.some((kw) => {
+        const kwTokens = kw.split(/\s+/)
+        return kwTokens.every((k) => channelNameTokens.some((ct) => ct === k || matchToken(k, ct).matched))
+      })
+      if (matchesNetwork) {
+        score += 260
+        matchedDimensions.add('broadcaster')
+        if (!matchedReason) matchedReason = `${netKey.toUpperCase()} Network`
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 6. Language Matching
+  // -------------------------------------------------------------------------
+  const targetLang = filters.language
   for (const qToken of queryTokens) {
     for (const [lang, aliases] of Object.entries(LANGUAGE_ALIASES)) {
-      if (qToken === lang || aliases.includes(qToken)) {
+      const isLangQuery = qToken === lang || aliases.includes(qToken) || targetLang === lang
+      if (isLangQuery) {
         if (channelLangTokens.some((t) => t === lang || aliases.includes(t))) {
-          score += 180
+          score += 200
+          matchedDimensions.add('language')
           if (!matchedReason) matchedReason = channel.language
         }
       }
     }
   }
 
-  // Match category / genre synonyms (e.g. "sports", "cricket", "news", "movie")
+  // -------------------------------------------------------------------------
+  // 7. Category and Genre Synonyms
+  // -------------------------------------------------------------------------
+  const targetCat = filters.category
   for (const qToken of queryTokens) {
     for (const [cat, syns] of Object.entries(CATEGORY_SYNONYMS)) {
-      if (qToken === cat || syns.includes(qToken)) {
+      const isCatQuery = qToken === cat || syns.includes(qToken) || targetCat === cat
+      if (isCatQuery) {
         if (channelCatTokens.some((t) => t === cat || syns.includes(t))) {
-          score += 140
+          score += 180
+          matchedDimensions.add('category')
           if (!matchedReason) matchedReason = channel.category
         }
       }
     }
   }
 
-  // Match currently running EPG program title (e.g. user searches for a show or live event)
-  if (programTokens.length > 0) {
-    let epgTokenMatches = 0
-    for (const qToken of queryTokens) {
-      for (const pToken of programTokens) {
-        const match = matchToken(qToken, pToken)
-        if (match.matched) {
-          epgTokenMatches += 1
-          score += match.score * 1.5
-          break
-        }
-      }
-    }
-    if (epgTokenMatches === queryTokens.length && queryTokens.length > 0) {
-      score += 350
-      matchedReason = epgProgram?.title
-    }
-  }
-
-  // Match quality intent: if user typed "hd", boost HD channels. If "sd", boost SD channels.
-  const wantsHD = queryTokens.includes('hd') || queryTokens.includes('fhd') || queryTokens.includes('4k')
-  const wantsSD = queryTokens.includes('sd')
+  // -------------------------------------------------------------------------
+  // 8. Quality Intent (HD / SD / 4K)
+  // -------------------------------------------------------------------------
+  const wantsHD =
+    filters.quality === 'HD' ||
+    filters.quality === '4K' ||
+    queryTokens.includes('hd') ||
+    queryTokens.includes('fhd') ||
+    queryTokens.includes('4k') ||
+    cleanQuery.includes('high definition')
+  const wantsSD =
+    filters.quality === 'SD' || queryTokens.includes('sd') || cleanQuery.includes('standard definition')
   const isHD =
     channel.quality?.some((q) => q.toUpperCase() === 'HD' || q.toUpperCase() === '4K') ||
     channel.name.toUpperCase().includes('HD')
 
   if (wantsHD) {
-    if (isHD) score += 120
-    else score -= 80
+    if (isHD) {
+      score += 150
+      matchedDimensions.add('quality')
+    } else {
+      score -= 80
+    }
   } else if (wantsSD) {
-    if (!isHD) score += 120
-    else score -= 80
+    if (!isHD) {
+      score += 150
+      matchedDimensions.add('quality')
+    } else {
+      score -= 80
+    }
   } else if (score > 0) {
     // Subtle tie-breaker preference for HD when not explicitly specified
     if (isHD) score += 15
   }
 
-  // Popularity / rank tie-breaker
+  // -------------------------------------------------------------------------
+  // 9. Multi-Parameter Synergy Bonus
+  // -------------------------------------------------------------------------
+  // When query satisfies multiple dimensions (e.g. Language + Category + Quality),
+  // compound the relevance score so highly targeted queries cleanly win.
+  if (matchedDimensions.size >= 3) {
+    score += 450
+  } else if (matchedDimensions.size === 2) {
+    score += 220
+  }
+
+  // -------------------------------------------------------------------------
+  // 10. EPG Program Matching (Current + Upcoming)
+  // -------------------------------------------------------------------------
+  if (currentProgram && currentProgTokens.length > 0) {
+    let epgTokenMatches = 0
+    let epgTokenScore = 0
+    for (const qToken of queryTokens) {
+      for (const pToken of currentProgTokens) {
+        const match = matchToken(qToken, pToken)
+        if (match.matched) {
+          epgTokenMatches += 1
+          epgTokenScore += match.score
+          break
+        }
+      }
+    }
+    if (epgTokenMatches > 0) {
+      const fraction = epgTokenMatches / queryTokens.length
+      score += epgTokenScore * 2 * fraction
+      if (epgTokenMatches === queryTokens.length) {
+        score += 400
+        matchedReason = `Live: ${currentProgram.title}`
+        matchedDimensions.add('epg')
+      }
+    }
+
+    // Match current program description keywords (teams, actors, players)
+    if (currentDescTokens.length > 0) {
+      let descMatches = 0
+      for (const qToken of queryTokens) {
+        if (currentDescTokens.some((dt) => dt === qToken || matchToken(qToken, dt).matched)) {
+          descMatches += 1
+        }
+      }
+      if (descMatches > 0) {
+        score += descMatches * 80
+        if (!matchedReason) matchedReason = `Live: ${currentProgram.title}`
+      }
+    }
+  }
+
+  // Search upcoming EPG programs (up to 4 hours ahead)
+  if (upcomingPrograms && upcomingPrograms.length > 0 && queryTokens.length > 0) {
+    const nowMs = now.getTime()
+    for (const prog of upcomingPrograms) {
+      const startMs = Date.parse(prog.start)
+      if (startMs > nowMs && startMs - nowMs <= 4 * 3600 * 1000) {
+        const pTokens = tokenize(prog.title)
+        let matches = 0
+        for (const qToken of queryTokens) {
+          if (pTokens.some((pt) => pt === qToken || matchToken(qToken, pt).matched)) {
+            matches += 1
+          }
+        }
+        if (matches === queryTokens.length) {
+          const minutesUntil = Math.max(0, (startMs - nowMs) / 60000)
+          const timeBonus = Math.max(80, 260 - Math.round(minutesUntil * 0.7))
+          score += timeBonus
+          if (!matchedReason) {
+            matchedReason = `Upcoming (${formatShortTime(prog.start)}): ${prog.title}`
+          }
+          break
+        }
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 11. Channel Description Matching
+  // -------------------------------------------------------------------------
+  if (channelDescTokens.length > 0 && queryTokens.length > 0) {
+    let descCount = 0
+    for (const qToken of queryTokens) {
+      if (channelDescTokens.some((ct) => ct === qToken || matchToken(qToken, ct).matched)) {
+        descCount += 1
+      }
+    }
+    if (descCount > 0) {
+      score += descCount * 60
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 12. Caller Options: Favorites & Recent Boosts
+  // -------------------------------------------------------------------------
+  if (options?.boostFavorites?.includes(channel.id)) {
+    score += 100
+  }
+  if (options?.boostRecent?.includes(channel.id)) {
+    score += 80
+  }
+
+  // -------------------------------------------------------------------------
+  // 13. Popularity & Viewers Tie-Breaker
+  // -------------------------------------------------------------------------
   if (score > 0) {
-    const popularity = channel.popularity ?? (channel.viewers ? Math.min(channel.viewers / 100, 20) : 0)
+    const popularity =
+      channel.popularity ?? (channel.viewers ? Math.min(channel.viewers / 100, 20) : 0)
     score += Math.min(popularity, 20)
   }
 
@@ -493,37 +1176,71 @@ export function scoreChannel(
  * - Number-word equivalence ("sony 10 three" -> "Sony Ten 3")
  * - Sub-token matching ("sony 3" -> "Sony Ten 3 HD")
  * - Acronym expansion ("ss1" -> "Star Sports 1", "st3" -> "Sony Ten 3")
- * - Typo tolerance ("soony" -> "sony")
- * - Channel number direct search ("154")
- * - Live EPG program title match ("wwe", "kapil sharma")
- * - Category / language semantics ("hindi sports", "news")
+ * - Damerau-Levenshtein typo tolerance with transpositions ("snoy" -> "sony")
+ * - Phonetic sound-alikes ("soni", "staar", "kolors", "zeee")
+ * - Direct & prefixed channel number search ("154", "ch 162", "#162")
+ * - Multi-parameter intent ("hindi sports hd", "tamil news")
+ * - Broadcaster network search ("sony sports", "viacom", "disney")
+ * - Live and upcoming EPG program search (with start times)
+ * - Structured query syntax ("lang:hindi", "cat:sports", "quality:hd")
+ * - Caller-level structured parameters and favorites/recent boosts
  */
 export function smartSearchChannels(
   query: string,
   channels: Channel[],
   epg: Record<string, Program[]> = {},
   now: Date = new Date(),
-  limit = 20
+  optionsOrLimit: SmartSearchOptions | number = 20
 ): Channel[] {
+  const scored = smartSearchWithDetails(query, channels, epg, now, optionsOrLimit)
+  const limit = typeof optionsOrLimit === 'number' ? optionsOrLimit : optionsOrLimit.limit ?? 20
+  return scored.slice(0, limit).map((s) => s.channel)
+}
+
+/**
+ * Detailed channel search returning scored results and matched reasons.
+ */
+export function smartSearchWithDetails(
+  query: string,
+  channels: Channel[],
+  epg: Record<string, Program[]> = {},
+  now: Date = new Date(),
+  optionsOrLimit: SmartSearchOptions | number = 20
+): ScoredChannel[] {
   const trimmed = query.trim()
   if (!trimmed) return []
 
+  const options: SmartSearchOptions | undefined =
+    typeof optionsOrLimit === 'number' ? undefined : optionsOrLimit
+
   const scored: ScoredChannel[] = []
+  const nowMs = now.getTime()
 
   for (const channel of channels) {
-    // Find current active program if EPG exists
     const programs = epg[channel.id]
     let currentProgram: Program | undefined
+    const upcomingPrograms: Program[] = []
+
     if (programs && programs.length > 0) {
-      const nowMs = now.getTime()
-      currentProgram = programs.find((p) => {
+      for (const p of programs) {
         const start = Date.parse(p.start)
         const end = Date.parse(p.end)
-        return nowMs >= start && nowMs <= end
-      })
+        if (nowMs >= start && nowMs <= end) {
+          currentProgram = p
+        } else if (start > nowMs) {
+          upcomingPrograms.push(p)
+        }
+      }
     }
 
-    const result = scoreChannel(channel, trimmed, currentProgram)
+    const context: ChannelScoreContext = {
+      epgProgram: currentProgram,
+      upcomingPrograms,
+      now,
+      options
+    }
+
+    const result = scoreChannel(channel, trimmed, context)
     if (result.score > 25) {
       scored.push(result)
     }
@@ -537,6 +1254,5 @@ export function smartSearchChannels(
     return a.channel.number - b.channel.number
   })
 
-  const results = scored.slice(0, limit).map((s) => s.channel)
-  return results
+  return scored
 }

@@ -219,25 +219,178 @@ export function epgScores(
 }
 
 function byNumber(a: HeroCandidate, b: HeroCandidate): number {
-  if (b.score !== a.score) return b.score - a.score
+  if (Math.abs(b.score - a.score) > 0.0001) return b.score - a.score
+  const categoryA = CATEGORY_PRIORITY[a.channel.category] ?? 9
+  const categoryB = CATEGORY_PRIORITY[b.channel.category] ?? 9
+  if (categoryA !== categoryB) return categoryA - categoryB
+
+  const promA = getChannelProminence(a.channel)
+  const promB = getChannelProminence(b.channel)
+  if (promA !== promB) return promB - promA
+
   if (a.channel.number !== b.channel.number) return a.channel.number - b.channel.number
   return a.channel.id.localeCompare(b.channel.id)
 }
 
-const MAJOR_NETWORKS_REGEX =
-  /sports\s*18|sony\s*ten|star\s*sports|dd\s*sports|eurosport|aaj\s*tak|ndtv|abp\s*news|india\s*today|republic|news\s*18\s*india|zee\s*news|times\s*now|wion|colors|star\s*plus|sony\s*sab|set\s*india|sony\s*entertainment|zee\s*tv|star\s*gold|sony\s*max|zee\s*cinema/i
+export const MARQUEE_SPORTS_REGEX =
+  /(sports\s*18|sony\s*(sports\s*)?ten|\bten\s*[1-5]\b|star\s*sports|dd\s*sports|eurosport)/i
+
+export const MARQUEE_NEWS_REGEX =
+  /(aaj\s*tak|ndtv|india\s*today|times\s*now|wion|cnn(-|\s*)news\s*18|republic|cnbc|abp\s*news|zee\s*news|bbc(\s*world)?\s*news)/i
+
+export const MARQUEE_FLAGSHIP_REGEX =
+  /(star\s*plus|colors|sony\s*sab|set(\s*india|\s*hd)?$|sony\s*entertainment|zee\s*tv|star\s*gold|sony\s*max|zee\s*cinema|&pictures|star\s*movies|movies\s*now)/i
+
+export const JUNK_CHANNEL_REGEX =
+  /(shopping|teleshopping|naaptol|darshan|bhakti|aastha|sadhna|sanskar|peace\s*tv|subhavaartha|shubh|dangal\s*2|b4u\s*(bhojpuri|kadak)|manoranjan|maha\s*movie|cinemachi|test\b)/i
+
+const REGIONAL_LANGUAGES = new Set([
+  'tamil',
+  'telugu',
+  'malayalam',
+  'kannada',
+  'bengali',
+  'marathi',
+  'gujarati',
+  'punjabi',
+  'odia',
+  'bhojpuri',
+  'assamese',
+  'urdu'
+])
+
+export function isHeroEligibleChannel(channel: Channel): boolean {
+  if (channel.category === 'regional') return false
+  const lang = (channel.language || '').trim().toLowerCase()
+  // Non-sports channels in regional languages must not lead the national hero stage
+  if (channel.category !== 'sports' && REGIONAL_LANGUAGES.has(lang)) return false
+  if (JUNK_CHANNEL_REGEX.test(channel.name)) return false
+  return true
+}
+
+export function isHDChannel(channel: Channel): boolean {
+  if (channel.quality && (channel.quality.includes('HD') || channel.quality.includes('4K'))) {
+    return true
+  }
+  return /\b(HD|4K|UHD)\b/i.test(channel.name)
+}
+
+export function getBaseChannelName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(hd|sd|4k|uhd|\+)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export function getChannelProminence(channel: Channel): number {
   const name = channel.name.toLowerCase()
   let score = 0
-  if (channel.category === 'sports') score += 50
-  else if (channel.category === 'news') score += 40
-  else if (channel.category === 'entertainment') score += 20
-  else if (channel.category === 'movies') score += 15
 
-  if (MAJOR_NETWORKS_REGEX.test(name)) score += 60
-  if (channel.quality.includes('HD') || channel.quality.includes('4K')) score += 5
+  const isSports = channel.category === 'sports' || MARQUEE_SPORTS_REGEX.test(name)
+  const isNews = channel.category === 'news' || MARQUEE_NEWS_REGEX.test(name)
+
+  if (isSports) {
+    score += 1000
+    if (MARQUEE_SPORTS_REGEX.test(name)) score += 300
+  } else if (isNews) {
+    score += 600
+    if (MARQUEE_NEWS_REGEX.test(name)) score += 250
+  } else if (channel.category === 'entertainment') {
+    score += 300
+    if (MARQUEE_FLAGSHIP_REGEX.test(name)) score += 150
+  } else if (channel.category === 'movies') {
+    score += 250
+    if (MARQUEE_FLAGSHIP_REGEX.test(name)) score += 150
+  } else {
+    score += 50
+  }
+
+  // Major boost for HD / 4K feeds so highest quality feeds strictly beat SD variants
+  if (isHDChannel(channel)) {
+    score += 200
+  }
+
   return score
+}
+
+/**
+ * Curates hero candidates so the top 5 slots guarantee the highest quality
+ * Sports marquee channels (top 3) and High Quality News channels (top 2),
+ * deduplicating SD feeds when an HD version of the network exists.
+ */
+export function curateHeroCandidates(candidates: HeroCandidate[]): HeroCandidate[] {
+  if (candidates.length <= 1) return candidates
+
+  const sports: HeroCandidate[] = []
+  const news: HeroCandidate[] = []
+  const others: HeroCandidate[] = []
+
+  for (const candidate of candidates) {
+    const ch = candidate.channel
+    const name = ch.name.toLowerCase()
+    if (ch.category === 'sports' || MARQUEE_SPORTS_REGEX.test(name)) {
+      sports.push(candidate)
+    } else if (ch.category === 'news' || MARQUEE_NEWS_REGEX.test(name)) {
+      news.push(candidate)
+    } else {
+      others.push(candidate)
+    }
+  }
+
+  // Deduplicate channels by base name, preferring HD and higher prominence
+  const dedup = (list: HeroCandidate[]): { top: HeroCandidate[]; rest: HeroCandidate[] } => {
+    const seenBase = new Set<string>()
+    const top: HeroCandidate[] = []
+    const rest: HeroCandidate[] = []
+
+    const sorted = [...list].sort((a, b) => {
+      const pDiff = getChannelProminence(b.channel) - getChannelProminence(a.channel)
+      if (pDiff !== 0) return pDiff
+      return b.score - a.score
+    })
+
+    for (const item of sorted) {
+      const base = getBaseChannelName(item.channel.name)
+      if (!seenBase.has(base)) {
+        seenBase.add(base)
+        top.push(item)
+      } else {
+        rest.push(item)
+      }
+    }
+    return { top, rest }
+  }
+
+  const { top: topSports, rest: restSports } = dedup(sports)
+  const { top: topNews, rest: restNews } = dedup(news)
+  const { top: topOthers, rest: restOthers } = dedup(others)
+
+  // Primary slots: top 3 premier sports + top 2 premier high-quality news
+  const heroPrimary: HeroCandidate[] = []
+  heroPrimary.push(...topSports.slice(0, 3))
+  heroPrimary.push(...topNews.slice(0, 2))
+
+  const combined = [
+    ...heroPrimary,
+    ...topSports.slice(3),
+    ...topNews.slice(2),
+    ...topOthers,
+    ...restSports,
+    ...restNews,
+    ...restOthers
+  ]
+
+  const seenIds = new Set<string>()
+  const finalCandidates: HeroCandidate[] = []
+  for (const item of combined) {
+    if (!seenIds.has(item.channel.id)) {
+      seenIds.add(item.channel.id)
+      finalCandidates.push(item)
+    }
+  }
+
+  return finalCandidates
 }
 
 /** Deterministic fallback: recents & favorites first, then category priority & major Indian networks. */
@@ -382,9 +535,22 @@ export const featuredService = {
   async getHeroCandidates(now: Date = new Date()): Promise<HeroCandidate[]> {
     const channelState = useChannelStore.getState()
     const settings = useSettingsStore.getState()
-    const editorial = await fetchEditorial(now)
-    return rankHeroCandidates({
-      channels: channelState.channels,
+    const allChannels = channelState.channels
+
+    if (!allChannels || allChannels.length === 0) return []
+
+    // 1. Strictly filter out regional channels, non-sports regional languages, and junk tickers
+    const eligibleChannels = allChannels.filter(isHeroEligibleChannel)
+    const pool = eligibleChannels.length > 0 ? eligibleChannels : allChannels
+
+    // 2. Fetch editorial feed and filter entries to eligible channels only
+    const rawEditorial = await fetchEditorial(now)
+    const eligibleIds = new Set(pool.map((c) => c.id))
+    const editorial = rawEditorial ? rawEditorial.filter((e) => eligibleIds.has(e.channelId)) : null
+
+    // 3. Rank eligible candidates
+    const ranked = rankHeroCandidates({
+      channels: pool,
       epg: channelState.epg,
       favorites: channelState.favorites,
       history: historyFromRecents(channelState.recents),
@@ -392,6 +558,9 @@ export const featuredService = {
       now,
       editorial
     })
+
+    // 4. Curate top 5 slots: Top 3 Sports HD + Top 2 High-Quality News HD (deduplicating SD feeds)
+    return curateHeroCandidates(ranked)
   }
 }
 

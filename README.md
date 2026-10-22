@@ -30,6 +30,7 @@ The app starts out of the box in **Demo mode** with 38 pre-configured channels, 
 
 ## Table of Contents
 
+- [Why JioTv Max?](#why-jiotv-max-big-screen-live-tv-on-windows)
 - [Highlights](#highlights)
 - [Design System](#design-system)
 - [Architecture & Engineering](#architecture--engineering)
@@ -48,6 +49,19 @@ The app starts out of the box in **Demo mode** with 38 pre-configured channels, 
 - [NPM Scripts Reference](#npm-scripts-reference)
 - [Automated Verification Harness](#automated-verification-harness)
 - [License](#license)
+
+---
+
+## 💡 Why JioTv Max? (Big-Screen Live TV on Windows)
+
+Unlike standard streaming services, **JioTV has no official Windows desktop app**, and its web portal does not stream live television. If you are sitting at a desktop PC, laptop, or multi-monitor workstation, you are officially locked out of watching live broadcasts on a large display.
+
+**JioTv Max solves this completely:**
+
+- 🖥️ **Bigger Screens, No Boundaries** — Enjoy 1,000+ live television channels directly on Windows 10 & 11 in native 1080p, with zero emulator lag and hardware GPU decoding.
+- 📱 **Works With Any Standard Mobile Plan (Zero Extra Cost)** — **You do not need a Smart TV subscription, JioFiber TV set-top box, or an expensive large-screen add-on.** Any regular prepaid or postpaid Jio mobile recharge bundled with basic JioTV mobile access works seamlessly out of the box.
+- 🔑 **Simple OTP Login** — Simply sign in with your Jio mobile number via OTP. Whatever channels and live content your plan supports on mobile are immediately unlocked on your PC monitor or TV.
+- ⚡ **Native Performance** — Forget running heavy, resource-draining Android emulators (like BlueStacks) that peg your CPU and throttle video framerates. JioTv Max runs lean, fast, and responsive.
 
 ---
 

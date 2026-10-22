@@ -3,7 +3,6 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
-import { getLogoBox } from '@/lib/logo/logoService'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -63,12 +62,6 @@ function resolveContext(
   if (size === 'sm' || size === 'md') return 'cell'
   if (size === 'lg' || size === 'xl') return 'banner'
   return 'tile'
-}
-
-function areaFor(context: ChannelLogoContext, explicit?: number): number {
-  if (explicit !== undefined) return explicit
-  if (context === 'cell' || context === 'switcher') return 0.38
-  return 0.3
 }
 
 /**
@@ -143,8 +136,6 @@ export const ChannelLogo = memo(function ChannelLogo({
   }, [logo])
 
   const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
-  const areaFactor = areaFor(context, explicitAreaFactor)
-  const box = logo?.spec && !isHero && !isBanner ? getLogoBox(logo.spec, areaFactor, 100) : null
 
   // Inner logo content
   const content = (
@@ -199,25 +190,20 @@ export const ChannelLogo = memo(function ChannelLogo({
               transition: 'opacity 300ms ease'
             }}
           />
-        ) : box ? (
+        ) : (
           <img
             src={logo.objectUrl}
             alt=""
             draggable={false}
             decoding="async"
-            className="pointer-events-none absolute block object-contain"
+            className="pointer-events-none block h-full w-full object-contain"
             style={{
               imageRendering: 'auto',
-              left: `${50 + box.offsetXRatio * 100}%`,
-              top: `${50 + box.offsetYRatio * 100}%`,
-              width: `${box.widthRatio * 100}%`,
-              height: `${box.heightRatio * 100}%`,
-              transform: 'translate(-50%, -50%)',
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}
           />
-        ) : null
+        )
       ) : null}
     </span>
   )

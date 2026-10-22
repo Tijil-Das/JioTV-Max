@@ -14,7 +14,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { GUIDE_NAV, NAV_ITEMS } from '@/lib/constants'
+import { NAV_ITEMS } from '@/lib/constants'
 import { tween } from '@/lib/motion'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useUIStore } from '@/store/useUIStore'
@@ -50,7 +50,6 @@ export function Sidebar(): JSX.Element {
 
   const items = [
     ...NAV_ITEMS,
-    { label: GUIDE_NAV.label, to: GUIDE_NAV.to, icon: 'guide' as const },
     { label: 'Settings', to: '/settings', icon: 'settings' as const }
   ]
 

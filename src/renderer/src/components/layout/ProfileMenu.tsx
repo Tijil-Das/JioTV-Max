@@ -55,14 +55,15 @@ export function ProfileMenu(): JSX.Element {
 
       <AnimatePresence>
         {open && user ? (
-          <motion.div
-            role="menu"
-            variants={popover}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="glass absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-[12px] p-2"
-          >
+          <div className="absolute left-1/2 top-[calc(100%+8px)] z-50 -translate-x-1/2">
+            <motion.div
+              role="menu"
+              variants={popover}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="glass w-[240px] overflow-hidden rounded-[12px] p-2"
+            >
             {/* User identity */}
             <div className="flex items-center gap-3 rounded-[8px] bg-white/[0.04] px-3 py-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
@@ -110,8 +111,9 @@ export function ProfileMenu(): JSX.Element {
               </button>
             </div>
           </motion.div>
-        ) : null}
-      </AnimatePresence>
+        </div>
+      ) : null}
+    </AnimatePresence>
     </div>
   )
 }

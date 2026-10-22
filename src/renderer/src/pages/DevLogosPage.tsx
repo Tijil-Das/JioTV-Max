@@ -44,8 +44,8 @@ function LogoAuditCell({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="relative aspect-square overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]">
-        <ChannelLogo channelId={channel.id} channel={channel} context="tile" priority="visible" />
+      <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0E0E10] p-3">
+        <ChannelLogo channelId={channel.id} channel={channel} context="tile" priority="visible" className="h-full w-full" />
       </div>
       <p className="truncate text-[12px] font-[600] text-[#F4F4F5]">
         {channel.number} · {channel.name}

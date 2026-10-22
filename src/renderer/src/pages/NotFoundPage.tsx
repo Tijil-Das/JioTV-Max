@@ -13,8 +13,6 @@ export function NotFoundPage(): JSX.Element {
           description="The address does not match anything in JioTv Max. Head back to the front page and pick a channel."
           actionLabel="Back home"
           onAction={() => navigate('/')}
-          secondaryLabel="Open the guide"
-          onSecondary={() => navigate('/guide')}
         />
       </div>
     </PageTransition>

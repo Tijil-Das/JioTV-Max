@@ -78,9 +78,9 @@ export const ChannelCard = memo(function ChannelCard({
             'group-focus-within:outline group-focus-within:outline-2 group-focus-within:outline-offset-2 group-focus-within:outline-[var(--red-line)]'
           )}
         >
-          {/* Logo container: whole tile scales, logo is never scaled separately */}
-          <div className="absolute inset-0">
-            <ChannelLogo channel={channel} context="tile" />
+          {/* Logo container: fixed 1:1 optical square, flex-centered with safe-zone padding */}
+          <div className="flex h-full w-full items-center justify-center p-3">
+            <ChannelLogo channel={channel} context="tile" className="h-full w-full" />
           </div>
 
           {/* Number chip (top-left, inset 8px): 20px tall, padding 0 7px, radius 6px */}

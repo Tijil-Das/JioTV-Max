@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useOnline } from '@/hooks/useOnline'
 import { authService } from '@/services/authService'
 import { getBridge } from '@/services/api'
@@ -17,7 +17,6 @@ import { ToastViewport } from '@/components/ui/Toasts'
 import { SplashScreen } from '@/components/ui/SplashScreen'
 import { HomePage } from '@/pages/HomePage'
 import { CategoryPage } from '@/pages/CategoryPage'
-import { GuidePage } from '@/pages/GuidePage'
 import { FavoritesPage } from '@/pages/FavoritesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { PlayerPage } from '@/pages/PlayerPage'
@@ -216,7 +215,7 @@ export default function App(): JSX.Element {
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<HomePage />} />
               <Route path="/category/:category" element={<CategoryPage />} />
-              <Route path="/guide" element={<GuidePage />} />
+              <Route path="/guide" element={<Navigate to="/" replace />} />
               <Route path="/favorites" element={<FavoritesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               {import.meta.env.DEV ? (

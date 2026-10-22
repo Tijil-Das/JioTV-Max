@@ -44,8 +44,6 @@ export function FavoritesPage(): JSX.Element {
             description="Hover any channel card and tap the heart. Favourites appear here across restarts."
             actionLabel="Browse channels"
             onAction={() => navigate('/')}
-            secondaryLabel="Open the guide"
-            onSecondary={() => navigate('/guide')}
           />
         ) : (
           <ChannelGrid

@@ -55,7 +55,6 @@ const slideVariants: Variants = {
 
 const MAX_SWITCHER = 5
 const RERANK_MS = 15 * 60_000
-const HOVER_DWELL_MS = 250
 const VERIFY_WINDOW = 20
 const SWITCHER_WANTED = 5
 
@@ -96,7 +95,6 @@ export function Hero(): JSX.Element {
 
   const sectionRef = useRef<HTMLElement>(null)
   const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const dwellRef = useRef<{ id: string; timer: number } | null>(null)
 
   const channelById = useMemo(
     () => new Map(channels.map((channel) => [channel.id, channel])),
@@ -293,20 +291,6 @@ export function Hero(): JSX.Element {
     setActiveId(id)
   }, [])
 
-  const cancelDwell = useCallback(() => {
-    if (dwellRef.current) window.clearTimeout(dwellRef.current.timer)
-    dwellRef.current = null
-  }, [])
-
-  const startDwell = useCallback(
-    (id: string) => {
-      if (id === activeId) return
-      cancelDwell()
-      dwellRef.current = { id, timer: window.setTimeout(() => select(id), HOVER_DWELL_MS) }
-    },
-    [activeId, cancelDwell, select]
-  )
-
   const [tooltipId, setTooltipId] = useState<string | null>(null)
   const tooltipTimer = useRef<number | null>(null)
 
@@ -459,7 +443,7 @@ export function Hero(): JSX.Element {
                 ) : null}
               </div>
 
-              {/* A/B video slots: max two hls instances, crossfade, full cover */}
+              {/* A/B video slots: max two hls instances, crossfade, full contain */}
               <div className="absolute inset-0" aria-hidden>
                 {[0, 1].map((slot) => (
                   <video
@@ -472,9 +456,8 @@ export function Hero(): JSX.Element {
                     disableRemotePlayback
                     tabIndex={-1}
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                    className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
                     style={{
-                      objectPosition: 'center 30%',
                       opacity: opacity[slot],
                       transition: 'opacity 500ms ease'
                     }}
@@ -482,42 +465,42 @@ export function Hero(): JSX.Element {
                 ))}
               </div>
 
-              {/* Scrims */}
+              {/* Scrims: brighten up (fade to 20% opacity) on hero hover */}
               <div
-                className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[120px]"
+                className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300 ease-out group-hover/hero:opacity-20"
                 aria-hidden
-                style={{
-                  background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)'
-                }}
-              />
-              <div
-                className="pointer-events-none absolute inset-0 z-10"
-                aria-hidden
-                style={{
-                  background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 45%, transparent 75%)'
-                }}
-              />
-              <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[240px]"
-                aria-hidden
-                style={{
-                  background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 40%, transparent 100%)'
-                }}
-              />
-              <div
-                className="pointer-events-none absolute inset-0 z-10 bg-black/15"
-                aria-hidden
-              />
-              {!previewOn ? (
+              >
                 <div
-                  className="pointer-events-none absolute inset-0 z-10"
-                  aria-hidden
+                  className="absolute inset-x-0 top-0 h-[100px]"
                   style={{
-                    background:
-                      'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)'
                   }}
                 />
-              ) : null}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 45%, transparent 75%)'
+                  }}
+                />
+                <div
+                  className="absolute inset-x-0 bottom-0 h-[180px]"
+                  style={{
+                    background:
+                      'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)'
+                  }}
+                />
+                <div className="absolute inset-0 bg-black/10" />
+                {!previewOn ? (
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
+                    }}
+                  />
+                ) : null}
+              </div>
 
               {/* Navigation Arrow: Left (shown on mouse active) */}
               {verifiedOrdered.length > 1 ? (
@@ -638,16 +621,6 @@ export function Hero(): JSX.Element {
                         >
                           Watch live
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="lg"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            navigate(`/guide?channel=${activeChannel.id}`)
-                          }}
-                        >
-                          Guide
-                        </Button>
                       </div>
                     </motion.div>
                   </AnimatePresence>
@@ -725,15 +698,20 @@ export function Hero(): JSX.Element {
                             }
                           }}
                           onMouseEnter={() => {
-                            startDwell(id)
+                            if (id !== activeId) {
+                              setDirection(index > activeIdx ? 1 : -1)
+                              select(id)
+                            }
                             showTooltip(id)
                           }}
                           onMouseLeave={() => {
-                            cancelDwell()
                             hideTooltip()
                           }}
                           onFocus={() => {
-                            cancelDwell()
+                            if (id !== activeId) {
+                              setDirection(index > activeIdx ? 1 : -1)
+                              select(id)
+                            }
                             showTooltip(id)
                           }}
                           onBlur={hideTooltip}

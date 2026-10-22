@@ -158,8 +158,8 @@ export default function App(): JSX.Element {
       ? 'Watching'
       : path.startsWith('/category/')
         ? path.replace('/category/', '').replace(/^\w/, (c) => c.toUpperCase())
-        : titles[path] ?? 'StreamDeck TV'
-    document.title = `${title} · StreamDeck TV`
+        : titles[path] ?? 'JioTv Max'
+    document.title = `${title} · JioTv Max`
   }, [location.pathname])
 
   return (

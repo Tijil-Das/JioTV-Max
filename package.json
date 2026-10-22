@@ -1,7 +1,7 @@
 {
-  "name": "streamdeck-tv",
+  "name": "jiotv-max",
   "version": "1.0.0",
-  "description": "StreamDeck TV — a premium desktop live-TV experience for JioTV.",
+  "description": "JioTv Max — a premium desktop live-TV experience for JioTV.",
   "main": "./out/main/index.js",
   "author": "StreamDeck",
   "license": "MIT",
@@ -49,8 +49,8 @@
     "vitest": "^3.2.4"
   },
   "build": {
-    "appId": "tv.streamdeck.app",
-    "productName": "StreamDeck TV",
+    "appId": "tv.jiotvmax.app",
+    "productName": "JioTv Max",
     "electronDist": "T:\\DevLibs\\castlabs-electron-33",
     "electronVersion": "33.3.2",
     "directories": {
@@ -59,7 +59,7 @@
     "extraFiles": [
       {
         "from": "T:/DevLibs/castlabs-electron-33/electron.exe.sig",
-        "to": "StreamDeck TV.exe.sig"
+        "to": "JioTv Max.exe.sig"
       }
     ],
     "files": [
@@ -69,7 +69,7 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
-      "artifactName": "StreamDeck-TV-${version}-setup.${ext}"
+      "artifactName": "JioTv-Max-${version}-setup.${ext}"
     },
     "nsis": {
       "oneClick": false,

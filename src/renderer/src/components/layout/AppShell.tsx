@@ -42,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
               <footer className="mt-8 flex items-center justify-between border-t border-white/[0.05] px-8 py-6 text-[11px] text-text-muted">
                 <div className="flex items-center gap-2.5">
                   <BrandMark size={16} />
-                  <span>StreamDeck TV · local-first, privacy-respecting playback</span>
+                  <span>JioTv Max · local-first, privacy-respecting playback</span>
                 </div>
                 <span className="flex items-center gap-1.5">
                   <Keyboard className="h-3.5 w-3.5" />

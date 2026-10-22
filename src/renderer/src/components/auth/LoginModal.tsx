@@ -205,7 +205,7 @@ export function LoginModal(): JSX.Element | null {
   }
 
   const masked = challenge?.maskedPhone ?? `+91 ••••• ${phone.slice(-5)}`
-  const title = step === 'otp' ? 'Enter your code' : 'Sign in to StreamDeck'
+  const title = step === 'otp' ? 'Enter your code' : 'Sign in to JioTv Max'
 
   return (
     <Modal open={open} onClose={closeLogin} bare className="w-[420px] max-w-[94vw]" labelledBy="login-title">
@@ -442,7 +442,7 @@ export function LoginModal(): JSX.Element | null {
                 </div>
 
                 <p className="mt-5 text-center text-[11px] leading-relaxed text-text-muted">
-                  By continuing you agree to keep this sign-in on trusted devices only. StreamDeck
+                  By continuing you agree to keep this sign-in on trusted devices only. JioTv Max
                   stores your Jio tokens in the operating system keychain.
                 </p>
               </motion.div>

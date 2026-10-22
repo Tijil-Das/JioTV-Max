@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import appIcon from '@/assets/icons/app-icon-256.png'
 
 interface SplashScreenProps {
   visible: boolean
@@ -7,6 +8,7 @@ interface SplashScreenProps {
 /**
  * Full-window loading splash shown while the app bootstraps —
  * session restore + relay init + first catalogue fetch.
+ * Uses the JioTv Max rounded brand icon and matching purplish loading bar.
  * Unmounts completely once `visible` becomes false.
  */
 export function SplashScreen({ visible }: SplashScreenProps): JSX.Element {
@@ -18,7 +20,7 @@ export function SplashScreen({ visible }: SplashScreenProps): JSX.Element {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.5, ease: 'easeOut' } }}
           className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#000000]"
-          aria-label="Loading StreamDeck TV"
+          aria-label="Loading JioTv Max"
           aria-busy="true"
         >
           {/* Brand mark */}
@@ -28,36 +30,34 @@ export function SplashScreen({ visible }: SplashScreenProps): JSX.Element {
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="flex flex-col items-center gap-5"
           >
-            {/* Red square logo */}
-            <div className="relative flex h-20 w-20 items-center justify-center rounded-[20px] bg-[#E11D2E]">
-              {/* TV signal icon made from pure CSS */}
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
-                <rect x="8" y="20" width="24" height="14" rx="2" fill="white" fillOpacity="0.95" />
-                <polyline points="13,20 20,10 27,20" fill="none" stroke="white" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-                <line x1="16" y1="34" x2="24" y2="34" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="20" y1="34" x2="20" y2="38" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-              {/* Breathing ring */}
+            {/* Rounded App Icon from Icon-Pack/Rounded */}
+            <div className="relative flex h-24 w-24 items-center justify-center">
+              <img
+                src={appIcon}
+                alt="JioTv Max logo"
+                className="h-24 w-24 object-contain drop-shadow-[0_8px_32px_rgba(157,12,165,0.45)]"
+              />
+              {/* Soft breathing pulse ring matching the purplish icon */}
               <motion.div
-                className="absolute inset-0 rounded-[20px] ring-2 ring-[#E11D2E]"
-                animate={{ opacity: [0.6, 0, 0.6], scale: [1, 1.12, 1] }}
+                className="absolute inset-0 rounded-[28px] ring-2 ring-[#9D0CA5]"
+                animate={{ opacity: [0.55, 0, 0.55], scale: [1, 1.12, 1] }}
                 transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
               />
             </div>
 
             <div className="text-center">
-              <p className="font-sans text-[22px] font-[700] tracking-[-0.02em] text-[#F4F4F5]">
-                StreamDeck<span className="text-[#E11D2E]"> TV</span>
+              <p className="font-sans text-[24px] font-[700] tracking-[-0.02em] text-[#F4F4F5]">
+                JioTv <span className="text-[#B815C2]">Max</span>
               </p>
-              <p className="mt-1 text-[13px] text-[#66666C]">Live television, beautifully staged</p>
+              <p className="mt-1 text-[13px] text-[#A1A1A6]">Live television, beautifully staged</p>
             </div>
 
-            {/* Progress bar */}
+            {/* Progress bar — same purplish as the icon colour theme */}
             <motion.div
-              className="mt-2 h-[2px] w-[160px] overflow-hidden rounded-full bg-[#18181B]"
+              className="mt-3 h-[3px] w-[180px] overflow-hidden rounded-full bg-white/[0.08]"
             >
               <motion.div
-                className="h-full bg-[#E11D2E]"
+                className="h-full rounded-full bg-gradient-to-r from-[#860A8D] via-[#9D0CA5] to-[#B815C2]"
                 initial={{ x: '-100%' }}
                 animate={{ x: ['−100%', '0%', '100%'] }}
                 transition={{

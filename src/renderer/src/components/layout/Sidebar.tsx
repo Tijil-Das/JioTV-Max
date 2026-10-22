@@ -18,6 +18,7 @@ import { GUIDE_NAV, NAV_ITEMS } from '@/lib/constants'
 import { tween } from '@/lib/motion'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useUIStore } from '@/store/useUIStore'
+import appIcon from '@/assets/icons/app-icon-128.png'
 
 const icons: Record<string, LucideIcon> = {
   home: Home,
@@ -65,12 +66,13 @@ export function Sidebar(): JSX.Element {
         )}
       >
         {/* Logo area */}
-        <div className="flex h-[64px] items-center px-[26px]">
-          <Link to="/" aria-label="StreamDeck TV home" className="flex items-center gap-3">
-            {/* Simple red square mark */}
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[#E11D2E]">
-              <span className="h-2 w-2 rounded-[2px] bg-white" />
-            </span>
+        <div className="flex h-[64px] items-center px-[22px]">
+          <Link to="/" aria-label="JioTv Max home" className="flex items-center gap-3">
+            <img
+              src={appIcon}
+              alt=""
+              className="h-7 w-7 shrink-0 rounded-[6px] object-contain drop-shadow-[0_2px_8px_rgba(157,12,165,0.3)]"
+            />
             <AnimatePresence>
               {expanded ? (
                 <motion.span
@@ -78,9 +80,9 @@ export function Sidebar(): JSX.Element {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -6 }}
                   transition={tween(0.15)}
-                  className="whitespace-nowrap text-[13px] font-[600] text-[#F4F4F5]"
+                  className="whitespace-nowrap text-[14px] font-[700] tracking-tight text-[#F4F4F5]"
                 >
-                  StreamDeck TV
+                  JioTv <span className="text-[#B815C2]">Max</span>
                 </motion.span>
               ) : null}
             </AnimatePresence>

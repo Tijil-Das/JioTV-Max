@@ -1,7 +1,7 @@
 import type { Channel, ChannelCategory, Program } from '@shared/types'
 
-export const APP_NAME = 'StreamDeck TV'
-export const APP_SHORT = 'StreamDeck'
+export const APP_NAME = 'JioTv Max'
+export const APP_SHORT = 'JioTv Max'
 export const APP_TAGLINE = 'Live television, beautifully staged.'
 export const DEMO_OTP = '123456'
 export const DEMO_PHONE = '9876543210'

@@ -6,11 +6,12 @@ import { useOnline } from '@/hooks/useOnline'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { WindowControls } from './WindowControls'
+import appIcon from '@/assets/icons/app-icon-128.png'
 
 const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
 /**
- * 36px title bar. True black, text in --text-2. No decorative labels.
+ * 36px title bar. True black, text in --text-2.
  * Fades away over the player when controls are hidden.
  */
 export function TitleBar(): JSX.Element {
@@ -30,14 +31,15 @@ export function TitleBar(): JSX.Element {
         isPlayer && 'border-transparent bg-black/30'
       )}
     >
-      {/* Left: just the app name, nothing decorative */}
+      {/* Left: app icon and name */}
       <div
         className={cn(
           'flex items-center gap-2 transition-opacity duration-500',
           faded ? 'opacity-0' : 'opacity-100'
         )}
       >
-        <span className="text-[12px] font-[600] tracking-wide text-[#F4F4F5]">StreamDeck TV</span>
+        <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
+        <span className="text-[12px] font-[600] tracking-wide text-[#F4F4F5]">JioTv Max</span>
         <span className="mx-1 h-3.5 w-px bg-white/[0.07]" aria-hidden />
         <span className="text-[11px] font-[400] text-[#66666C]">Live television</span>
       </div>

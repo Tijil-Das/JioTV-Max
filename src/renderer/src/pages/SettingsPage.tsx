@@ -141,7 +141,7 @@ export function SettingsPage(): JSX.Element {
         <Section
           icon={<MonitorPlay className="h-4 w-4" />}
           title="Playback"
-          description="How StreamDeck opens channels and chooses a stream quality."
+          description="How JioTv Max opens channels and chooses a stream quality."
         >
           <div>
             <p className="mb-2 text-[12px] font-[500] text-[#A1A1A6]">Catalogue source</p>
@@ -369,7 +369,7 @@ export function SettingsPage(): JSX.Element {
         >
           <dl className="space-y-1.5 text-[12px]">
             {[
-              ['Application', `StreamDeck TV ${appInfo?.version ?? '1.0.0'}`],
+              ['Application', `JioTv Max ${appInfo?.version ?? '1.0.0'}`],
               ['Runtime', appInfo ? `Electron ${appInfo.electron} · ${appInfo.platform}` : 'Browser preview'],
               ['Backend', bridge ? 'Electron bridge · loopback media relay' : 'Browser fallback · demo data'],
               ['Relay', appInfo?.relayBase ?? '—'],

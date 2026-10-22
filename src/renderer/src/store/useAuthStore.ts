@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,
-        status: state.status === 'authenticated' ? 'authenticated' : 'anonymous'
+        status: state.user?.mode === 'jio' && state.status === 'authenticated' ? 'authenticated' : 'anonymous'
       })
     }
   )

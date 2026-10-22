@@ -32,7 +32,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      mode: 'demo',
+      mode: 'jio',
       defaultQuality: 1080,
       language: 'English',
       reduceMotion: false,

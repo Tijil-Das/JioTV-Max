@@ -46,8 +46,10 @@ export default function App(): JSX.Element {
   const prefersReducedMotion = useReducedMotion()
   const reduceMotion = useSettingsStore((state) => state.reduceMotion)
   const mode = useSettingsStore((state) => state.mode)
+  const setMode = useSettingsStore((state) => state.setMode)
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop)
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
+  const user = useAuthStore((state) => state.user)
   const setSession = useAuthStore((state) => state.setSession)
   const status = useAuthStore((state) => state.status)
   const pushToast = useUIStore((state) => state.pushToast)
@@ -75,36 +77,50 @@ export default function App(): JSX.Element {
         }
       }
 
-      // Step 2: restore persisted session (JioTV mode only)
-      let hasSession = status === 'authenticated'
-      if (!hasSession && mode === 'jio' && !restoredRef.current) {
-        restoredRef.current = true
+      // Step 2: restore persisted Jio session if present in main process
+      let hasValidSession = false
+      if (bridge) {
         try {
           const session = await authService.restore('jio')
-          if (session) {
+          if (session?.user) {
             setSession(session)
-            hasSession = true
+            setMode('jio')
+            hasValidSession = true
+          } else {
+            // Main process has no valid session in secure store; clear renderer stale state
+            useAuthStore.setState({ user: null, status: 'anonymous', lastError: null })
           }
         } catch {
-          // non-fatal — fall through to login prompt
+          useAuthStore.setState({ user: null, status: 'anonymous', lastError: null })
         }
+      } else {
+        hasValidSession = status === 'authenticated' && user?.mode === 'jio'
       }
 
       // Step 3: fetch channel catalogue
+      const catalogueMode = hasValidSession ? 'jio' : (mode === 'jio' ? 'jio' : 'demo')
       try {
-        await fetchCatalogue(mode)
+        await fetchCatalogue(catalogueMode)
       } catch {
-        // non-fatal
-      }
-
-      // Step 4: show login if still unauthenticated in JioTV mode
-      if (mode === 'jio' && !hasSession) {
-        openLogin('Sign in with your JioTV number to start watching.')
+        if (!hasValidSession) {
+          try {
+            await fetchCatalogue('demo')
+          } catch {
+            // non-fatal
+          }
+        }
       }
 
       // Minimum splash duration for a polished feel
-      await new Promise<void>((r) => setTimeout(r, 800))
+      await new Promise<void>((r) => setTimeout(r, 600))
       setSplashVisible(false)
+
+      // Step 4: if not authenticated with a JioTV account, pop the login panel automatically
+      if (!hasValidSession) {
+        setTimeout(() => {
+          openLogin('Sign in with your JioTV number to start watching.')
+        }, 120)
+      }
     }
 
     void bootstrap()

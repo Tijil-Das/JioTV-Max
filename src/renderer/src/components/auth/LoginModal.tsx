@@ -57,7 +57,7 @@ export function LoginModal(): JSX.Element | null {
   const setAuthenticating = useAuthStore((state) => state.setAuthenticating)
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
 
-  const [mode, setLocalMode] = useState<AuthMode>(settingsMode)
+  const [mode, setLocalMode] = useState<AuthMode>('jio')
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''))
@@ -85,7 +85,7 @@ export function LoginModal(): JSX.Element | null {
 
   useEffect(() => {
     if (open) {
-      setLocalMode(settingsMode)
+      setLocalMode(settingsMode === 'demo' ? 'demo' : 'jio')
       reset()
     }
   }, [open, reset, settingsMode])
@@ -283,8 +283,8 @@ export function LoginModal(): JSX.Element | null {
                         setError(null)
                       }}
                       options={[
-                        { value: 'demo', label: 'Demo access' },
-                        { value: 'jio', label: 'JioTV account' }
+                        { value: 'jio', label: 'JioTV account' },
+                        { value: 'demo', label: 'Demo access' }
                       ]}
                     />
 

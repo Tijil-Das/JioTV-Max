@@ -134,7 +134,7 @@ export const ChannelLogo = memo(function ChannelLogo({
             src={logo.objectUrl}
             alt=""
             draggable={false}
-            className="pointer-events-none block h-auto w-auto max-h-[120px] max-w-[280px] object-contain"
+            className="pointer-events-none block h-auto w-auto max-h-[36px] max-w-[160px] object-contain"
             style={{ opacity: faded ? 1 : 0, transition: 'opacity 300ms ease' }}
           />
         ) : box ? (

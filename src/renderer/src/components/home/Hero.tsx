@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Pause, Play } from 'lucide-react'
 import type { StreamInfo } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
-import { formatRange, getNowNext } from '@/lib/time'
+import { formatRange, getNowNext, getProgress } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
 import { useHeroPlayer } from '@/hooks/useHeroPlayer'
 import { channelService } from '@/services/channelService'
@@ -20,7 +20,6 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { Button } from '@/components/ui/Button'
 import { ChannelLogo, ChannelLogoCell } from '@/components/ui/ChannelLogo'
-import { QualityBadge } from '@/components/ui/LiveBadge'
 
 /**
  * Addendum 3 §8 — live hero.
@@ -244,6 +243,20 @@ export function Hero(): JSX.Element {
     [activeId, cancelDwell, select]
   )
 
+  const [tooltipId, setTooltipId] = useState<string | null>(null)
+  const tooltipTimer = useRef<number | null>(null)
+
+  const showTooltip = useCallback((id: string) => {
+    if (tooltipTimer.current) window.clearTimeout(tooltipTimer.current)
+    tooltipTimer.current = window.setTimeout(() => setTooltipId(id), 400)
+  }, [])
+
+  const hideTooltip = useCallback(() => {
+    if (tooltipTimer.current) window.clearTimeout(tooltipTimer.current)
+    tooltipTimer.current = null
+    setTooltipId(null)
+  }, [])
+
   const onTablistKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     const ids = verifiedOrdered
     if (ids.length === 0) return
@@ -253,6 +266,13 @@ export function Hero(): JSX.Element {
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + ids.length) % ids.length
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = ids.length - 1
+    else if (event.key === 'Enter') {
+      if (activeId) {
+        event.preventDefault()
+        watch(activeId)
+        return
+      }
+    }
     if (next < 0) return
     event.preventDefault()
     const id = ids[next]
@@ -270,12 +290,39 @@ export function Hero(): JSX.Element {
     [destroyAll, navigate]
   )
 
-  // ---- Render --------------------------------------------------------------
+  // ---- Render (Addendum 3 §8) -----------------------------------------------
   const expanded = verifiedOrdered.length > 0
   const activeChannel = activeId ? channelById.get(activeId) ?? null : null
   const current = activeChannel ? getNowNext(epg[activeChannel.id] ?? [], now).current : null
   const quality = activeChannel ? highestQuality(activeChannel) : ''
+  const progress = current ? getProgress(current, now) : 0
   const artwork = current?.artworkUrl ?? ''
+
+  const cleanTitle = useMemo(() => {
+    if (current?.title) return current.title
+    return activeChannel?.name.replace(/\s+live$/i, '') ?? ''
+  }, [current, activeChannel])
+
+  const metaParts = useMemo(() => {
+    if (!activeChannel) return []
+    const parts: string[] = []
+    if (current) {
+      parts.push(formatRange(current.start, current.end))
+      const endMs = new Date(current.end).getTime()
+      const nowMs = now.getTime()
+      if (endMs > nowMs) {
+        const minsLeft = Math.max(1, Math.round((endMs - nowMs) / 60000))
+        parts.push(`${minsLeft} min left`)
+      }
+    }
+    if (activeChannel.language) {
+      parts.push(activeChannel.language)
+    }
+    if (quality) {
+      parts.push(quality)
+    }
+    return parts
+  }, [activeChannel, current, now, quality])
 
   return (
     <div
@@ -291,9 +338,9 @@ export function Hero(): JSX.Element {
           <section
             ref={sectionRef}
             aria-label="Featured live channel"
-            className="relative h-[clamp(360px,40vw,460px)] w-full overflow-hidden bg-[#0A0A0B]"
+            className="relative h-[clamp(440px,60vh,640px)] w-full overflow-hidden bg-[#0A0A0B]"
           >
-            {/* Static backdrop: real EPG artwork when present, else a quiet field */}
+            {/* Static backdrop: real EPG artwork when present */}
             <div className="absolute inset-0" aria-hidden>
               {artwork ? (
                 <img
@@ -305,125 +352,159 @@ export function Hero(): JSX.Element {
               ) : null}
             </div>
 
-            {/* A/B video slots (max two hls instances, 400ms crossfade) */}
+            {/* A/B video slots: max two hls instances, 400ms crossfade, center 30% */}
             <div className="absolute inset-0" aria-hidden>
               {[0, 1].map((slot) => (
                 <video
                   key={slot}
                   ref={videoRefs[slot]}
                   muted
-                  loop
                   autoPlay
                   playsInline
                   disablePictureInPicture
+                  disableRemotePlayback
                   tabIndex={-1}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{ opacity: opacity[slot], transition: 'opacity 400ms ease' }}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    objectPosition: 'center 30%',
+                    opacity: opacity[slot],
+                    transition: 'opacity 500ms ease'
+                  }}
                 />
               ))}
             </div>
 
-            {/* Static brand mark while the preview is off or buffering */}
-            {activeChannel && !previewOn ? (
-              <div className="pointer-events-none absolute right-[calc(var(--gutter)+64px)] top-[68%] z-10 hidden -translate-y-1/2 lg:block">
-                <ChannelLogo channel={activeChannel} size="hero" priority="visible" />
-              </div>
+            {/* Scrims: the only gradients in the app (Addendum 3 §8) */}
+            {/* Top 96px black 0.6 → 0 */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[96px]"
+              aria-hidden
+              style={{
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%)'
+              }}
+            />
+            {/* Left-to-right black 0.92 → 0 across the left 60% */}
+            <div
+              className="pointer-events-none absolute inset-0 z-10"
+              aria-hidden
+              style={{
+                background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, transparent 60%)'
+              }}
+            />
+            {/* Bottom 200px black 1 → 0 */}
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[200px]"
+              aria-hidden
+              style={{
+                background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, transparent 100%)'
+              }}
+            />
+            {/* Flat rgba(0,0,0,0.2) over the video */}
+            <div
+              className="pointer-events-none absolute inset-0 z-10 bg-black/20"
+              aria-hidden
+            />
+            {/* Subtle radial lift over black when preview is off or prefers-reduced-motion */}
+            {!previewOn ? (
+              <div
+                className="pointer-events-none absolute inset-0 z-10"
+                aria-hidden
+                style={{
+                  background:
+                    'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
+                }}
+              />
             ) : null}
 
-            {/* Scrims: top for the transparent bar, left → right, bottom fade */}
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-28"
-              aria-hidden
-              style={{
-                background:
-                  'linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.32) 55%, transparent 100%)'
-              }}
-            />
-            <div
-              className="pointer-events-none absolute inset-0"
-              aria-hidden
-              style={{
-                background:
-                  'linear-gradient(to right, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 42%, rgba(0,0,0,0.12) 72%, transparent 100%)'
-              }}
-            />
-            <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-44"
-              aria-hidden
-              style={{
-                background:
-                  'linear-gradient(to top, #000000 0%, rgba(0,0,0,0.55) 45%, transparent 100%)'
-              }}
-            />
-
-            {/* Content */}
+            {/* Content: left, bottom-aligned, max-width 560px, 48px gutter, 56px bottom padding, 12px rhythm */}
             {activeChannel ? (
-              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-[var(--gutter)] pb-12 pt-6">
-                <div className="max-w-[min(560px,58%)]">
-                  <div className="flex items-center gap-2.5">
-                    {activeChannel.isLive ? (
+              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-[var(--gutter)] pb-[56px]">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeChannel.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex max-w-[560px] flex-col gap-3"
+                  >
+                    {/* 1. Processed logo, max 36px tall and 160px wide, black drop-shadow */}
+                    <div
+                      className="flex h-9 max-w-[160px] items-center"
+                      style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.6))' }}
+                    >
+                      <ChannelLogo channel={activeChannel} size="hero" priority="visible" />
+                    </div>
+
+                    {/* 2. Overline: 6px red dot + LIVE NOW (11/600, 0.12em, text-2) + · CH 155 (12/650 tabular text-1) */}
+                    <div className="flex items-center gap-2">
                       <span
                         className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
                         aria-hidden
                       />
+                      <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
+                        LIVE NOW
+                      </span>
+                      <span className="font-sans text-[12px] font-[650] tabular-nums text-[#F4F4F5]">
+                        · CH {activeChannel.number}
+                      </span>
+                    </div>
+
+                    {/* 3. Title: current EPG program title, 52/700/-0.03em, max 2 lines. With no EPG clean channel name. */}
+                    <h1 className="line-clamp-2 text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
+                      {cleanTitle}
+                    </h1>
+
+                    {/* 4. Meta: 6:00 – 7:00 PM · 42 min left · English · HD at 14/500 text-2 + 140px 2px progress bar */}
+                    {metaParts.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2 text-[14px] font-[500] text-[#A1A1A6]">
+                        <span>{metaParts.join(' · ')}</span>
+                        {current && progress > 0 ? (
+                          <span
+                            aria-hidden="true"
+                            className="inline-block h-[2px] w-[140px] overflow-hidden rounded-full bg-white/[0.12]"
+                          >
+                            <span
+                              className="block h-full bg-[var(--red)]"
+                              style={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
+                            />
+                          </span>
+                        ) : null}
+                      </div>
                     ) : null}
-                    <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
-                      {activeChannel.name}
-                    </span>
-                    <QualityBadge quality={quality} />
-                  </div>
 
-                  <h1 className="mt-3 text-[40px] font-[700] leading-[1.04] tracking-[-0.03em] text-[#F4F4F5] xl:text-[46px]">
-                    {current?.title ?? activeChannel.name}
-                  </h1>
+                    {/* 5. Description: EPG only, max 2 lines, text-2, max 520px. Omit if absent. */}
+                    {current?.description ? (
+                      <p className="line-clamp-2 max-w-[520px] text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
+                        {current.description}
+                      </p>
+                    ) : null}
 
-                  <p className="mt-2 text-[13px] font-[450] text-[#A1A1A6]">
-                    {current
-                      ? `${formatRange(current.start, current.end)} · ${activeChannel.language}`
-                      : activeChannel.language}
-                  </p>
-
-                  {current?.description ? (
-                    <p className="mt-3 line-clamp-2 max-w-[480px] text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
-                      {current.description}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-7 flex items-center gap-3">
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      icon={<Play className="h-4 w-4 fill-current" />}
-                      onClick={() => watch(activeChannel.id)}
-                    >
-                      Watch
-                    </Button>
-                    {!previewOn ? (
+                    {/* 6. Buttons: Primary "Watch live", Secondary "Guide" */}
+                    <div className="mt-1 flex items-center gap-3">
                       <Button
-                        variant="secondary"
+                        variant="primary"
                         size="lg"
-                        icon={<Play className="h-4 w-4" />}
-                        onClick={() => {
-                          setOverridePlay(true)
-                          setUserPaused(false)
-                        }}
+                        icon={<Play className="h-4 w-4 fill-current" />}
+                        onClick={() => watch(activeChannel.id)}
                       >
-                        Play preview
+                        Watch live
                       </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="lg"
-                      onClick={() => navigate(`/guide?channel=${activeChannel.id}`)}
-                    >
-                      Guide
-                    </Button>
-                  </div>
-                </div>
+                      <Button
+                        variant="ghost"
+                        size="lg"
+                        onClick={() => navigate(`/guide?channel=${activeChannel.id}`)}
+                      >
+                        Guide
+                      </Button>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
               </div>
             ) : null}
 
-            {/* Always-on 32px pause/play */}
+            {/* Always-on 32px pause/play icon button (accessibility) */}
             {activeChannel ? (
               <button
                 type="button"
@@ -453,44 +534,63 @@ export function Hero(): JSX.Element {
               </button>
             ) : null}
 
-            {/* Switcher: up to 6 verified channels, tablist semantics */}
-            {verifiedOrdered.length > 1 ? (
+            {/* Channel Switcher (bottom-right, 48px gutter, 56px from bottom): up to 6 plates of 56x56 */}
+            {verifiedOrdered.length > 0 ? (
               <div
                 role="tablist"
                 aria-label="Verified featured channels"
                 onKeyDown={onTablistKeyDown}
-                className="absolute right-[var(--gutter)] top-[124px] z-30 flex items-center gap-2"
+                className="absolute bottom-[56px] right-[var(--gutter)] z-30 flex items-center gap-[10px]"
               >
                 {verifiedOrdered.map((id) => {
                   const channel = channelById.get(id)
                   if (!channel) return null
                   const selected = id === activeId
                   return (
-                    <button
-                      key={id}
-                      ref={(element) => {
-                        chipRefs.current[id] = element
-                      }}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      tabIndex={selected ? 0 : -1}
-                      title={channel.name}
-                      aria-label={`Show ${channel.name}`}
-                      onClick={() => select(id)}
-                      onMouseEnter={() => startDwell(id)}
-                      onMouseLeave={cancelDwell}
-                      onFocus={cancelDwell}
-                      className={cn(
-                        'relative rounded-[12px] transition-opacity duration-150',
-                        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
-                        selected
-                          ? 'opacity-100 after:absolute after:inset-[-3px] after:rounded-[14px] after:border after:border-[var(--red-line)] after:content-[""]'
-                          : 'opacity-70 hover:opacity-100'
-                      )}
-                    >
-                      <ChannelLogoCell channel={channel} />
-                    </button>
+                    <div key={id} className="relative">
+                      {tooltipId === id ? (
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-[8px] border border-[rgba(255,255,255,0.12)] bg-[#111113] px-2.5 py-1 text-[12px] font-[500] text-[#F4F4F5] shadow-lg"
+                        >
+                          {channel.name} · CH {channel.number}
+                        </div>
+                      ) : null}
+                      <button
+                        ref={(element) => {
+                          chipRefs.current[id] = element
+                        }}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        tabIndex={selected ? 0 : -1}
+                        title={channel.name}
+                        aria-label={`Show ${channel.name}`}
+                        onClick={() => select(id)}
+                        onMouseEnter={() => {
+                          startDwell(id)
+                          showTooltip(id)
+                        }}
+                        onMouseLeave={() => {
+                          cancelDwell()
+                          hideTooltip()
+                        }}
+                        onFocus={() => {
+                          cancelDwell()
+                          showTooltip(id)
+                        }}
+                        onBlur={hideTooltip}
+                        className={cn(
+                          'relative rounded-[12px] transition-opacity duration-150',
+                          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
+                          selected
+                            ? 'opacity-100 after:absolute after:inset-[-2px] after:rounded-[14px] after:border-2 after:border-[var(--red-line)] after:content-[""]'
+                            : 'opacity-60 hover:opacity-100'
+                        )}
+                      >
+                        <ChannelLogoCell channel={channel} priority="visible" />
+                      </button>
+                    </div>
                   )
                 })}
               </div>

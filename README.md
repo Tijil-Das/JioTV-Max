@@ -196,7 +196,7 @@ The player is fully controllable via the keyboard:
 
 1. **Clone the repository**:
    ```powershell
-   git clone https://github.com/Tijil-Das/JioTV-Proxy.git "JioTV Max"
+   git clone https://github.com/Tijil-Das/JioTV-Max.git "JioTV Max"
    cd "JioTV Max"
    ```
 

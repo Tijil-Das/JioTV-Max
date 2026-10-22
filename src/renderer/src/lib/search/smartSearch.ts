@@ -786,11 +786,111 @@ export interface SmartSearchOptions {
   boostRecent?: string[]
 }
 
+export interface PreparedQuery {
+  query: string
+  cleanQuery: string
+  filters: ParsedFilters
+  queryTokens: string[]
+  queryPhoneticKeys: string[]
+  effectiveQueryTokens: string[]
+  collapsedQuery: string
+  wantsHD: boolean
+  wantsSD: boolean
+  targetNum?: string
+}
+
+export function prepareQuery(rawQuery: string): PreparedQuery {
+  const query = rawQuery.trim().toLowerCase()
+  const filters = parseQueryFilters(query)
+  const cleanQuery = filters.cleanQuery || query
+  const queryTokens = tokenize(cleanQuery)
+  const queryPhoneticKeys = queryTokens.map((t) => (t.length >= 3 ? phoneticKey(t) : ''))
+  const acronymExpansion = ACRONYM_MAP[cleanQuery]
+  const effectiveQueryTokens = acronymExpansion ?? queryTokens
+  const collapsedQuery = queryTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
+
+  const wantsHD =
+    filters.quality === 'HD' ||
+    filters.quality === '4K' ||
+    queryTokens.includes('hd') ||
+    queryTokens.includes('fhd') ||
+    queryTokens.includes('4k') ||
+    cleanQuery.includes('high definition')
+  const wantsSD =
+    filters.quality === 'SD' || queryTokens.includes('sd') || cleanQuery.includes('standard definition')
+  const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : undefined)
+
+  return {
+    query,
+    cleanQuery,
+    filters,
+    queryTokens,
+    queryPhoneticKeys,
+    effectiveQueryTokens,
+    collapsedQuery,
+    wantsHD,
+    wantsSD,
+    targetNum
+  }
+}
+
+export interface CachedChannelIndex {
+  channelNumberStr: string
+  rawCleanName: string
+  nameTokens: string[]
+  namePhoneticKeys: string[]
+  descTokens: string[]
+  langTokens: string[]
+  catTokens: string[]
+  collapsedChannel: string
+  isHD: boolean
+  popularityBonus: number
+}
+
+const channelIndexCache = new WeakMap<Channel, CachedChannelIndex>()
+
+export function getCachedChannelIndex(channel: Channel): CachedChannelIndex {
+  let cached = channelIndexCache.get(channel)
+  if (!cached) {
+    const channelNumberStr = channel.number.toString()
+    const rawCleanName = channel.name.toLowerCase().trim()
+    const nameTokens = tokenize(channel.name)
+    const namePhoneticKeys = nameTokens.map((t) => (t.length >= 3 ? phoneticKey(t) : ''))
+    const descTokens = channel.description ? tokenize(channel.description) : []
+    const langTokens = tokenize(channel.language || '')
+    const catTokens = tokenize(channel.category || '')
+    const collapsedChannel = nameTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
+    const isHD =
+      channel.quality?.some((q) => q.toUpperCase() === 'HD' || q.toUpperCase() === '4K') ||
+      channel.name.toUpperCase().includes('HD')
+    const popularityBonus = Math.min(
+      channel.popularity ?? (channel.viewers ? Math.min(channel.viewers / 100, 20) : 0),
+      20
+    )
+
+    cached = {
+      channelNumberStr,
+      rawCleanName,
+      nameTokens,
+      namePhoneticKeys,
+      descTokens,
+      langTokens,
+      catTokens,
+      collapsedChannel,
+      isHD,
+      popularityBonus
+    }
+    channelIndexCache.set(channel, cached)
+  }
+  return cached
+}
+
 export interface ChannelScoreContext {
   epgProgram?: Program
   upcomingPrograms?: Program[]
   now?: Date
   options?: SmartSearchOptions
+  preparedQuery?: PreparedQuery
 }
 
 /**
@@ -817,15 +917,12 @@ export function scoreChannel(
   const query = rawQuery.trim().toLowerCase()
   if (!query) return { channel, score: 0 }
 
-  // Extract structured filters from query
-  const filters = parseQueryFilters(query)
-  const cleanQuery = filters.cleanQuery || query
-
   // Normalize context
   let currentProgram: Program | undefined
   let upcomingPrograms: Program[] | undefined
   let now = new Date()
   let options: SmartSearchOptions | undefined
+  let preparedQuery: PreparedQuery | undefined
 
   if (contextOrEpg) {
     if ('title' in contextOrEpg && typeof contextOrEpg.title === 'string') {
@@ -836,6 +933,7 @@ export function scoreChannel(
       upcomingPrograms = ctx.upcomingPrograms
       if (ctx.now) now = ctx.now
       options = ctx.options
+      preparedQuery = ctx.preparedQuery
     }
   }
 
@@ -857,19 +955,29 @@ export function scoreChannel(
     return { channel, score: 0 }
   }
 
-  const queryTokens = tokenize(cleanQuery)
-  if (queryTokens.length === 0 && !filters.targetChannelNumber) {
+  const prep = preparedQuery ?? prepareQuery(query)
+  const { cleanQuery, filters, queryTokens, effectiveQueryTokens, collapsedQuery, wantsHD, wantsSD, targetNum } = prep
+
+  if (queryTokens.length === 0 && !targetNum) {
     return { channel, score: 0 }
   }
+
+  const idx = getCachedChannelIndex(channel)
+  const {
+    channelNumberStr,
+    rawCleanName,
+    nameTokens: channelNameTokens,
+    descTokens: channelDescTokens,
+    langTokens: channelLangTokens,
+    catTokens: channelCatTokens,
+    collapsedChannel,
+    isHD,
+    popularityBonus
+  } = idx
 
   let score = 0
   let matchedReason: string | undefined
 
-  const channelNumberStr = channel.number.toString()
-  const channelNameTokens = tokenize(channel.name)
-  const channelDescTokens = channel.description ? tokenize(channel.description) : []
-  const channelLangTokens = tokenize(channel.language || '')
-  const channelCatTokens = tokenize(channel.category || '')
   const currentProgTokens = currentProgram ? tokenize(currentProgram.title) : []
   const currentDescTokens = currentProgram?.description ? tokenize(currentProgram.description) : []
 
@@ -879,7 +987,6 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 1. Channel Number Matching
   // -------------------------------------------------------------------------
-  const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : undefined)
   if (targetNum) {
     if (channelNumberStr === targetNum) {
       score += 2000
@@ -894,7 +1001,6 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 2. Exact & Prefix Name Matching
   // -------------------------------------------------------------------------
-  const rawCleanName = channel.name.toLowerCase().trim()
   if (rawCleanName === cleanQuery) {
     score += 1500
     matchedReason = 'Exact name match'
@@ -907,9 +1013,6 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 3. Acronym & Token Matching against Channel Name
   // -------------------------------------------------------------------------
-  const acronymExpansion = ACRONYM_MAP[cleanQuery]
-  const effectiveQueryTokens = acronymExpansion ?? queryTokens
-
   let nameMatches = 0
   let nameMatchScoreTotal = 0
   let lastMatchedChannelIndex = -1
@@ -953,9 +1056,6 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 4. Collapsed Substring and Subsequence Matching
   // -------------------------------------------------------------------------
-  const collapsedQuery = queryTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
-  const collapsedChannel = channelNameTokens.map((t) => NUMBER_WORD_MAP[t] ?? t).join('')
-
   if (collapsedQuery.length >= 3) {
     if (collapsedChannel.includes(collapsedQuery)) {
       score += 450
@@ -1024,19 +1124,6 @@ export function scoreChannel(
   // -------------------------------------------------------------------------
   // 8. Quality Intent (HD / SD / 4K)
   // -------------------------------------------------------------------------
-  const wantsHD =
-    filters.quality === 'HD' ||
-    filters.quality === '4K' ||
-    queryTokens.includes('hd') ||
-    queryTokens.includes('fhd') ||
-    queryTokens.includes('4k') ||
-    cleanQuery.includes('high definition')
-  const wantsSD =
-    filters.quality === 'SD' || queryTokens.includes('sd') || cleanQuery.includes('standard definition')
-  const isHD =
-    channel.quality?.some((q) => q.toUpperCase() === 'HD' || q.toUpperCase() === '4K') ||
-    channel.name.toUpperCase().includes('HD')
-
   if (wantsHD) {
     if (isHD) {
       score += 150
@@ -1052,15 +1139,12 @@ export function scoreChannel(
       score -= 80
     }
   } else if (score > 0) {
-    // Subtle tie-breaker preference for HD when not explicitly specified
     if (isHD) score += 15
   }
 
   // -------------------------------------------------------------------------
   // 9. Multi-Parameter Synergy Bonus
   // -------------------------------------------------------------------------
-  // When query satisfies multiple dimensions (e.g. Language + Category + Quality),
-  // compound the relevance score so highly targeted queries cleanly win.
   if (matchedDimensions.size >= 3) {
     score += 450
   } else if (matchedDimensions.size === 2) {
@@ -1163,9 +1247,7 @@ export function scoreChannel(
   // 13. Popularity & Viewers Tie-Breaker
   // -------------------------------------------------------------------------
   if (score > 0) {
-    const popularity =
-      channel.popularity ?? (channel.viewers ? Math.min(channel.viewers / 100, 20) : 0)
-    score += Math.min(popularity, 20)
+    score += popularityBonus
   }
 
   return { channel, score, matchedReason }
@@ -1210,6 +1292,9 @@ export function smartSearchWithDetails(
   const trimmed = query.trim()
   if (!trimmed) return []
 
+  const prep = prepareQuery(trimmed)
+  if (prep.queryTokens.length === 0 && !prep.targetNum) return []
+
   const options: SmartSearchOptions | undefined =
     typeof optionsOrLimit === 'number' ? undefined : optionsOrLimit
 
@@ -1217,6 +1302,20 @@ export function smartSearchWithDetails(
   const nowMs = now.getTime()
 
   for (const channel of channels) {
+    // Fast skip by hard options before doing EPG lookups
+    if (options?.category && options.category !== 'all' && channel.category !== options.category) {
+      continue
+    }
+    if (options?.language && channel.language.toLowerCase() !== options.language.toLowerCase()) {
+      continue
+    }
+    if (options?.isPremium !== undefined && channel.isPremium !== options.isPremium) {
+      continue
+    }
+    if (options?.isLive !== undefined && channel.isLive !== options.isLive) {
+      continue
+    }
+
     const programs = epg[channel.id]
     let currentProgram: Program | undefined
     const upcomingPrograms: Program[] = []
@@ -1237,7 +1336,8 @@ export function smartSearchWithDetails(
       epgProgram: currentProgram,
       upcomingPrograms,
       now,
-      options
+      options,
+      preparedQuery: prep
     }
 
     const result = scoreChannel(channel, trimmed, context)
@@ -1256,3 +1356,4 @@ export function smartSearchWithDetails(
 
   return scored
 }
+

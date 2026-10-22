@@ -3,6 +3,7 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
+import { useLogoScaling } from '@/hooks/useLogoScaling'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -135,6 +136,8 @@ export const ChannelLogo = memo(function ChannelLogo({
     return () => cancelAnimationFrame(frame)
   }, [logo])
 
+  const logoScale = useLogoScaling(logo?.objectUrl || channel?.logoUrl)
+
   const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
 
   // Inner logo content
@@ -196,11 +199,12 @@ export const ChannelLogo = memo(function ChannelLogo({
             alt=""
             draggable={false}
             decoding="async"
-            className="pointer-events-none block h-full w-full object-contain"
+            className="pointer-events-none block h-full w-full object-contain transition-transform duration-300"
             style={{
               imageRendering: 'auto',
+              transform: `scale(${logoScale})`,
               opacity: faded ? 1 : 0,
-              transition: 'opacity 300ms ease'
+              transition: 'opacity 300ms ease, transform 300ms ease'
             }}
           />
         )

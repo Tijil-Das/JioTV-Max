@@ -1,0 +1,5 @@
+# E2E Test configuration for local differential auto-updater testing
+# Extends package.json build configuration, swapping ONLY the publish provider.
+publish:
+  provider: generic
+  url: http://localhost:8765/

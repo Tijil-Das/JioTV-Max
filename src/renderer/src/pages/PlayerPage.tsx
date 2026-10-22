@@ -927,8 +927,8 @@ export function PlayerPage(): JSX.Element {
             >
               {isPlaying ? (
                 <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true">
-                  <rect x="5.25" y="4" width="5" height="16" rx="1.5" />
-                  <rect x="13.75" y="4" width="5" height="16" rx="1.5" />
+                  <rect x="5.25" y="2.5" width="5" height="19" rx="1.5" />
+                  <rect x="13.75" y="2.5" width="5" height="19" rx="1.5" />
                 </svg>
               ) : (
                 <Play className="ml-0.5 h-6 w-6 fill-current" />

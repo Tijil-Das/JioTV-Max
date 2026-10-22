@@ -1,9 +1,13 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Keyboard,
+  CheckCircle2,
   LogOut,
   MonitorPlay,
+  RefreshCw,
+  RotateCcw,
   ShieldCheck,
+  Sparkles,
   UserRound
 } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -12,6 +16,7 @@ import { useUIStore } from '@/store/useUIStore'
 import { PageTransition } from '@/components/ui/StateView'
 import { Button } from '@/components/ui/Button'
 import { Toggle } from '@/components/ui/Controls'
+import { getBridge } from '@/services/api'
 import { cn } from '@/lib/cn'
 
 function Section({
@@ -62,17 +67,79 @@ export function SettingsPage(): JSX.Element {
   const openLogin = useUIStore((state) => state.openLogin)
   const pushToast = useUIStore((state) => state.pushToast)
 
-  const shortcuts = [
-    ['Space', 'Play or pause'],
-    ['↑ / ↓', 'Previous or next channel'],
-    ['← / →', 'Volume down or up'],
-    ['F', 'Toggle fullscreen'],
-    ['M', 'Mute or unmute'],
-    ['C', 'Channel drawer'],
-    ['Q', 'Quality menu'],
-    ['Ctrl K', 'Search channels and programs'],
-    ['Esc', 'Back / exit fullscreen']
-  ]
+  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0')
+  const [readyVersion, setReadyVersion] = useState<string | null>(null)
+  const [checking, setChecking] = useState<boolean>(false)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    // 1. Fetch current application version from main process bridge
+    const bridge = getBridge()
+    if (bridge) {
+      bridge
+        .getAppInfo()
+        .then((info) => {
+          if (info?.version) setCurrentVersion(info.version)
+        })
+        .catch(() => {})
+    }
+
+    // 2. Fetch updater state to check for already downloaded update
+    if (window.updater) {
+      window.updater
+        .getState()
+        .then((state) => {
+          if (state?.readyVersion) {
+            setReadyVersion(state.readyVersion)
+          }
+        })
+        .catch(() => {})
+
+      // 3. Listen for update completion while settings page is open
+      window.updater.onReady((newVer) => {
+        setReadyVersion(newVer)
+        pushToast({
+          title: `Update v${newVer} ready`,
+          description: 'Restart JioTV Max to apply the update.',
+          variant: 'info'
+        })
+      })
+    }
+  }, [pushToast])
+
+  const handleCheckUpdates = async (): Promise<void> => {
+    if (checking) return
+    setChecking(true)
+    setCheckMessage('Checking for updates…')
+
+    try {
+      if (window.updater?.check) {
+        const res = await window.updater.check()
+        if (res.status === 'ready' && res.readyVersion) {
+          setReadyVersion(res.readyVersion)
+          setCheckMessage(`Update v${res.readyVersion} is downloaded and ready to apply.`)
+        } else if (res.status === 'update-available' && res.version) {
+          setCheckMessage(`Update v${res.version} found! Downloading in the background…`)
+        } else if (res.status === 'up-to-date') {
+          setCheckMessage('You are on the latest version. JioTV Max is up to date.')
+        } else if (res.status === 'dev-mode') {
+          setCheckMessage('Development build: Auto-updater runs in packaged desktop releases.')
+        } else if (res.error) {
+          setCheckMessage(res.error)
+        } else {
+          setCheckMessage('You are on the latest version.')
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 600))
+        setCheckMessage('You are on the latest version.')
+      }
+    } catch {
+      setCheckMessage('Unable to check for updates. Please check your network connection.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
 
   return (
     <PageTransition>
@@ -89,29 +156,25 @@ export function SettingsPage(): JSX.Element {
 
         <div className="grid grid-cols-1 gap-7 lg:grid-cols-2">
           {/* ── Account ──────────────────────────────────────────────────── */}
-          <Section
-            icon={<UserRound className="h-5 w-5" />}
-            title="Account"
-            description="Manage your linked JioTV account and session security."
-          >
+          <section className="rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#0C0C0E] p-7 shadow-sm transition-all">
             {user ? (
-              <div className="rounded-[14px] border border-[rgba(255,255,255,0.08)] bg-[#141417] p-5">
-                <div className="flex items-center gap-3.5">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-[#1C1C20] text-[#F4F4F5]">
-                    <UserRound className="h-5 w-5" />
+              <>
+                <div className="flex items-start gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#1C1C20] text-[#F4F4F5]">
+                    <UserRound className="h-6 w-6" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-[650] text-[#F4F4F5]">
+                    <h2 className="font-sans text-[16px] font-[650] text-[#F4F4F5]">
                       {user.name && user.name !== 'Jio Viewer' && user.name !== 'Demo Viewer'
                         ? user.name
                         : 'JioTV Subscriber'}
-                    </p>
-                    <p className="truncate text-[12px] font-medium text-[#A1A1A6]">
+                    </h2>
+                    <p className="mt-1 text-[13px] text-[#A1A1A6]">
                       +91 ••••• {user.phone.slice(-5)} · Active session
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <Button variant="secondary" size="sm" onClick={() => navigate('/favorites')}>
                     Open My List
                   </Button>
@@ -131,27 +194,34 @@ export function SettingsPage(): JSX.Element {
                     Sign out
                   </Button>
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="rounded-[14px] border border-[rgba(255,255,255,0.08)] bg-[#141417] p-5">
-                <p className="text-[14px] font-[600] text-[#F4F4F5]">No account linked</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-[#A1A1A6]">
-                  {status === 'authenticating'
-                    ? 'A sign-in attempt is currently in progress.'
-                    : 'Sign in with your registered JioTV mobile number to watch live television.'}
-                </p>
-                <Button
-                  variant="primary"
-                  className="mt-5"
-                  icon={<ShieldCheck className="h-4 w-4" />}
-                  onClick={() => openLogin('Connect your JioTV account to unlock live streams.')}
-                >
-                  Sign in with JioTV
-                </Button>
-              </div>
+              <>
+                <div className="flex items-start gap-3.5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-[rgba(255,255,255,0.08)] bg-[#141417] text-[#A1A1A6]">
+                    <UserRound className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="font-sans text-[16px] font-[650] text-[#F4F4F5]">Account</h2>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[#A1A1A6]">
+                      {status === 'authenticating'
+                        ? 'A sign-in attempt is currently in progress.'
+                        : 'Sign in with your registered JioTV mobile number to watch live television.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <Button
+                    variant="primary"
+                    icon={<ShieldCheck className="h-4 w-4" />}
+                    onClick={() => openLogin('Connect your JioTV account to unlock live streams.')}
+                  >
+                    Sign in with JioTV
+                  </Button>
+                </div>
+              </>
             )}
-
-          </Section>
+          </section>
 
           {/* ── Playback ─────────────────────────────────────────────────── */}
           <Section
@@ -171,27 +241,103 @@ export function SettingsPage(): JSX.Element {
             />
           </Section>
 
-          {/* ── Keyboard shortcuts ───────────────────────────────────────── */}
+          {/* ── App Updates ──────────────────────────────────────────────── */}
           <Section
-            icon={<Keyboard className="h-5 w-5" />}
-            title="Keyboard shortcuts"
-            description="Quick reference for player and navigation hotkeys."
+            icon={<Sparkles className="h-5 w-5" />}
+            title="App Updates"
+            description="View current app version, check for new releases, and restart to apply updates."
             className="lg:col-span-2"
           >
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {shortcuts.map(([keys, description]) => (
-                <li
-                  key={keys}
-                  className="flex items-center justify-between gap-3 rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[#141417] px-4 py-3"
-                >
-                  <span className="text-[13px] font-medium text-[#A1A1A6]">{description}</span>
-                  <kbd className="rounded-[6px] border border-[rgba(255,255,255,0.1)] bg-[#1C1C20] px-2.5 py-1 font-mono text-[11px] font-semibold text-[#F4F4F5] shadow-inner">
-                    {keys}
-                  </kbd>
-                </li>
-              ))}
-            </ul>
+            {/* Current Version & Check for Updates Card */}
+            <div className="rounded-[14px] border border-[rgba(255,255,255,0.08)] bg-[#141417] p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3.5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-white/10 bg-[#1C1C20] text-emerald-400">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <p className="text-[15px] font-[650] text-[#F4F4F5]">
+                        JioTV Max <span className="font-mono text-[13px] font-semibold text-white/90">v{currentVersion}</span>
+                      </p>
+                      <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                        {readyVersion ? 'Update Ready' : 'Current Release'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[#A1A1A6]">
+                      {checkMessage ?? 'Automatic background updates are active. Background polling checks every 20 minutes.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<RefreshCw className={cn('h-3.5 w-3.5', checking && 'animate-spin')} />}
+                    disabled={checking}
+                    onClick={handleCheckUpdates}
+                  >
+                    {checking ? 'Checking…' : 'Check for updates'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Restart to Update Space */}
+            <div className="rounded-[14px] border border-[rgba(255,255,255,0.08)] bg-[#141417] p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3.5">
+                  <span
+                    className={cn(
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border transition-colors',
+                      readyVersion
+                        ? 'border-[var(--red)]/40 bg-[var(--red)]/15 text-[var(--red)] shadow-[0_0_12px_rgba(225,29,46,0.25)]'
+                        : 'border-white/10 bg-[#1C1C20] text-[#A1A1A6]'
+                    )}
+                  >
+                    <RotateCcw className={cn('h-5 w-5', readyVersion && 'animate-pulse')} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <p className="text-[14px] font-[650] text-[#F4F4F5]">Restart to update</p>
+                      {readyVersion ? (
+                        <span className="rounded-full bg-[var(--red)]/20 px-2.5 py-0.5 text-[11px] font-semibold text-[var(--red)]">
+                          Update v{readyVersion} ready
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-[#71717A]">
+                          No pending restart
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[#A1A1A6]">
+                      {readyVersion
+                        ? `Update v${readyVersion} is downloaded and waiting. Restart now to complete the update.`
+                        : 'When a background update completes downloading, this button activates to restart and apply it.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center">
+                  <Button
+                    variant={readyVersion ? 'primary' : 'secondary'}
+                    size="sm"
+                    icon={<RotateCcw className="h-3.5 w-3.5" />}
+                    disabled={!readyVersion}
+                    onClick={() => {
+                      window.updater?.restart()
+                    }}
+                    className={cn(!readyVersion && 'cursor-not-allowed opacity-40')}
+                  >
+                    Restart to update
+                  </Button>
+                </div>
+              </div>
+            </div>
           </Section>
+
+
         </div>
       </div>
     </PageTransition>

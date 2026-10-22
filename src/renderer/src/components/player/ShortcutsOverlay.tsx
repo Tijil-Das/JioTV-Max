@@ -4,9 +4,9 @@ import { Modal } from '@/components/ui/Modal'
 const rows: Array<[string, string]> = [
   ['Space', 'Play / pause'],
   ['J / L', 'Rewind / forward 5s'],
-  ['↑ / ↓', 'Previous / next channel'],
-  ['← / →', 'Volume down / up'],
-  ['F', 'Toggle fullscreen'],
+  ['↑ / ↓', 'Volume level (±5%)'],
+  ['← / →', 'Rewind / forward 5s'],
+  ['F', 'Fullscreen mode'],
   ['M', 'Mute / unmute'],
   ['Q', 'Quality menu'],
   ['?', 'This shortcut sheet'],

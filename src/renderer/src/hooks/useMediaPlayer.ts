@@ -50,6 +50,7 @@ export interface UseMediaPlayerResult {
   videoRef: React.RefObject<HTMLVideoElement>
   levels: EngineLevel[]
   activeLevel: number | 'auto'
+  activeHeight: number
   setLevel: (level: number | 'auto') => void
   buffering: boolean
   reconnecting: boolean
@@ -73,6 +74,52 @@ function friendlyMediaError(detail?: string): string {
     return 'This channel uses Widevine DRM and Chromium could not open a compatible content decryption module. Use a Widevine-enabled Electron build to watch this channel.'
   }
   return detail || 'The stream could not be played.'
+}
+
+/**
+ * Picks the optimal variant track prioritizing:
+ * 1. Maximum audio fidelity first (highest audioBandwidth) — never downgrade audio!
+ * 2. Target height if specified, or highest available video resolution (1080p -> 720p)
+ * 3. Highest video / total bandwidth
+ */
+function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: number; bandwidth?: number }>(
+  tracks: T[],
+  targetHeight?: number
+): T | null {
+  if (!tracks || tracks.length === 0) return null
+
+  // 1. Determine the maximum audio bandwidth available across all tracks to anchor audio fidelity
+  const maxAudioBw = Math.max(...tracks.map((t) => t.audioBandwidth || 0), 0)
+
+  // 2. Filter tracks matching the target height (if specified) or all with positive height
+  const byHeightPool = targetHeight
+    ? tracks.filter((t) => t.height === targetHeight)
+    : tracks.filter((t) => (t.height ?? 0) > 0)
+
+  const pool = byHeightPool.length > 0 ? byHeightPool : tracks
+
+  // 3. Sort so highest audio and video quality win
+  return (
+    [...pool].sort((a, b) => {
+      // Prioritize tracks with uncompressed/top audio (within 85% of max audio bandwidth)
+      const aAudio = a.audioBandwidth || 0
+      const bAudio = b.audioBandwidth || 0
+      if (maxAudioBw > 0) {
+        const aTopAudio = aAudio >= maxAudioBw * 0.85
+        const bTopAudio = bAudio >= maxAudioBw * 0.85
+        if (aTopAudio !== bTopAudio) return bTopAudio ? 1 : -1
+      }
+      if (bAudio !== aAudio) return bAudio - aAudio
+
+      // Video height
+      const aHeight = a.height || 0
+      const bHeight = b.height || 0
+      if (bHeight !== aHeight) return bHeight - aHeight
+
+      // Video / total bandwidth
+      return (b.bandwidth || 0) - (a.bandwidth || 0)
+    })[0] ?? null
+  )
 }
 
 interface FormattedShakaError {
@@ -187,6 +234,7 @@ export function useMediaPlayer({
   const [activeLevel, setActiveLevel] = useState<number | 'auto'>(
     initialQuality === 'auto' ? 'auto' : 0
   )
+  const [activeHeight, setActiveHeight] = useState<number>(0)
   const [buffering, setBuffering] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reconnecting, setReconnecting] = useState(false)
@@ -202,6 +250,7 @@ export function useMediaPlayer({
   const pausedAtRef = useRef<number | null>(null)
   const refreshingOnResumeRef = useRef(false)
   const seekRangeRef = useRef<MediaSeekRange | null>(null)
+  const autoRecoveryTimerRef = useRef<number | null>(null)
 
   // Stable ref so fail() can call the latest onReconnect without being a dep.
   const onReconnectRef = useRef(onReconnect)
@@ -455,8 +504,8 @@ export function useMediaPlayer({
             useNativeHlsForFairPlay: false,
             lowLatencyMode: false,
             inaccurateManifestTolerance: 0,
-            bufferBehind: 15,
-            bufferingGoal: 25,
+            bufferBehind: 2,
+            bufferingGoal: 6,
             rebufferingGoal: 2,
             stallEnabled: true,
             stallThreshold: 1,
@@ -506,10 +555,29 @@ export function useMediaPlayer({
       video.load()
     }
 
+    let stallCountInAuto = 0
+    let lastStallAt = 0
+
     const onPlaying = () => {
       console.log('[useMediaPlayer] Video event: playing')
       clearBuffering()
       setReady(true)
+      if (desiredRef.current === 'auto' && stallCountInAuto >= 2 && shakaRef.current) {
+        if (autoRecoveryTimerRef.current) window.clearTimeout(autoRecoveryTimerRef.current)
+        autoRecoveryTimerRef.current = window.setTimeout(() => {
+          if (!disposed && desiredRef.current === 'auto' && shakaRef.current) {
+            const p = shakaRef.current
+            const currentTracks = p.getVariantTracks()
+            const best = pickBestVariantTrack(currentTracks)
+            if (best) {
+              console.log('[useMediaPlayer] Auto mode: network stabilized, restoring to highest resolution (1080p)')
+              p.selectVariantTrack(best, false)
+              if (best.height) setActiveHeight(best.height)
+              stallCountInAuto = 0
+            }
+          }
+        }, 40_000)
+      }
     }
 
     const onPlay = () => {
@@ -549,6 +617,31 @@ export function useMediaPlayer({
     const onWaiting = () => {
       console.log('[useMediaPlayer] Video event: waiting')
       showBufferingSoon()
+      if (desiredRef.current === 'auto' && shakaRef.current) {
+        const now = performance.now()
+        if (now - lastStallAt < 12_000) {
+          stallCountInAuto++
+        } else {
+          stallCountInAuto = 1
+        }
+        lastStallAt = now
+
+        // If repeated stalls occur within 12s on a weak connection, step down video to 720p while preserving uncompressed audio
+        if (stallCountInAuto >= 2) {
+          const p = shakaRef.current
+          const currentTracks = p.getVariantTracks()
+          const active = currentTracks.find((t: { active?: boolean }) => t.active)
+          const currentHeight = active?.height || 1080
+          if (currentHeight > 720) {
+            console.warn('[useMediaPlayer] Auto mode: repeated stalls detected, stepping down to 720p without degrading audio')
+            const fallback = pickBestVariantTrack(currentTracks, 720)
+            if (fallback) {
+              p.selectVariantTrack(fallback, false)
+              if (fallback.height) setActiveHeight(fallback.height)
+            }
+          }
+        }
+      }
     }
     const onStalled = () => {
       console.log('[useMediaPlayer] Video event: stalled')
@@ -578,6 +671,10 @@ export function useMediaPlayer({
     // Ensure micro-catchup speed adjustments sound natural without pitch distortion
     video.preservesPitch = true
 
+    const onResize = () => {
+      if (video.videoHeight > 0) setActiveHeight(video.videoHeight)
+    }
+    video.addEventListener('resize', onResize)
     video.addEventListener('playing', onPlaying)
     video.addEventListener('play', onPlay)
     video.addEventListener('waiting', onWaiting)
@@ -585,6 +682,7 @@ export function useMediaPlayer({
     video.addEventListener('canplay', onCanPlay)
     video.addEventListener('loadeddata', onLoadedData)
     video.addEventListener('loadedmetadata', syncSeekRange)
+    video.addEventListener('loadedmetadata', onResize)
     video.addEventListener('durationchange', syncSeekRange)
     video.addEventListener('progress', syncSeekRange)
     video.addEventListener('seeked', syncSeekRange)
@@ -595,6 +693,86 @@ export function useMediaPlayer({
     // timer runs so the DVR bar keeps up even without media events.
     const seekRangeTimer = window.setInterval(syncSeekRange, 1000)
     syncSeekRange()
+
+    // Active video frame presentation watchdog:
+    // Detects and automatically recovers when audio continues playing and advancing currentTime,
+    // but video graphics/frames are frozen on a single image.
+    let lastFramePresentedAt = performance.now()
+    let lastMediaTime = video.currentTime
+    let freezeConsecutiveCount = 0
+    let rVfcId: number | null = null
+
+    type VideoWithCallback = HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number
+      cancelVideoFrameCallback?: (id: number) => void
+    }
+    const videoWithCallback = video as VideoWithCallback
+
+    const onVideoFramePresented = () => {
+      lastFramePresentedAt = performance.now()
+      freezeConsecutiveCount = 0
+      if (!disposed && typeof videoWithCallback.requestVideoFrameCallback === 'function') {
+        rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
+      }
+    }
+
+    if (typeof videoWithCallback.requestVideoFrameCallback === 'function') {
+      rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
+    }
+
+    const videoFreezeWatchdogTimer = window.setInterval(() => {
+      if (disposed) return
+      const currentMediaTime = video.currentTime
+      const timeAdvanced = currentMediaTime - lastMediaTime
+      lastMediaTime = currentMediaTime
+
+      // Only evaluate when the video is expected to be playing
+      if (!video.paused && !video.ended && video.readyState >= 2) {
+        // Timeline is moving (audio playback clock is advancing)
+        if (timeAdvanced > 0.2) {
+          const timeSinceFrame = performance.now() - lastFramePresentedAt
+          // If no video frame has been presented for more than 2 seconds
+          if (timeSinceFrame > 2000) {
+            freezeConsecutiveCount++
+            console.warn(
+              `[useMediaPlayer] Video graphics freeze detected: audio advanced ${timeAdvanced.toFixed(2)}s, but 0 video frames for ${(timeSinceFrame / 1000).toFixed(1)}s (tick ${freezeConsecutiveCount})`
+            )
+
+            if (freezeConsecutiveCount === 1) {
+              // Level 1: Micro-seek nudge to kick Chromium decoder out of the stalled decode state
+              try {
+                video.currentTime = video.currentTime + 0.02
+              } catch (e) {
+                console.warn('[useMediaPlayer] Micro-seek nudge failed:', e)
+              }
+            } else if (freezeConsecutiveCount === 2) {
+              // Level 2: Engine-level recovery
+              if (hlsRef.current) {
+                console.warn('[useMediaPlayer] Recovering HLS from video freeze via recoverMediaError()')
+                try {
+                  hlsRef.current.recoverMediaError()
+                } catch (e) {
+                  console.warn('[useMediaPlayer] hls.recoverMediaError failed:', e)
+                }
+              } else if (shakaRef.current) {
+                console.warn('[useMediaPlayer] Recovering Shaka from video freeze via retryStreaming()')
+                try {
+                  void shakaRef.current.retryStreaming()
+                } catch (e) {
+                  console.warn('[useMediaPlayer] shaka.retryStreaming failed:', e)
+                }
+              }
+            } else if (freezeConsecutiveCount >= 3) {
+              // Level 3: Jump forward to live edge
+              console.warn('[useMediaPlayer] Video freeze persisted; jumping to live edge')
+              goLive()
+              freezeConsecutiveCount = 0
+            }
+            lastFramePresentedAt = performance.now()
+          }
+        }
+      }
+    }, 1000)
 
     const applyInitialHeight = (available: EngineLevel[], select: (index: number | 'auto') => void) => {
       const desired = desiredRef.current
@@ -629,19 +807,21 @@ export function useMediaPlayer({
           // Keep a longer back buffer so pausing then rewinding does not have
           // to immediately re-fetch everything from the CDN.
           backBufferLength: 90,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 60 * 1000 * 1000,
-          highBufferWatchdogPeriod: 2,
-          nudgeOffset: 0.1,
-          nudgeMaxRetry: 5,
+          maxBufferLength: 15,
+          maxMaxBufferLength: 30,
+          maxBufferSize: 30 * 1000 * 1000,
+          highBufferWatchdogPeriod: 1,
+          nudgeOffset: 0.15,
+          nudgeMaxRetry: 10,
+          maxStarvationDelay: 2,
           liveSyncDurationCount: 3,
           liveMaxLatencyDurationCount: 6,
           liveDurationInfinity: true,
           capLevelToPlayerSize: false,
-          startLevel: -1,
-          abrEwmaDefaultEstimate: 20_000_000,
-          abrBandWidthFactor: 0.92,
+          minAutoBitrate: 1_800_000,
+          abrEwmaDefaultEstimate: 50_000_000,
+          abrEwmaDefaultEstimateMax: 80_000_000,
+          abrBandWidthFactor: 0.85,
           abrBandWidthUpFactor: 0.85,
           abrMaxWithRealBitrate: true
         })
@@ -668,16 +848,43 @@ export function useMediaPlayer({
           setReady(true)
           syncSeekRange()
 
+          const heights = mapped.map((l) => l.height || 0).filter((h) => h > 0)
+          const maxHeight = heights.length > 0 ? Math.max(...heights) : 0
+          const targetFloor = maxHeight >= 720 ? 720 : maxHeight
+          const eligibleFloors = mapped.filter((l) => (l.height || 0) >= targetFloor && (l.bitrate || 0) > 0)
+          if (eligibleFloors.length > 0) {
+            const minBitrate = Math.min(...eligibleFloors.map((l) => l.bitrate))
+            hls.config.minAutoBitrate = minBitrate
+          }
+
           const desired = desiredRef.current
           if (desired === 'auto' || typeof desired === 'number') {
             const maxAllowedHeight = typeof desired === 'number' ? desired : 1080
             const eligible = mapped.filter((l) => l.height > 0 && l.height <= maxAllowedHeight)
-            if (eligible.length > 0) {
-              const highestEligible = eligible.reduce((prev, curr) => (curr.height > prev.height ? curr : prev))
+            const highestEligible = (eligible.length > 0 ? eligible : mapped).reduce(
+              (prev, curr) => (curr.height > prev.height ? curr : prev),
+              mapped[0]
+            )
+            if (highestEligible) {
               hls.autoLevelCapping = highestEligible.index
+              hls.startLevel = highestEligible.index
+              hls.nextLevel = highestEligible.index
+              if (highestEligible.height) setActiveHeight(highestEligible.height)
             }
-            hls.currentLevel = -1
-            setActiveLevel('auto')
+            if (desired === 'auto') {
+              hls.autoLevelCapping = highestEligible.index
+              hls.currentLevel = highestEligible.index
+              setActiveLevel('auto')
+            } else {
+              const exact = mapped.find((l) => l.height === desired)
+              if (exact) {
+                hls.currentLevel = exact.index
+                setActiveLevel(exact.index)
+              } else {
+                hls.currentLevel = highestEligible.index
+                setActiveLevel('auto')
+              }
+            }
           }
           void media.play().catch((err: unknown) => {
             console.warn('[useMediaPlayer] Autoplay play() rejected in MANIFEST_PARSED:', err)
@@ -685,10 +892,33 @@ export function useMediaPlayer({
           })
         })
 
+        hls.on(HlsEvents.FRAG_BUFFERED, () => {
+          mediaRecoveryAttempts = 0
+        })
+
+        hls.on(HlsEvents.LEVEL_SWITCHING, (_event, data) => {
+          if (disposed) return
+          const levels = hls.levels || []
+          const maxHeight = Math.max(...levels.map((l) => l.height || 0), 0)
+          const targetFloor = maxHeight >= 720 ? 720 : maxHeight
+          const eligibleIdxs = levels
+            .map((l, idx) => ({ height: l.height || 0, idx }))
+            .filter((l) => l.height >= targetFloor)
+          if (eligibleIdxs.length > 0) {
+            const minAllowedIdx = eligibleIdxs.reduce((min, curr) => (curr.idx < min.idx ? curr : min)).idx
+            if (hls.autoLevelEnabled && data.level < minAllowedIdx) {
+              console.log(`[useMediaPlayer] Guarding HLS Auto quality: preventing drop below ${targetFloor}p (attempted ${data.level})`)
+              hls.nextLevel = minAllowedIdx
+            }
+          }
+        })
+
         hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
           if (disposed) return
           console.log(`[useMediaPlayer] HlsEvent: LEVEL_SWITCHED to ${data.level}`)
           setActiveLevel(hls.autoLevelEnabled ? 'auto' : data.level)
+          const levelObj = hls.levels[data.level]
+          if (levelObj?.height) setActiveHeight(levelObj.height)
         })
 
         hls.on(HlsEvents.ERROR, (_event, data) => {
@@ -701,6 +931,12 @@ export function useMediaPlayer({
             data.response?.code,
             data.response?.text
           )
+          if (data.details === ErrorDetails.BUFFER_STALLED_ERROR) {
+            console.warn('[useMediaPlayer] Non-fatal buffer stalled error; nudging video...')
+            if (media && !media.paused) {
+              media.currentTime += 0.05
+            }
+          }
           if (disposed || !data.fatal) return
           const httpStatus = data.response?.code ?? 0
           if (
@@ -733,9 +969,9 @@ export function useMediaPlayer({
             }
             fail('The live stream could not be reached. Reconnecting…', true)
           } else if (data.type === ErrorTypes.MEDIA_ERROR) {
-            if (mediaRecoveryAttempts < 1) {
+            if (mediaRecoveryAttempts < 3) {
               mediaRecoveryAttempts += 1
-              console.log('[useMediaPlayer] Fatal media error: attempting hls.recoverMediaError()')
+              console.log(`[useMediaPlayer] Fatal media error: attempting hls.recoverMediaError() (attempt ${mediaRecoveryAttempts}/3)`)
               hls.recoverMediaError()
               return
             }
@@ -963,13 +1199,9 @@ export function useMediaPlayer({
               clockSyncUri: (() => { try { const u = new URL(activeStream.url); return `${u.protocol}//${u.host}/dashtime` } catch { return '' } })()
             }
           },
+          preferredAudioChannelCount: 2,
           abr: {
-            enabled: true,
-            defaultBandwidthEstimate: 20_000_000,
-            switchInterval: 2,
-            bandwidthUpgradeTarget: 0.82,
-            bandwidthDowngradeTarget: 0.95,
-            restrictions: { maxHeight: 1080 }
+            enabled: false
           },
           streaming: {
             useNativeHlsForFairPlay: false,
@@ -980,8 +1212,8 @@ export function useMediaPlayer({
             // buffering goal multiplies segment requests needed before playback
             // starts. Keep DRM buffer lean; HLS fallback uses original values.
             // Mirrors jiotv_go: bufferBehind: isDRM ? 2 : 5
-            bufferBehind: 15,
-            bufferingGoal: 25,
+            bufferBehind: activeStream.isDrm ? 2 : 5,
+            bufferingGoal: activeStream.isDrm ? 6 : 15,
             rebufferingGoal: 2,
             stallEnabled: true,
             stallThreshold: 1,
@@ -998,6 +1230,16 @@ export function useMediaPlayer({
               backoffFactor: 2,
               timeout: 30_000
             }
+          }
+        })
+
+        player.addEventListener('adaptation', () => {
+          if (disposed) return
+          const tracks = player.getVariantTracks()
+          const active = tracks.find((t: { active?: boolean }) => t.active)
+          if (active?.height) {
+            console.log(`[useMediaPlayer] Shaka ABR switched to ${active.height}p (video: ${active.videoBandwidth}, audio: ${active.audioBandwidth})`)
+            setActiveHeight(active.height)
           }
         })
 
@@ -1039,24 +1281,28 @@ export function useMediaPlayer({
         setLevels(mapped)
 
         applyInitialHeight(mapped, (index) => {
+          player.configure({
+            preferredAudioChannelCount: 2,
+            abr: { enabled: false }
+          })
+
           if (index === 'auto') {
-            player.configure({
-              abr: {
-                enabled: true,
-                defaultBandwidthEstimate: 5000000,
-                restrictions: { maxHeight: 1080 }
-              }
-            })
+            const best = pickBestVariantTrack(tracks)
+            if (best) {
+              player.selectVariantTrack(best, false)
+              if (best.height) setActiveHeight(best.height)
+            }
+            setActiveLevel('auto')
             return
           }
           const target = mapped[index]
           if (!target) return
-          player.configure({ abr: { enabled: false } })
-          const candidates = tracks.filter((track: { height?: number }) => track.height === target.height)
-          const best = candidates.sort(
-            (a: { bandwidth?: number }, b: { bandwidth?: number }) => (b.bandwidth ?? 0) - (a.bandwidth ?? 0)
-          )[0]
-          if (best) player.selectVariantTrack(best, true)
+          const best = pickBestVariantTrack(tracks, target.height)
+          if (best) {
+            player.selectVariantTrack(best, true)
+            if (best.height) setActiveHeight(best.height)
+            setActiveLevel(index)
+          }
         })
 
         void video.play().catch((err: unknown) => {
@@ -1094,6 +1340,10 @@ export function useMediaPlayer({
       seekRangeRef.current = null
       return () => {
         window.clearInterval(seekRangeTimer)
+        window.clearInterval(videoFreezeWatchdogTimer)
+        if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
+          videoWithCallback.cancelVideoFrameCallback(rVfcId)
+        }
         video.removeEventListener('playing', onPlaying)
         video.removeEventListener('play', onPlay)
         video.removeEventListener('waiting', onWaiting)
@@ -1121,7 +1371,12 @@ export function useMediaPlayer({
       disposed = true
       clearBuffering()
       window.clearInterval(seekRangeTimer)
+      window.clearInterval(videoFreezeWatchdogTimer)
+      if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
+        videoWithCallback.cancelVideoFrameCallback(rVfcId)
+      }
       if (retryTimer.current) clearTimeout(retryTimer.current)
+      if (autoRecoveryTimerRef.current) window.clearTimeout(autoRecoveryTimerRef.current)
       video.removeEventListener('playing', onPlaying)
       video.removeEventListener('play', onPlay)
       video.removeEventListener('waiting', onWaiting)
@@ -1152,42 +1407,54 @@ export function useMediaPlayer({
     if (!hlsRef.current && !shakaRef.current) return
 
     if (hlsRef.current) {
+      const hls = hlsRef.current
       if (level === 'auto') {
-        hlsRef.current.autoLevelCapping = -1
-        hlsRef.current.currentLevel = -1
+        const levels = hls.levels || []
+        const highestEligibleIdx = levels.reduce(
+          (prev, curr, idx) => ((curr.height || 0) > (levels[prev]?.height || 0) ? idx : prev),
+          0
+        )
+        hls.autoLevelCapping = highestEligibleIdx
+        hls.currentLevel = highestEligibleIdx
+        if (levels[highestEligibleIdx]?.height) {
+          setActiveHeight(levels[highestEligibleIdx].height)
+        }
+        setActiveLevel('auto')
       } else {
-        hlsRef.current.currentLevel = level
+        hls.currentLevel = level
+        if (hls.levels[level]?.height) {
+          setActiveHeight(hls.levels[level].height)
+        }
+        setActiveLevel(level)
       }
-      setActiveLevel(level)
       return
     }
 
     const player = shakaRef.current
     if (!player) return
+    player.configure({
+      preferredAudioChannelCount: 2,
+      abr: { enabled: false }
+    })
+    const tracks = player.getVariantTracks()
+
     if (level === 'auto') {
-      player.configure({
-        abr: {
-          enabled: true,
-          defaultBandwidthEstimate: 5000000,
-          restrictions: { maxHeight: 1080 }
-        }
-      })
+      const best = pickBestVariantTrack(tracks)
+      if (best) {
+        player.selectVariantTrack(best, false)
+        if (best.height) setActiveHeight(best.height)
+      }
       setActiveLevel('auto')
       return
     }
 
     const target = levelsRef.current[level]
     if (!target) return
-    const tracks = player.getVariantTracks()
-    const best = tracks
-      .filter((track: { height?: number }) => track.height === target.height)
-      .sort(
-        (a: { bandwidth?: number }, b: { bandwidth?: number }) => (b.bandwidth ?? 0) - (a.bandwidth ?? 0)
-      )[0]
-    if (!best) return
-
-    player.configure({ abr: { enabled: false } })
-    player.selectVariantTrack(best, true)
+    const best = pickBestVariantTrack(tracks, target.height)
+    if (best) {
+      player.selectVariantTrack(best, true)
+      if (best.height) setActiveHeight(best.height)
+    }
     setActiveLevel(level)
   }, [])
 
@@ -1195,6 +1462,7 @@ export function useMediaPlayer({
     videoRef,
     levels,
     activeLevel,
+    activeHeight,
     setLevel,
     buffering,
     reconnecting,

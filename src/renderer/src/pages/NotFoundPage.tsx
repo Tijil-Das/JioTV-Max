@@ -15,7 +15,7 @@ export function NotFoundPage(): JSX.Element {
               The address does not match anything in JioTv <span className="text-[var(--red)] font-semibold">Max</span>. Head back to the front page and pick a channel.
             </>
           }
-          actionLabel="Back home"
+          actionLabel="Browse channels"
           onAction={() => navigate('/')}
         />
       </div>

@@ -240,6 +240,14 @@ export default function App(): JSX.Element {
     }
   }, [location.pathname])
 
+  // ── Track last non-watch route for player back navigation ────────────
+  useEffect(() => {
+    if (!location.pathname.startsWith('/watch')) {
+      const fullPath = location.pathname + location.search
+      useUIStore.getState().setLastBrowsePath(fullPath)
+    }
+  }, [location.pathname, location.search])
+
   // ── Window title ─────────────────────────────────────────────────────
   useEffect(() => {
     const path = location.pathname

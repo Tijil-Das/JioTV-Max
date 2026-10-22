@@ -189,6 +189,7 @@ export interface StreamDeckApi {
 
 export interface UpdaterBridge {
   getState(): Promise<{ readyVersion: string | null }>
+  check(): Promise<{ status: string; readyVersion?: string | null; version?: string; error?: string }>
   onReady(cb: (version: string) => void): void
   restart(): void
 }

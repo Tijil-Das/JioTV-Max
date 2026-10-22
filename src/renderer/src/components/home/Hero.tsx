@@ -85,6 +85,7 @@ export function Hero(): JSX.Element {
   )
   const [direction, setDirection] = useState<1 | -1>(1)
   const [mouseActive, setMouseActive] = useState(false)
+  const [videoHovered, setVideoHovered] = useState(false)
   const mouseTimerRef = useRef<number | null>(null)
 
   const onMouseMove = useCallback(() => {
@@ -210,28 +211,27 @@ export function Hero(): JSX.Element {
       setActiveStream(null)
       return
     }
-    const handoff = streamProbe.lastStream(activeId)
-    if (handoff) {
+    const currentActiveId = activeId
+    const handoff = streamProbe.lastStream(currentActiveId)
+    if (handoff && handoff.channelId === currentActiveId) {
       setActiveStream(handoff)
       return
     }
-    const channel = channelById.get(activeId)
+    const channel = channelById.get(currentActiveId)
     if (!channel) {
-      setActiveStream(null)
       return
     }
     let cancelled = false
-    setActiveStream(null)
     void channelService
       .getStream(channel, mode, defaultQuality)
       .then((stream) => {
-        if (!cancelled) setActiveStream(stream)
+        if (!cancelled) {
+          streamProbe.setStreamHandoff(currentActiveId, stream)
+          setActiveStream(stream)
+        }
       })
       .catch((err) => {
-        console.warn(`[hero] getStream error on ${activeId}:`, err)
-        if (!cancelled) {
-          setActiveStream(null)
-        }
+        console.warn(`[hero] getStream error on ${currentActiveId}:`, err)
       })
     return () => {
       cancelled = true
@@ -315,7 +315,6 @@ export function Hero(): JSX.Element {
   // ---- Interaction ---------------------------------------------------------
   const select = useCallback((id: string) => {
     setUserPaused(false)
-    setActiveStream(null)
     setActiveId(id)
   }, [])
 
@@ -455,25 +454,61 @@ export function Hero(): JSX.Element {
 
   return (
     <div
-      className="relative z-0 transition-[margin] duration-300 ease-out"
+      className="relative z-0 flex flex-col items-center justify-center pt-[72px] pb-8 px-4 sm:px-8 md:px-12 transition-[margin] duration-300 ease-out bg-[#0A0A0B]"
       style={{ marginBottom: 0 }}
     >
       <div
-        className="grid transition-[grid-template-rows] duration-300 ease-out"
+        className="w-full grid transition-[grid-template-rows] duration-300 ease-out"
         style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
         aria-hidden={!expanded}
       >
-        <div className="min-h-0 overflow-hidden">
-          <section
-            ref={sectionRef}
-            aria-label="Featured live channel"
-            onMouseMove={onMouseMove}
-            onMouseEnter={() => setMouseActive(true)}
-            onMouseLeave={() => setMouseActive(false)}
-            onClick={() => activeChannel && watch(activeChannel.id)}
-            className="group/hero relative h-[clamp(680px,86vh,980px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
-          >
-            {/* Cinema Stage — full width & height */}
+        <div className="min-h-0 overflow-hidden w-full flex items-center justify-center">
+          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px]">
+            {/* Left Channel Skip Arrow (in free space to the left of the video container) */}
+            {verifiedOrdered.length > 1 ? (
+              <button
+                type="button"
+                aria-label="Previous channel"
+                title={prevChannel ? `Previous: ${prevChannel.name}` : 'Previous channel'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  goToPrev()
+                }}
+                className={cn(
+                  'mr-4 sm:mr-7 md:mr-9 shrink-0 z-30',
+                  'flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full',
+                  'border border-white/15 bg-white/[0.08] hover:bg-white/[0.18] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
+                  'transition-all duration-300 ease-out active:scale-95 hover:scale-110',
+                  'opacity-80 hover:opacity-100',
+                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
+                  videoHovered ? '-translate-x-4 sm:-translate-x-6 opacity-95' : 'translate-x-0'
+                )}
+              >
+                <ChevronLeft className="h-6 w-6 stroke-[2.5]" />
+              </button>
+            ) : null}
+
+            <section
+              ref={sectionRef}
+              aria-label="Featured live channel"
+              onMouseMove={onMouseMove}
+              onMouseEnter={() => {
+                setMouseActive(true)
+                setVideoHovered(true)
+              }}
+              onMouseLeave={() => {
+                setMouseActive(false)
+                setVideoHovered(false)
+              }}
+              onClick={() => activeChannel && watch(activeChannel.id)}
+              style={{
+                width: 'min(calc(100% - 150px), calc(72vh * 16 / 9))',
+                maxWidth: '1340px',
+                aspectRatio: '16 / 9'
+              }}
+              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] rounded-[24px] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08]"
+            >
+            {/* Cinema Stage — 16:9 aspect ratio strictly preserved */}
             <div className="relative h-full w-full overflow-hidden">
               {/* Static backdrop: real EPG artwork when present */}
               <div className="absolute inset-0" aria-hidden>
@@ -487,18 +522,9 @@ export function Hero(): JSX.Element {
                 ) : null}
               </div>
 
-              {/* A/B video slots: full bleed with soft edge mask */}
-              <div
-                className="absolute inset-0"
-                style={{
-                  WebkitMaskImage:
-                    'radial-gradient(ellipse 74% 70% at 50% 50%, black 25%, rgba(0,0,0,0.85) 50%, rgba(0,0,0,0.2) 75%, transparent 92%)',
-                  maskImage:
-                    'radial-gradient(ellipse 74% 70% at 50% 50%, black 25%, rgba(0,0,0,0.85) 50%, rgba(0,0,0,0.2) 75%, transparent 92%)'
-                }}
-                aria-hidden
-              >
-                <div className="relative h-full w-full overflow-hidden">
+              {/* A/B video slots: darkened when idle, full brightness on hover */}
+              <div className="absolute inset-0" aria-hidden>
+                <div className="relative h-full w-full overflow-hidden transition-[filter] duration-500 brightness-[0.48] contrast-[1.05] group-hover/hero:brightness-100 group-hover/hero:contrast-100">
                   {[0, 1].map((slot) => (
                     <video
                       key={slot}
@@ -520,100 +546,56 @@ export function Hero(): JSX.Element {
                 </div>
               </div>
 
-              {/* Strong four-sided cinema crossfade: seamlessly transitions video into solid #0A0A0B from all 4 sides */}
+              {/* Edge crossfade: 4-sided solid black gradient feathering that retracts outwards on hover */}
               <div
-                className="pointer-events-none absolute inset-0 z-10"
+                className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
                 aria-hidden
               >
-                {/* Top edge crossfade */}
+                {/* Top crossfade: retracts upward on hover */}
                 <div
-                  className="absolute inset-x-0 top-0 h-[220px]"
+                  className="absolute inset-x-0 top-0 h-[56px] transition-all duration-500 ease-out group-hover/hero:-translate-y-8 group-hover/hero:opacity-25"
                   style={{
                     background:
-                      'linear-gradient(to bottom, #0A0A0B 0%, #0A0A0B 24%, rgba(10,10,11,0.96) 50%, rgba(10,10,11,0.7) 72%, rgba(10,10,11,0.25) 90%, transparent 100%)'
+                      'linear-gradient(to bottom, #0A0A0B 0%, rgba(10,10,11,0.92) 25%, rgba(10,10,11,0.45) 65%, transparent 100%)'
                   }}
                 />
-                {/* Bottom edge crossfade */}
+                {/* Bottom crossfade: retracts downward on hover */}
                 <div
-                  className="absolute inset-x-0 bottom-0 h-[340px]"
+                  className="absolute inset-x-0 bottom-0 h-[56px] transition-all duration-500 ease-out group-hover/hero:translate-y-8 group-hover/hero:opacity-25"
                   style={{
                     background:
-                      'linear-gradient(to top, #0A0A0B 0%, #0A0A0B 26%, rgba(10,10,11,0.98) 52%, rgba(10,10,11,0.8) 72%, rgba(10,10,11,0.35) 90%, transparent 100%)'
+                      'linear-gradient(to top, #0A0A0B 0%, rgba(10,10,11,0.92) 25%, rgba(10,10,11,0.45) 65%, transparent 100%)'
                   }}
                 />
-                {/* Left edge crossfade */}
+                {/* Left crossfade: retracts leftward on hover */}
                 <div
-                  className="absolute inset-y-0 left-0 w-[62%]"
+                  className="absolute inset-y-0 left-0 w-[56px] transition-all duration-500 ease-out group-hover/hero:-translate-x-8 group-hover/hero:opacity-25"
                   style={{
                     background:
-                      'linear-gradient(to right, #0A0A0B 0%, #0A0A0B 24%, rgba(10,10,11,0.96) 48%, rgba(10,10,11,0.7) 70%, rgba(10,10,11,0.2) 90%, transparent 100%)'
+                      'linear-gradient(to right, #0A0A0B 0%, rgba(10,10,11,0.92) 25%, rgba(10,10,11,0.45) 65%, transparent 100%)'
                   }}
                 />
-                {/* Right edge crossfade */}
+                {/* Right crossfade: retracts rightward on hover */}
                 <div
-                  className="absolute inset-y-0 right-0 w-[45%]"
+                  className="absolute inset-y-0 right-0 w-[56px] transition-all duration-500 ease-out group-hover/hero:translate-x-8 group-hover/hero:opacity-25"
                   style={{
                     background:
-                      'linear-gradient(to left, #0A0A0B 0%, #0A0A0B 18%, rgba(10,10,11,0.92) 42%, rgba(10,10,11,0.6) 68%, rgba(10,10,11,0.16) 88%, transparent 100%)'
+                      'linear-gradient(to left, #0A0A0B 0%, rgba(10,10,11,0.92) 25%, rgba(10,10,11,0.45) 65%, transparent 100%)'
                   }}
                 />
-                {/* Perimeter ellipse crossfade */}
+                {/* Localized subtle vignette behind bottom-left hero text for legibility */}
                 <div
-                  className="absolute inset-0"
+                  className="absolute bottom-0 left-0 h-[200px] w-[460px] max-w-full transition-opacity duration-500 ease-out group-hover/hero:opacity-60"
                   style={{
                     background:
-                      'radial-gradient(ellipse 88% 82% at 50% 50%, transparent 20%, rgba(10,10,11,0.45) 45%, rgba(10,10,11,0.9) 72%, #0A0A0B 90%, #0A0A0B 100%)'
+                      'radial-gradient(ellipse at bottom left, rgba(10,10,11,0.75) 0%, rgba(10,10,11,0.25) 50%, transparent 75%)'
                   }}
                 />
               </div>
 
-              {/* Navigation Arrow: Left (shown on mouse active) */}
-              {verifiedOrdered.length > 1 ? (
-                <button
-                  type="button"
-                  aria-label="Previous channel"
-                  title={prevChannel ? `Previous: ${prevChannel.name}` : 'Previous channel'}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    goToPrev()
-                  }}
-                  className={cn(
-                    'absolute left-4 lg:left-8 top-1/2 -translate-y-1/2 z-30',
-                    'flex h-12 w-12 items-center justify-center rounded-full',
-                    'border border-white/20 bg-black/60 text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.6)]',
-                    'transition-all duration-200 hover:scale-110 hover:bg-black/85 hover:border-white/40 active:scale-95',
-                    mouseActive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                  )}
-                >
-                  <ChevronLeft className="h-6 w-6 stroke-[2.5]" />
-                </button>
-              ) : null}
-
-              {/* Navigation Arrow: Right (shown on mouse active) */}
-              {verifiedOrdered.length > 1 ? (
-                <button
-                  type="button"
-                  aria-label="Next channel"
-                  title={nextChannel ? `Next: ${nextChannel.name}` : 'Next channel'}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    goToNext()
-                  }}
-                  className={cn(
-                    'absolute right-4 lg:right-8 top-1/2 -translate-y-1/2 z-30',
-                    'flex h-12 w-12 items-center justify-center rounded-full',
-                    'border border-white/20 bg-black/60 text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.6)]',
-                    'transition-all duration-200 hover:scale-110 hover:bg-black/85 hover:border-white/40 active:scale-95',
-                    mouseActive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                  )}
-                >
-                  <ChevronRight className="h-6 w-6 stroke-[2.5]" />
-                </button>
-              ) : null}
-
               {/* Content with Side Scrolling Slide Animation */}
               {activeChannel ? (
-                <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-[var(--gutter)] pb-[56px] pl-[clamp(48px,6vw,96px)]">
+                <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-6 sm:px-8 pb-7">
                   <AnimatePresence custom={direction} mode="wait">
                     <motion.div
                       key={activeChannel.id}
@@ -622,7 +604,7 @@ export function Hero(): JSX.Element {
                       initial="enter"
                       animate="center"
                       exit="exit"
-                      className="flex max-w-[620px] flex-col gap-3"
+                      className="flex max-w-[540px] flex-col gap-2.5 drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]"
                     >
                       {/* 1. Overline: LIVE NOW */}
                       <div className="flex items-center gap-2">
@@ -639,8 +621,8 @@ export function Hero(): JSX.Element {
                       </div>
 
                       {/* 2. Channel icon to the left side of the channel name */}
-                      <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[14px]">
+                      <div className="flex items-center gap-3.5">
+                        <div className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 overflow-hidden rounded-[14px]">
                           <ChannelLogo
                             channelId={activeChannel.id}
                             channel={activeChannel}
@@ -649,14 +631,14 @@ export function Hero(): JSX.Element {
                             className="h-full w-full"
                           />
                         </div>
-                        <h1 className="line-clamp-2 text-[38px] sm:text-[46px] lg:text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
+                        <h1 className="line-clamp-2 text-[26px] sm:text-[34px] lg:text-[40px] font-[700] leading-[1.08] tracking-[-0.03em] text-[#F4F4F5]">
                           {cleanTitle}
                         </h1>
                       </div>
 
                       {/* 4. Meta */}
                       {metaParts.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2 text-[14px] font-[500] text-[#A1A1A6]">
+                        <div className="flex flex-wrap items-center gap-2 text-[13px] sm:text-[14px] font-[500] text-[#A1A1A6]">
                           <span>{metaParts.join(' · ')}</span>
                           {current && progress > 0 ? (
                             <span
@@ -674,7 +656,7 @@ export function Hero(): JSX.Element {
 
                       {/* 5. Description */}
                       {current?.description ? (
-                        <p className="line-clamp-2 max-w-[520px] text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
+                        <p className="line-clamp-2 max-w-[480px] text-[13px] sm:text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
                           {current.description}
                         </p>
                       ) : null}
@@ -715,7 +697,7 @@ export function Hero(): JSX.Element {
                     }
                   }}
                   className={cn(
-                    'absolute right-[24px] top-[76px] z-30 flex h-8 w-8 items-center justify-center rounded-full',
+                    'absolute right-5 top-5 z-30 flex h-8 w-8 items-center justify-center rounded-full',
                     'border border-[rgba(255,255,255,0.14)] bg-black/55 text-[#F4F4F5] backdrop-blur-sm',
                     'transition-colors duration-150 hover:bg-black/75',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
@@ -735,7 +717,7 @@ export function Hero(): JSX.Element {
                   role="tablist"
                   aria-label="Featured channels switcher"
                   onKeyDown={onTablistKeyDown}
-                  className="absolute bottom-[56px] right-[48px] z-30 flex items-center gap-[12px]"
+                  className="absolute bottom-7 right-7 z-30 flex items-center gap-[10px]"
                 >
                   {verifiedOrdered.map((id, index) => {
                     const channel = channelById.get(id)
@@ -828,8 +810,33 @@ export function Hero(): JSX.Element {
                 })}
               </div>
             ) : null}
-          </section>
+            </section>
+
+          {/* Right Channel Skip Arrow (in free space to the right of the video container) */}
+          {verifiedOrdered.length > 1 ? (
+            <button
+              type="button"
+              aria-label="Next channel"
+              title={nextChannel ? `Next: ${nextChannel.name}` : 'Next channel'}
+              onClick={(e) => {
+                e.stopPropagation()
+                goToNext()
+              }}
+              className={cn(
+                'ml-4 sm:ml-7 md:ml-9 shrink-0 z-30',
+                'flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full',
+                'border border-white/15 bg-white/[0.08] hover:bg-white/[0.18] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
+                'transition-all duration-300 ease-out active:scale-95 hover:scale-110',
+                'opacity-80 hover:opacity-100',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
+                videoHovered ? 'translate-x-4 sm:translate-x-6 opacity-95' : 'translate-x-0'
+              )}
+            >
+              <ChevronRight className="h-6 w-6 stroke-[2.5]" />
+            </button>
+          ) : null}
         </div>
+      </div>
       </div>
     </div>
   )

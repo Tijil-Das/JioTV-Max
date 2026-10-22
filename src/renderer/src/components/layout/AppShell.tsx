@@ -1,10 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Keyboard } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
-import { BrandMark } from '@/components/ui/BrandMark'
 
 /**
  * Persistent chrome around the routed pages. The player route takes over the
@@ -15,8 +13,6 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
   const mainRef = useRef<HTMLElement>(null)
   const isPlayer = location.pathname.startsWith('/watch')
 
-  const isFavorites = location.pathname.startsWith('/favorites')
-
   useEffect(() => {
     if (!isPlayer && mainRef.current) mainRef.current.scrollTop = 0
   }, [location.pathname, isPlayer])
@@ -24,37 +20,23 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
   return (
     <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
       {!isPlayer ? <Sidebar /> : null}
-        <main
-          ref={mainRef}
-          id="app-scroll"
-          className={cn(
-            'relative min-w-0 flex-1',
-            isPlayer ? 'overflow-hidden bg-black' : 'overflow-y-auto overscroll-contain'
-          )}
-        >
-          {!isPlayer ? (
-            <>
-              <TopBar />
-              <div className="relative">{children}</div>
-              {!isFavorites ? (
-                <footer className="mt-8 flex items-center justify-between border-t border-white/[0.05] px-8 py-6 text-[12px] text-text-secondary">
-                  <div className="flex items-center gap-2.5">
-                    <BrandMark size={16} />
-                    <span>
-                      JioTv <span className="text-[var(--red)]">Max</span> · local-first, privacy-respecting playback
-                    </span>
-                  </div>
-                  <span className="flex items-center gap-1.5">
-                    <Keyboard className="h-3.5 w-3.5" />
-                    Press Space to play · ↑↓ to change channel · Ctrl K to search
-                  </span>
-                </footer>
-              ) : null}
-            </>
-          ) : (
-            children
-          )}
-        </main>
+      <main
+        ref={mainRef}
+        id="app-scroll"
+        className={cn(
+          'relative min-w-0 flex-1',
+          isPlayer ? 'overflow-hidden bg-black' : 'overflow-y-auto overscroll-contain'
+        )}
+      >
+        {!isPlayer ? (
+          <>
+            <TopBar />
+            <div className="relative">{children}</div>
+          </>
+        ) : (
+          children
+        )}
+      </main>
     </div>
   )
 }

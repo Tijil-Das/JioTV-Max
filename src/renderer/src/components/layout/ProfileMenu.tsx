@@ -62,11 +62,11 @@ export function ProfileMenu(): JSX.Element {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="glass w-[240px] overflow-hidden rounded-[12px] p-2"
+              className="w-[244px] overflow-hidden rounded-[14px] border border-white/10 bg-[#121214]/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
             >
             {/* User identity */}
-            <div className="flex items-center gap-3 rounded-[8px] bg-white/[0.04] px-3 py-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
+            <div className="flex items-center gap-3 rounded-[10px] border border-white/[0.06] bg-[#18181C] px-3 py-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#222228] text-[#F4F4F5]">
                 <UserRound className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
@@ -87,14 +87,14 @@ export function ProfileMenu(): JSX.Element {
                   type="button"
                   role="menuitem"
                   onClick={action}
-                  className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[13px] text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.06] hover:text-[#F4F4F5]"
+                  className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[13px] text-[#A1A1A6] transition-colors duration-[120ms] hover:bg-white/[0.08] hover:text-[#F4F4F5]"
                 >
                   <Icon className="h-4 w-4" />
                   {label}
                 </button>
               ))}
 
-              <div className="my-1.5 h-px bg-[rgba(255,255,255,0.07)]" />
+              <div className="my-1.5 h-px bg-white/[0.08]" />
 
               <button
                 type="button"
@@ -104,7 +104,7 @@ export function ProfileMenu(): JSX.Element {
                   await signOut(mode)
                   pushToast({ title: 'Signed out', description: 'Demo mode stays available offline.', variant: 'info' })
                 }}
-                className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[13px] text-[#F87171] transition-colors duration-[120ms] hover:bg-[#F87171]/10"
+                className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[13px] text-[#F87171] transition-colors duration-[120ms] hover:bg-[#F87171]/15 hover:text-[#FCA5A5]"
               >
                 <LogOut className="h-4 w-4" />
                 Sign out

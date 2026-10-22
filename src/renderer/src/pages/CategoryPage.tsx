@@ -8,7 +8,6 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { PageTransition, StateView } from '@/components/ui/StateView'
 import { ChannelGrid } from '@/components/channels/ChannelGrid'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { Button } from '@/components/ui/Button'
 
 const categoryColor: Record<ChannelCategory, string> = {
   sports: '#EF4444',
@@ -115,12 +114,6 @@ export function CategoryPage(): JSX.Element {
         ) : (
           <ChannelGrid channels={items} epg={epg} />
         )}
-      </div>
-
-      <div className="px-8 pb-10">
-        <Button variant="ghost" onClick={() => navigate('/')}>
-          ← Back to home
-        </Button>
       </div>
     </PageTransition>
   )

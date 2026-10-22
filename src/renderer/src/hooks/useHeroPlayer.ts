@@ -348,6 +348,16 @@ export function useHeroPlayer({
       destroyAll()
       return
     }
+
+    const currentSlot = slotsRef.current[activeSlotRef.current]
+    if (
+      currentSlot.channelId === channelId &&
+      currentSlot.url === stream.url &&
+      (currentSlot.hls || currentSlot.shaka)
+    ) {
+      return
+    }
+
     const existingOther = slotsRef.current.findIndex(
       (slot) => slot.url === stream.url && (slot.hls || slot.shaka)
     )
@@ -359,10 +369,11 @@ export function useHeroPlayer({
       const timer = window.setTimeout(() => destroySlot(outgoing), 400)
       return () => window.clearTimeout(timer)
     }
-    const outgoing = activeSlotRef.current
-    const incoming = outgoing === 0 ? 1 : 0
-    destroySlot(outgoing)
-    setOpacity([0, 0])
+
+    // Seamless A/B transition: load new stream in the alternate slot without killing
+    // the currently playing stream upfront. When incoming renders its first frame,
+    // trackFrame() will set activeSlotRef, crossfade opacity, and clean up outgoing.
+    const incoming = everPlayedRef.current ? (activeSlotRef.current === 0 ? 1 : 0) : activeSlotRef.current
     loadSlot(incoming, stream, channelId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream?.url, channelId, enabled, destroyAll, loadSlot, destroySlot])

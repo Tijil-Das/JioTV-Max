@@ -679,7 +679,10 @@ export class JioService {
       case 'low':
         return lowUrl || ''
       default:
-        return autoUrl || ''
+        // On desktop, 'auto' mode requires the uncompressed master stream (highUrl)
+        // with full-fidelity 128k/192k audio and all resolution tiers.
+        // Jio's autoUrl is a low-bitrate mobile transcode with heavily compressed 32/64k audio.
+        return highUrl || autoUrl || ''
     }
   }
 

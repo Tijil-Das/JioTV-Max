@@ -15,6 +15,8 @@ interface UIState {
   loginReason: string | null
   searchOpen: boolean
   toasts: Toast[]
+  lastBrowsePath: string
+  setLastBrowsePath: (path: string) => void
   openLogin: (reason?: string) => void
   closeLogin: () => void
   setSearchOpen: (open: boolean) => void
@@ -29,6 +31,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   loginReason: null,
   searchOpen: false,
   toasts: [],
+  lastBrowsePath: '/',
+  setLastBrowsePath: (lastBrowsePath) => set({ lastBrowsePath }),
   openLogin: (reason) =>
     set((state) => ({
       loginOpen: true,

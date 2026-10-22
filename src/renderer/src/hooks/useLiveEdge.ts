@@ -2,8 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MediaSeekRange } from './useMediaPlayer'
 import { formatBehindLive } from '@/lib/time'
 
-/** Within this many seconds of the live edge we call it "LIVE". */
-export const LIVE_EDGE_THRESHOLD_SECONDS = 3
+/**
+ * Hysteresis thresholds for live-edge detection:
+ * - Enter delayed state when >= 20 seconds behind live edge.
+ * - Exit delayed state (return to live) only when caught up to <= 6 seconds behind live edge.
+ * This 14-second deadband prevents saw-tooth segment manifest updates (which jump by 2-6s)
+ * from repeatedly flipping the "Go Live" affordance on and off.
+ */
+export const LIVE_EDGE_ENTER_DELAYED_SECONDS = 20
+export const LIVE_EDGE_EXIT_DELAYED_SECONDS = 6
+export const LIVE_EDGE_THRESHOLD_SECONDS = LIVE_EDGE_ENTER_DELAYED_SECONDS
 
 export interface UseLiveEdgeOptions {
   videoRef: React.RefObject<HTMLVideoElement>
@@ -22,8 +30,10 @@ export interface UseLiveEdgeResult {
   currentTime: number
   /** Seconds between the live edge and the current position. */
   behindLive: number
-  /** True when playing at (or within 3 s of) the live edge. */
+  /** True when playing at (or within threshold of) the live edge. */
   atLiveEdge: boolean
+  /** True when viewer is delayed behind live edge with hysteresis applied. */
+  isDelayed: boolean
   /** "LIVE" or a "-MM:SS" timecode. */
   label: string
   /** True when the manifest exposes a usable DVR window. */
@@ -46,6 +56,7 @@ export function useLiveEdge({
   ready = true
 }: UseLiveEdgeOptions): UseLiveEdgeResult {
   const [currentTime, setCurrentTime] = useState(0)
+  const [isDelayed, setIsDelayed] = useState(false)
 
   const update = useCallback(() => {
     const video = videoRef.current
@@ -91,15 +102,39 @@ export function useLiveEdge({
   )
   const behindLive =
     enabled && seekRange ? Math.max(0, seekRange.end - currentTime) : 0
-  const atLiveEdge = !enabled || !ready || behindLive < LIVE_EDGE_THRESHOLD_SECONDS
+
+  // Hysteresis state machine to prevent periodic chunk updates from oscillating isDelayed
+  useEffect(() => {
+    if (!enabled || !ready) {
+      setIsDelayed(false)
+      return
+    }
+    if (!isDelayed) {
+      if (behindLive >= LIVE_EDGE_ENTER_DELAYED_SECONDS) {
+        setIsDelayed(true)
+      }
+    } else {
+      if (behindLive <= LIVE_EDGE_EXIT_DELAYED_SECONDS) {
+        setIsDelayed(false)
+      }
+    }
+  }, [behindLive, isDelayed, enabled, ready])
+
+  const atLiveEdge = !isDelayed
   const label = atLiveEdge ? 'LIVE' : formatBehindLive(behindLive)
+
+  const handleGoLive = useCallback(() => {
+    setIsDelayed(false)
+    goLive()
+  }, [goLive])
 
   return {
     currentTime,
     behindLive,
     atLiveEdge,
+    isDelayed,
     label,
     hasDvrWindow,
-    goLive
+    goLive: handleGoLive
   }
 }

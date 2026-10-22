@@ -6,7 +6,8 @@ import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
 import { ApiError, delay, getBridge } from './api'
 
 function qualityToJio(quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
-  if (quality === 'auto') return 'auto'
+  // Always request 'high' from Jio for 'auto' so desktop receives uncompressed master audio and video tiers
+  if (quality === 'auto') return 'high'
   if (quality >= 720) return 'high'
   if (quality >= 480) return 'medium'
   return 'low'

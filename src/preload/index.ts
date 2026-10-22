@@ -74,7 +74,13 @@ const api = {
 }
 
 const updater = {
-  getState: (): Promise<{ readyVersion: string | null }> => ipcRenderer.invoke('update:get-state'),
+  getState: (): Promise<{ readyVersion: string | null }> =>
+    ipcRenderer.invoke('update:get-state').catch(() => ({ readyVersion: null })),
+  check: (): Promise<{ status: string; readyVersion?: string | null; version?: string; error?: string }> =>
+    ipcRenderer.invoke('update:check').catch(() => ({
+      status: 'dev-mode',
+      error: 'Updates are enabled in packaged desktop builds'
+    })),
   onReady: (cb: (version: string) => void) =>
     ipcRenderer.on('update:ready', (_e: Electron.IpcRendererEvent, version: string) => cb(version)),
   restart: (): void => {

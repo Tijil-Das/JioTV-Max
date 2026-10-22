@@ -10,6 +10,7 @@ interface DvrSeekBarProps {
   currentTime: number
   behindLive: number
   atLiveEdge: boolean
+  isDelayed?: boolean
   isLive: boolean
   onSeek: (time: number) => void
   onGoLive: () => void
@@ -19,14 +20,15 @@ interface DvrSeekBarProps {
  * Progress bar mapped to DVR window.
  *
  * Theme red timeline bar.
- * When at live edge or <= 20s behind: clean LiveBadge (no second counters).
- * When > 20s behind: subtle behind counter + "Go Live" affordance.
+ * When at live edge or within live threshold: clean LiveBadge.
+ * When delayed: subtle behind counter + pro grey "Go Live" affordance.
  */
 export function DvrSeekBar({
   seekRange,
   currentTime,
   behindLive,
   atLiveEdge,
+  isDelayed: isDelayedProp,
   isLive,
   onSeek,
   onGoLive
@@ -45,8 +47,8 @@ export function DvrSeekBar({
   const progress = duration > 0 ? Math.min(100, Math.max(0, ((value - start) / duration) * 100)) : 0
   const behind = Math.max(0, behindLive)
 
-  // Only consider delayed if more than 20s behind live
-  const isDelayed = isLive && behind > 20
+  // Use stable hysteresis state when provided; fallback to !atLiveEdge
+  const delayed = isLive && (isDelayedProp !== undefined ? isDelayedProp : !atLiveEdge)
 
   const seek = (next: number): void => {
     setDragValue(next)
@@ -79,7 +81,7 @@ export function DvrSeekBar({
         onBlur={() => setDragging(false)}
         aria-label="Seek within the live broadcast"
         aria-valuetext={
-          isDelayed ? `${formatBehindLive(behind)} behind live` : 'Live edge'
+          delayed ? `${formatBehindLive(behind)} behind live` : 'Live edge'
         }
         className={cn(
           'dvr-range h-[4px] min-w-0 flex-1 cursor-pointer appearance-none rounded-pill transition-all',
@@ -93,12 +95,12 @@ export function DvrSeekBar({
       />
 
       {isLive ? (
-        !isDelayed ? (
+        !delayed ? (
           <LiveBadge />
         ) : (
           <div className="flex shrink-0 items-center gap-2">
             <span
-              className="rounded-md border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-white/80"
+              className="rounded-md border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-zinc-300"
               title={`${formatBehindLive(behind)} behind live`}
             >
               -{formatBehindLive(behind)}
@@ -106,9 +108,9 @@ export function DvrSeekBar({
             <button
               type="button"
               onClick={handleGoLive}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#E11D2E]/40 bg-[#E11D2E]/15 px-2.5 text-[11.5px] font-semibold text-white tracking-wide transition-all hover:bg-[#E11D2E]/25 hover:border-[#E11D2E]/60 active:scale-95 shadow-[0_0_12px_rgba(225,29,46,0.2)]"
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/[0.08] px-2.5 text-[11.5px] font-medium text-zinc-200 tracking-wide backdrop-blur-sm transition-all hover:bg-white/[0.16] hover:text-white hover:border-white/25 active:scale-95"
             >
-              <Radio className="h-3 w-3 text-[#E11D2E]" />
+              <Radio className="h-3 w-3 text-zinc-400" />
               Go Live
             </button>
           </div>

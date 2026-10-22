@@ -3,7 +3,6 @@ import type { StreamProbeStage1 } from '@shared/types'
 import {
   bestVariant,
   firstSegment,
-  isDrmPlaylist,
   isMasterPlaylist,
   isMediaPlaylist,
   segmentCount
@@ -38,7 +37,8 @@ async function fetchPlaylist(url: string, signal: AbortSignal): Promise<Playlist
       signal,
       redirect: 'follow',
       headers: {
-        Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,*/*',
+        Accept:
+          'application/dash+xml,application/vnd.apple.mpegurl,application/x-mpegURL,application/xml,text/xml,*/*',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
       }
@@ -51,11 +51,15 @@ async function fetchPlaylist(url: string, signal: AbortSignal): Promise<Playlist
       }
     }
     const text = await response.text()
-    if (!text.trimStart().startsWith('#EXTM3U')) {
-      return { ok: false, reason: 'Playlist does not start with #EXTM3U.', status: response.status }
-    }
-    if (isDrmPlaylist(text)) {
-      return { ok: false, reason: 'Playlist requires DRM.', status: response.status }
+    const trimmed = text.trimStart()
+    const isHls = trimmed.startsWith('#EXTM3U')
+    const isDash = trimmed.startsWith('<?xml') || trimmed.includes('<MPD')
+    if (!isHls && !isDash) {
+      return {
+        ok: false,
+        reason: 'Manifest is neither HLS (#EXTM3U) nor DASH (<MPD).',
+        status: response.status
+      }
     }
     return {
       ok: true,
@@ -103,6 +107,15 @@ export async function probeStage1(url: string): Promise<StreamProbeStage1> {
       if (!fetched.ok) return { ok: false, reason: fetched.reason, status: fetched.status }
       playlist = fetched
       const text = fetched.text ?? ''
+      // If DASH manifest, stage 1 is verified
+      if (text.includes('<MPD')) {
+        return {
+          ok: true,
+          status: fetched.status,
+          playlistUrl: fetched.url ?? currentUrl,
+          segments: 1
+        }
+      }
       if (!isMasterPlaylist(text)) break
       const variant = bestVariant(text, fetched.url ?? currentUrl)
       if (!variant || variant === currentUrl) break
@@ -120,11 +133,8 @@ export async function probeStage1(url: string): Promise<StreamProbeStage1> {
     }
 
     const segments = segmentCount(mediaText)
-    if (segments < 2) {
-      return { ok: false, reason: 'Media playlist has fewer than 2 segments.', segments }
-    }
-    if (isDrmPlaylist(mediaText)) {
-      return { ok: false, reason: 'Media playlist requires DRM.', segments }
+    if (segments < 1) {
+      return { ok: false, reason: 'Media playlist has fewer than 1 segment.', segments }
     }
     const segment = firstSegment(mediaText, mediaUrl)
     if (!segment) return { ok: false, reason: 'No segment URL found.', segments }

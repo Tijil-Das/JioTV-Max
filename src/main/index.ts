@@ -602,6 +602,10 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('tv.streamdeck.app')
   await relay.start()
   jio = new JioService(relay)
+  jio.setSessionExpiredHandler((reason) => {
+    console.warn('[Main] Emitting authExpired to renderer:', reason)
+    mainWindow?.webContents.send(IPC.authExpired, { reason })
+  })
   await jio.init()
   registerIpc()
   await createWindow()

@@ -9,7 +9,7 @@ import { getNowNext, getProgress } from '@/lib/time'
 import { initials } from '@/lib/color'
 import { useNow } from '@/hooks/useNow'
 import { useChannelStore } from '@/store/useChannelStore'
-import { useRelayStore } from '@/store/useRelayStore'
+import { ChannelLogo } from '@/components/ui/ChannelLogo'
 
 interface ChannelCardProps {
   channel: Channel
@@ -43,9 +43,6 @@ export const ChannelCard = memo(function ChannelCard({
   const favorites = useChannelStore((state) => state.favorites)
   const toggleFavorite = useChannelStore((state) => state.toggleFavorite)
   const isFavorite = favorites.includes(channel.id)
-  const relayBase = useRelayStore((state) => state.relayBase)
-  const [imgError, setImgError] = useState(false)
-  const logoSrc = relayBase ? `${relayBase}/logo/${channel.id}` : `/logo/${channel.id}`
 
   const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
   const progress = current ? getProgress(current, now) : 0
@@ -76,28 +73,11 @@ export const ChannelCard = memo(function ChannelCard({
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       >
         <div
-          className={cn(
-            'relative aspect-square w-full overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
-            'transition-colors duration-150 group-hover:border-[rgba(255,255,255,0.14)] group-hover:bg-[#151518]',
-            'group-focus-within:outline group-focus-within:outline-2 group-focus-within:outline-offset-2 group-focus-within:outline-[var(--red-line)]'
-          )}
+          className="relative aspect-square w-full overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0E0E10] transition-colors duration-150 group-hover:border-[rgba(255,255,255,0.14)] group-hover:bg-[#151518] group-focus-within:outline group-focus-within:outline-2 group-focus-within:outline-offset-2 group-focus-within:outline-[var(--red-line)]"
         >
           {/* Logo container: fixed 1:1 optical square, overflow: hidden, p-3 safe-zone padding */}
-          <div className="relative aspect-square w-full overflow-hidden p-3 flex items-center justify-center">
-            {imgError ? (
-              <span className="font-sans font-[650] text-[20px] text-[#A1A1A6] select-none">
-                {initials(channel.name)}
-              </span>
-            ) : (
-              <img
-                src={logoSrc}
-                alt={channel.name}
-                loading="lazy"
-                decoding="async"
-                onError={() => setImgError(true)}
-                className="w-full h-full object-contain pointer-events-none select-none"
-              />
-            )}
+          <div className="relative flex aspect-square h-full w-full items-center justify-center overflow-hidden p-3 bg-transparent">
+            <ChannelLogo channel={channel} context="tile" className="h-full w-full" />
           </div>
 
           {/* Number chip (top-left, inset 8px): 20px tall, padding 0 7px, radius 6px */}
@@ -130,16 +110,17 @@ export const ChannelCard = memo(function ChannelCard({
           <button
             type="button"
             onClick={() => toggleFavorite(channel.id)}
-            className={cn(
-              'absolute right-2 top-2 z-30 flex h-7 w-7 items-center justify-center rounded-full',
-              'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100',
-              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
-            )}
+            className="absolute right-2 top-2 z-30 flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)] hover:bg-white/10"
             aria-label={isFavorite ? `Remove ${channel.name} from My List` : `Add ${channel.name} to My List`}
             aria-pressed={isFavorite}
           >
             <Heart
-              className={cn('h-4 w-4', isFavorite ? 'fill-[var(--red)] text-[var(--red)]' : 'text-white')}
+              className={cn(
+                'h-4 w-4',
+                isFavorite
+                  ? 'fill-[var(--red)] text-[var(--red)]'
+                  : 'text-white'
+              )}
               strokeWidth={2}
             />
           </button>

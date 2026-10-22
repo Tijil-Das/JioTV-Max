@@ -20,6 +20,7 @@ import {
   extractHdnea,
   withHlsToken
 } from './jio-headers'
+import { isTokenOrAuthError } from '../shared/auth-errors'
 
 /**
  * JioTV backend.
@@ -225,9 +226,25 @@ export class JioService {
   private deviceId = ''
   private channelCache: { channels: Channel[]; at: number } | null = null
   private refreshing: Promise<boolean> | null = null
+  private onSessionExpiredCallback?: (reason: string) => void
+
+  setSessionExpiredHandler(handler: (reason: string) => void): void {
+    this.onSessionExpiredCallback = handler
+  }
+
+  notifySessionExpired(reason: string): void {
+    console.warn(`[JioService] Session expired: ${reason}`)
+    this.onSessionExpiredCallback?.(reason)
+  }
 
   constructor(private readonly relay: MediaRelay) {
     this.deviceFile = path.join(app.getPath('userData'), 'device-id.json')
+
+    // Listen to relay auth failures (e.g. license/manifest 401/403)
+    this.relay.setAuthExpiredHandler((reason) => {
+      void this.logout()
+      this.notifySessionExpired(reason)
+    })
 
     // The relay calls this when a CDN request answers 401/403 because the
     // short-lived `__hdnea__` token has expired. It must resolve a *raw*
@@ -236,6 +253,10 @@ export class JioService {
       const resolved = await this.resolveUpstreamStream(channelId, quality)
       if (!resolved.ok) {
         console.warn(`[JioService] Relay token refresh failed for ${channelId}: ${resolved.error}`)
+        if (isTokenOrAuthError(resolved.code) || isTokenOrAuthError(resolved.error)) {
+          void this.logout()
+          this.notifySessionExpired('Your streaming session has expired. Please sign in again.')
+        }
         return null
       }
       return {
@@ -460,13 +481,32 @@ export class JioService {
             refreshToken: this.session!.credentials.refreshToken
           })
         })
-        if (!response.ok) return false
+        if (!response.ok) {
+          console.warn(`[JioService] refreshAccessToken HTTP ${response.status}`)
+          if (
+            response.status === 400 ||
+            response.status === 401 ||
+            response.status === 403 ||
+            response.status === 410
+          ) {
+            console.warn('[JioService] Refresh token rejected or expired. Terminating session.')
+            await this.logout()
+            this.notifySessionExpired('Your JioTV session has expired. Please sign in again.')
+          }
+          return false
+        }
         const parsed = (body ?? {}) as Record<string, unknown>
-        if (typeof parsed.authToken !== 'string' || !parsed.authToken) return false
+        if (typeof parsed.authToken !== 'string' || !parsed.authToken) {
+          console.warn('[JioService] refreshAccessToken did not return an authToken')
+          await this.logout()
+          this.notifySessionExpired('Your JioTV session is invalid. Please sign in again.')
+          return false
+        }
         this.session!.credentials.accessToken = parsed.authToken
         await this.persist()
         return true
-      } catch {
+      } catch (err) {
+        console.warn('[JioService] refreshAccessToken network error:', err)
         return false
       } finally {
         this.refreshing = null
@@ -532,6 +572,14 @@ export class JioService {
       try {
         const { response, body } = await requestJson(attempt.url, { headers: attempt.headers })
         if (!response.ok) {
+          if (attempt.url === API.channelsAuthed && (response.status === 401 || response.status === 403)) {
+            console.warn('[JioService] Authed channels endpoint rejected session. Attempting refresh.')
+            const refreshed = await this.refreshAccessToken()
+            if (!refreshed) {
+              await this.logout()
+              this.notifySessionExpired('Your JioTV session expired. Please sign in again.')
+            }
+          }
           lastError = errorMessage(body, response.status)
           continue
         }
@@ -770,9 +818,10 @@ export class JioService {
     console.log(`[JioService] Resolving upstream stream for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
       console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
+      this.notifySessionExpired('Sign in with your JioTV number to watch live channels.')
       return {
         ok: false,
-        error: 'Sign in with your Jio number to watch live channels.',
+        error: 'Sign in with your JioTV number to watch live channels.',
         code: 'AUTH_REQUIRED'
       }
     }
@@ -808,6 +857,29 @@ export class JioService {
       }
       const parsed = (parsedBody ?? {}) as PlaybackResponse
       console.log(`[JioService] Playback API response status: ${response.status}, code: ${parsed.code ?? 'none'}`)
+
+      const isAuthFailure =
+        response.status === 401 ||
+        response.status === 403 ||
+        response.status === 419 ||
+        parsed.code === 401 ||
+        parsed.code === 403 ||
+        parsed.code === 419 ||
+        isTokenOrAuthError(parsed.message) ||
+        isTokenOrAuthError(errorMessage(parsedBody, response.status))
+
+      if (isAuthFailure) {
+        console.warn(`[JioService] Playback API rejected token (HTTP ${response.status}, code ${parsed.code}): ${parsed.message}`)
+        await this.logout()
+        const reason = 'Your JioTV session has expired. Please sign in again.'
+        this.notifySessionExpired(reason)
+        return {
+          ok: false,
+          error: reason,
+          code: 'TOKEN_EXPIRED'
+        }
+      }
+
       if (!response.ok) {
         console.warn(`[JioService] Playback API returned HTTP ${response.status}:`, parsedBody)
         return {

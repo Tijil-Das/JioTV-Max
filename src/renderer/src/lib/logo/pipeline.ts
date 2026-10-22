@@ -54,6 +54,7 @@ export interface LogoLayout {
   upscaleCapped: boolean
 }
 
+
 export interface LogoPipelineResult {
   ok: boolean
   tier: LogoPipelineTier
@@ -84,7 +85,7 @@ export interface LogoPipelineOptions {
   channelId?: string
 }
 
-export const PIPELINE_VERSION = 4
+export const PIPELINE_VERSION = 5
 export const PLATE_COLOR = { r: 14, g: 14, b: 16 } // #0E0E10
 const WHITE_REF = { r: 255, g: 255, b: 255 }
 const INK_ALPHA = 5 // alpha < 0.02 of 255 is <= 5
@@ -268,6 +269,7 @@ function cropImage(image: RgbaImage, bbox: LogoBbox): RgbaImage {
   }
   return { data, width: bbox.width, height: bbox.height }
 }
+
 
 interface InkStats {
   inkCoverage: number

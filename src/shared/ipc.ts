@@ -23,5 +23,6 @@ export const IPC = {
   probeStage1: 'stream:probe-stage1',
   secureSave: 'secure:save-token',
   secureLoad: 'secure:load-token',
-  secureClear: 'secure:clear-token'
+  secureClear: 'secure:clear-token',
+  authExpired: 'auth:expired'
 } as const

@@ -371,6 +371,7 @@ export class MediaRelay {
   private readonly segmentCache = new Map<string, CachedSegment>()
   private segmentCacheBytes = 0
   private streamResolver: RelayStreamResolver | null = null
+  private onAuthExpiredCallback?: (reason: string) => void
   private readonly channelLogos = new Map<string, string>()
   private readonly normalizedLogoCache = new Map<string, Buffer>()
   private channelFetchingPromise: Promise<void> | null = null
@@ -382,6 +383,11 @@ export class MediaRelay {
   /** Lets `JioService` re-resolve a signed playback URL on 401/403. */
   setStreamResolver(resolver: RelayStreamResolver): void {
     this.streamResolver = resolver
+  }
+
+  /** Registers a callback fired when upstream auth rejects playback/tokens. */
+  setAuthExpiredHandler(handler: (reason: string) => void): void {
+    this.onAuthExpiredCallback = handler
   }
 
   /** Registers channel catalog entries so /logo/:channelId can look up original logos. */
@@ -621,7 +627,10 @@ export class MediaRelay {
     const promise = (async (): Promise<boolean> => {
       try {
         const fresh = await this.streamResolver!(session.channelId, session.quality)
-        if (!fresh?.manifestUrl) return false
+        if (!fresh?.manifestUrl) {
+          this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
+          return false
+        }
         // Another request already refreshed while this call was in flight.
         if (session.generation !== generationAtStart) return true
 
@@ -639,6 +648,7 @@ export class MediaRelay {
         return true
       } catch (error) {
         console.warn(`[MediaRelay] Token refresh failed for ${session.channelId}:`, error)
+        this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
         return false
       }
     })()
@@ -682,6 +692,8 @@ export class MediaRelay {
       upstream = await fetchUpstream(target, this.buildUpstreamHeaders(session), init)
       this.captureRotatedToken(session, upstream)
       console.log(`[MediaRelay] Retry upstream status: ${upstream.status}`)
+    } else if (session && (upstream.status === 401 || upstream.status === 403)) {
+      this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
     }
 
     return { upstream, target }
@@ -827,8 +839,12 @@ export class MediaRelay {
 
         if (!upstream.ok) {
           console.warn(`[MediaRelay] /raw upstream error (${upstream.status}): ${fetchTarget}`)
-          const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
-          res.writeHead(statusToSend, CORS_HEADERS)
+          const isAuth = upstream.status === 401 || upstream.status === 403
+          const statusToSend = isAuth ? 401 : upstream.status
+          res.writeHead(statusToSend, {
+            ...CORS_HEADERS,
+            ...(isAuth ? { 'X-Auth-Required': '1', 'X-Token-Expired': '1' } : {})
+          })
           res.end(`Upstream error (${upstream.status})`)
           return
         }
@@ -966,8 +982,12 @@ export class MediaRelay {
 
         if (!upstream.ok) {
           console.warn(`[MediaRelay] /seg upstream error (${upstream.status}): ${target}`)
-          const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
-          res.writeHead(statusToSend, CORS_HEADERS)
+          const isAuth = upstream.status === 401 || upstream.status === 403
+          const statusToSend = isAuth ? 401 : upstream.status
+          res.writeHead(statusToSend, {
+            ...CORS_HEADERS,
+            ...(isAuth ? { 'X-Auth-Required': '1', 'X-Token-Expired': '1' } : {})
+          })
           res.end(`Upstream error (${upstream.status})`)
           return
         }
@@ -1058,9 +1078,17 @@ export class MediaRelay {
 
         try {
           finalBuffer = await sharp(originalBuffer)
-            .resize(256, 256, {
+            .trim()
+            .resize(240, 240, {
               fit: 'contain',
-              background: { r: 0, g: 0, b: 0, alpha: 0 } // transparent padding
+              background: { r: 0, g: 0, b: 0, alpha: 0 }
+            })
+            .extend({
+              top: 8,
+              bottom: 8,
+              left: 8,
+              right: 8,
+              background: { r: 0, g: 0, b: 0, alpha: 0 }
             })
             .png()
             .toBuffer()
@@ -1127,8 +1155,12 @@ export class MediaRelay {
 
       if (!upstream.ok) {
         console.warn(`[MediaRelay] Upstream manifest error: ${upstream.status}`)
-        const statusToSend = (upstream.status === 401 || upstream.status === 403) ? 502 : upstream.status
-        res.writeHead(statusToSend, CORS_HEADERS)
+        const isAuth = upstream.status === 401 || upstream.status === 403
+        const statusToSend = isAuth ? 401 : upstream.status
+        res.writeHead(statusToSend, {
+          ...CORS_HEADERS,
+          ...(isAuth ? { 'X-Auth-Required': '1', 'X-Token-Expired': '1' } : {})
+        })
         res.end(`Upstream manifest error (${upstream.status})`)
         return
       }
@@ -1336,6 +1368,9 @@ export class MediaRelay {
     console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
 
     if (!upstream.ok) {
+      if (upstream.status === 401 || upstream.status === 403) {
+        this.onAuthExpiredCallback?.('DRM license authorization failed. Please sign in again.')
+      }
       try {
         const textPreview = await upstream.clone().text()
         console.warn(`[MediaRelay] /license upstream error body (HTTP ${upstream.status}):`, textPreview.slice(0, 500))
@@ -1345,7 +1380,12 @@ export class MediaRelay {
     }
 
     copyHeaders(upstream.headers, res)
-    res.writeHead(upstream.status, CORS_HEADERS)
+    const isAuth = upstream.status === 401 || upstream.status === 403
+    const licenseStatus = isAuth ? 401 : upstream.status
+    res.writeHead(licenseStatus, {
+      ...CORS_HEADERS,
+      ...(isAuth ? { 'X-Auth-Required': '1', 'X-Token-Expired': '1' } : {})
+    })
     res.end(Buffer.from(await upstream.arrayBuffer()))
   }
 }

@@ -80,7 +80,7 @@ interface WorkerReply {
   blob?: Blob
 }
 
-const PIPELINE_VERSION = 4
+const PIPELINE_VERSION = 5
 const DB_NAME = 'jiotv-logo-pipeline'
 const DB_VERSION = 3
 const STORE = 'logos'
@@ -167,7 +167,7 @@ async function sha1Hex(value: string): Promise<string> {
 function normaliseSource(raw: string): string {
   const value = raw.trim()
   if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
+  if (/^(https?:|data:|file:|\/)/i.test(value)) return value
   if (value.startsWith('//')) return `https:${value}`
   return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${encodeURIComponent(value)}`
 }
@@ -289,6 +289,15 @@ class LogoWorkerQueue {
 const queue = new LogoWorkerQueue()
 
 async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
+  if (/^(data:|\/)/i.test(url)) {
+    try {
+      const response = await fetch(url)
+      if (!response.ok && !url.startsWith('data:')) return null
+      return { bytes: await response.arrayBuffer(), mimeType: response.headers.get('content-type') ?? 'image/png' }
+    } catch {
+      return null
+    }
+  }
   const bridge = getBridge()
   if (bridge) {
     const result = await bridge.assets.fetch(url)

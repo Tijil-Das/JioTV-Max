@@ -63,6 +63,7 @@ export function Hero(): JSX.Element {
   const location = useLocation()
   const now = useNow()
   const prefersReducedMotion = useReducedMotion()
+  const showHero = useSettingsStore((state) => state.showHero)
   const livePreviewOnHome = useSettingsStore((state) => state.livePreviewOnHome)
   const reduceMotion = useSettingsStore((state) => state.reduceMotion)
   const mode = useSettingsStore((state) => state.mode)
@@ -74,7 +75,6 @@ export function Hero(): JSX.Element {
   const [candidates, setCandidates] = useState<HeroCandidate[]>([])
   const [verified, setVerified] = useState<string[]>([])
   const [failed, setFailed] = useState<string[]>([])
-  const [windowSize, setWindowSize] = useState(VERIFY_WINDOW)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeStream, setActiveStream] = useState<StreamInfo | null>(null)
   const [userPaused, setUserPaused] = useState(false)
@@ -102,7 +102,7 @@ export function Hero(): JSX.Element {
   )
   const debugHero = new URLSearchParams(location.search).get('debug') === 'hero'
 
-  // ---- Deterministic ranking, reranked on boundaries and every 15 minutes ---
+  // ---- PopularityEngine ranking, reranked on boundaries and every 15 minutes ---
   useEffect(() => {
     let cancelled = false
     const rank = async (): Promise<void> => {
@@ -110,8 +110,6 @@ export function Hero(): JSX.Element {
       if (cancelled) return
       setCandidates((previous) => {
         if (previous.length === 0) return next
-        // Stable merge: keep the existing order for channels that still rank so
-        // a rerank never swaps the stage abruptly.
         const rankedIds = new Set(next.map((candidate) => candidate.channel.id))
         const kept = previous.filter((candidate) => rankedIds.has(candidate.channel.id))
         const keptIds = new Set(kept.map((candidate) => candidate.channel.id))
@@ -126,53 +124,70 @@ export function Hero(): JSX.Element {
     }
   }, [channels.length])
 
-  // ---- Stream verification (max 3 probes in flight, service-scheduled) -----
+  // ---- Stream verification & plan entitlement probe -----
   useEffect(() => {
-    const slice = candidates.slice(0, windowSize)
-    if (slice.length === 0) return
+    if (candidates.length === 0) return
     let cancelled = false
-    let settled = 0
-    let okCount = 0
-    for (const candidate of slice) {
-      const id = candidate.channel.id
-      void streamProbe.verify(id).then((ok) => {
+    const probeCandidates = async (): Promise<void> => {
+      // 1. Sync any already-cached results first (e.g. from splash preloader)
+      for (const candidate of candidates) {
         if (cancelled) return
-        settled += 1
+        const id = candidate.channel.id
+        const cached = streamProbe.cached(id)
+        if (cached === true) {
+          setVerified((prev) => (prev.includes(id) ? prev : [...prev, id]))
+        } else if (cached === false) {
+          setFailed((prev) => (prev.includes(id) ? prev : [...prev, id]))
+        }
+      }
+      // 2. Probe top candidates sequentially to prevent API flooding
+      for (const candidate of candidates) {
+        if (cancelled) return
+        const id = candidate.channel.id
+        const cached = streamProbe.cached(id)
+        if (cached !== undefined) continue
+        const ok = await streamProbe.verify(id)
+        if (cancelled) return
         if (ok) {
-          okCount += 1
-          setVerified((previous) => (previous.includes(id) ? previous : [...previous, id]))
+          setVerified((prev) => (prev.includes(id) ? prev : [...prev, id]))
         } else {
-          setFailed((previous) => (previous.includes(id) ? previous : [...previous, id]))
+          setFailed((prev) => (prev.includes(id) ? prev : [...prev, id]))
         }
-        if (settled === slice.length && okCount < SWITCHER_WANTED && windowSize < candidates.length) {
-          setWindowSize((size) => Math.min(candidates.length, size + VERIFY_WINDOW))
-        }
-      })
+      }
     }
+    void probeCandidates()
     return () => {
       cancelled = true
     }
-  }, [candidates, windowSize])
+  }, [candidates])
 
   const verifiedOrdered = useMemo(() => {
-    const verifiedIds = candidates
-      .map((candidate) => candidate.channel.id)
-      .filter((id) => verified.includes(id) && !failed.includes(id))
-    if (verifiedIds.length >= MAX_SWITCHER) {
-      return verifiedIds.slice(0, MAX_SWITCHER)
+    if (candidates.length === 0) return []
+    // Exclude channels whose streams cannot be fetched or aren't in user's plan
+    const eligible = candidates
+      .map((c) => c.channel.id)
+      .filter((id) => !failed.includes(id))
+
+    // Fall back to all candidates if all failed or still probing so Hero never vanishes
+    const pool = eligible.length > 0 ? eligible : candidates.map((c) => c.channel.id)
+
+    // Channels verified to have working playable streams
+    const verifiedOnes = pool.filter((id) => verified.includes(id))
+    if (verifiedOnes.length >= MAX_SWITCHER) {
+      return verifiedOnes.slice(0, MAX_SWITCHER)
     }
-    const combined = [...verifiedIds]
-    for (const c of candidates) {
+
+    // Fill remaining with unprobed eligible candidates
+    const combined = [...verifiedOnes]
+    for (const id of pool) {
       if (combined.length >= MAX_SWITCHER) break
-      if (!combined.includes(c.channel.id) && !failed.includes(c.channel.id)) {
-        combined.push(c.channel.id)
-      }
+      if (!combined.includes(id)) combined.push(id)
     }
     return combined.slice(0, MAX_SWITCHER)
   }, [candidates, verified, failed])
   const verifiedKey = verifiedOrdered.join('|')
 
-  // ---- Active channel: prefer the last good hero across sessions -----------
+  // ---- Active channel: prefer the first hero candidate across sessions -----------
   useEffect(() => {
     if (verifiedOrdered.length === 0) {
       setActiveId(null)
@@ -184,6 +199,10 @@ export function Hero(): JSX.Element {
     })
     saveHeroLast(verifiedOrdered)
   }, [verifiedKey])
+
+  const handleFailure = useCallback((channelId: string) => {
+    console.warn(`[hero] player stream issue on ${channelId}`)
+  }, [])
 
   // ---- Resolve the URL for the active channel through the player path ------
   useEffect(() => {
@@ -208,8 +227,11 @@ export function Hero(): JSX.Element {
       .then((stream) => {
         if (!cancelled) setActiveStream(stream)
       })
-      .catch(() => {
-        if (!cancelled) setActiveStream(null)
+      .catch((err) => {
+        console.warn(`[hero] getStream error on ${activeId}:`, err)
+        if (!cancelled) {
+          setActiveStream(null)
+        }
       })
     return () => {
       cancelled = true
@@ -221,13 +243,6 @@ export function Hero(): JSX.Element {
   const canPlay = previewAllowed && inView && documentVisible
   const enabled = canPlay && Boolean(activeId) && Boolean(activeStream)
   const previewOn = enabled && !userPaused
-
-  const handleFailure = useCallback((channelId: string) => {
-    // Watchdog verdict: negative-cache the channel and drop it from the hero.
-    streamProbe.markFailure(channelId)
-    setVerified((previous) => previous.filter((id) => id !== channelId))
-    setFailed((previous) => (previous.includes(channelId) ? previous : [...previous, channelId]))
-  }, [])
 
   const { videoRefs, opacity, destroyAll } = useHeroPlayer({
     stream: enabled ? activeStream : null,
@@ -292,12 +307,34 @@ export function Hero(): JSX.Element {
     setActiveId(id)
   }, [])
 
+  const dwellTimerRef = useRef<number | null>(null)
+
+  const startDwell = useCallback(
+    (id: string, index: number) => {
+      if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current)
+      dwellTimerRef.current = window.setTimeout(() => {
+        if (id !== activeId) {
+          setDirection(index > activeIdx ? 1 : -1)
+          select(id)
+        }
+      }, 200)
+    },
+    [activeId, activeIdx, select]
+  )
+
+  const cancelDwell = useCallback(() => {
+    if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current)
+    dwellTimerRef.current = null
+  }, [])
+
+  useEffect(() => () => cancelDwell(), [cancelDwell])
+
   const [tooltipId, setTooltipId] = useState<string | null>(null)
   const tooltipTimer = useRef<number | null>(null)
 
   const showTooltip = useCallback((id: string) => {
     if (tooltipTimer.current) window.clearTimeout(tooltipTimer.current)
-    tooltipTimer.current = window.setTimeout(() => setTooltipId(id), 400)
+    tooltipTimer.current = window.setTimeout(() => setTooltipId(id), 300)
   }, [])
 
   const hideTooltip = useCallback(() => {
@@ -368,8 +405,12 @@ export function Hero(): JSX.Element {
   )
 
   // ---- Render (Addendum 3 §8) -----------------------------------------------
-  const expanded = verifiedOrdered.length > 0
-  const activeChannel = activeId ? channelById.get(activeId) ?? null : null
+  const expanded = verifiedOrdered.length > 0 || candidates.length > 0
+  const activeChannel =
+    (activeId ? channelById.get(activeId) : null) ??
+    (verifiedOrdered[0] ? channelById.get(verifiedOrdered[0]) : null) ??
+    candidates[0]?.channel ??
+    null
   const current = activeChannel ? getNowNext(epg[activeChannel.id] ?? [], now).current : null
   const quality = activeChannel ? highestQuality(activeChannel) : ''
   const progress = current ? getProgress(current, now) : 0
@@ -410,10 +451,12 @@ export function Hero(): JSX.Element {
     return parts
   }, [activeChannel, current, now, quality])
 
+  if (!showHero) return <></>
+
   return (
     <div
       className="relative z-0 transition-[margin] duration-300 ease-out"
-      style={{ marginBottom: expanded ? -40 : 40 }}
+      style={{ marginBottom: 0 }}
     >
       <div
         className="grid transition-[grid-template-rows] duration-300 ease-out"
@@ -428,7 +471,7 @@ export function Hero(): JSX.Element {
             onMouseEnter={() => setMouseActive(true)}
             onMouseLeave={() => setMouseActive(false)}
             onClick={() => activeChannel && watch(activeChannel.id)}
-            className="group/hero relative h-[clamp(520px,70vh,760px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
+            className="group/hero relative h-[clamp(600px,80vh,880px)] w-full cursor-pointer select-none overflow-hidden bg-[#0A0A0B]"
           >
             {/* Cinema Stage — full width & height */}
             <div className="relative h-full w-full overflow-hidden">
@@ -445,69 +488,75 @@ export function Hero(): JSX.Element {
               </div>
 
               {/* A/B video slots: padded from top, sides and bottom */}
-              <div className="absolute inset-0 pt-[72px] pb-6 px-6 md:px-10" aria-hidden>
-                {[0, 1].map((slot) => (
-                  <video
-                    key={slot}
-                    ref={videoRefs[slot]}
-                    muted
-                    autoPlay
-                    playsInline
-                    disablePictureInPicture
-                    disableRemotePlayback
-                    tabIndex={-1}
-                    aria-hidden
-                    className="pointer-events-none h-full w-full object-contain object-center"
-                    style={{
-                      opacity: opacity[slot],
-                      transition: 'opacity 300ms ease'
-                    }}
-                  />
-                ))}
+              <div className="absolute inset-0 pt-[56px] pb-3 px-3 md:px-6" aria-hidden>
+                <div className="relative h-full w-full overflow-hidden">
+                  {[0, 1].map((slot) => (
+                    <video
+                      key={slot}
+                      ref={videoRefs[slot]}
+                      muted
+                      autoPlay
+                      playsInline
+                      disablePictureInPicture
+                      disableRemotePlayback
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 h-full w-full object-contain object-center"
+                      style={{
+                        opacity: opacity[slot],
+                        transition: 'opacity 300ms ease'
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
 
-              {/* Scrims: brighten up on hover without wiping out the vignette effect */}
+              {/* Four-sided cinema vignette: fades seamlessly into #0A0A0B from all 4 sides */}
               <div
-                className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300 ease-out group-hover/hero:opacity-60"
+                className="pointer-events-none absolute inset-0 z-10"
                 aria-hidden
               >
+                {/* Top edge fade */}
                 <div
-                  className="absolute inset-x-0 top-0 h-[120px]"
+                  className="absolute inset-x-0 top-0 h-[140px]"
                   style={{
-                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)'
+                    background:
+                      'linear-gradient(to bottom, #0A0A0B 0%, rgba(10,10,11,0.85) 35%, rgba(10,10,11,0.4) 65%, transparent 100%)'
                   }}
                 />
+                {/* Bottom edge fade */}
+                <div
+                  className="absolute inset-x-0 bottom-0 h-[220px]"
+                  style={{
+                    background:
+                      'linear-gradient(to top, #0A0A0B 0%, rgba(10,10,11,0.92) 35%, rgba(10,10,11,0.5) 70%, transparent 100%)'
+                  }}
+                />
+                {/* Left edge fade */}
+                <div
+                  className="absolute inset-y-0 left-0 w-[55%]"
+                  style={{
+                    background:
+                      'linear-gradient(to right, #0A0A0B 0%, rgba(10,10,11,0.92) 35%, rgba(10,10,11,0.5) 65%, transparent 100%)'
+                  }}
+                />
+                {/* Right edge fade */}
+                <div
+                  className="absolute inset-y-0 right-0 w-[40%]"
+                  style={{
+                    background:
+                      'linear-gradient(to left, #0A0A0B 0%, rgba(10,10,11,0.85) 25%, rgba(10,10,11,0.3) 60%, transparent 100%)'
+                  }}
+                />
+                {/* Radial perimeter vignette for smooth cinema curve */}
                 <div
                   className="absolute inset-0"
                   style={{
                     background:
-                      'linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 45%, transparent 75%)'
+                      'radial-gradient(ellipse at center, transparent 35%, rgba(10,10,11,0.35) 65%, rgba(10,10,11,0.9) 100%)'
                   }}
                 />
-                <div
-                  className="absolute inset-x-0 bottom-0 h-[200px]"
-                  style={{
-                    background:
-                      'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)'
-                  }}
-                />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.65) 100%)'
-                  }}
-                />
-                <div className="absolute inset-0 bg-black/10" />
-                {!previewOn ? (
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background:
-                        'radial-gradient(circle at 75% 50%, rgba(225,29,46,0.06) 0%, transparent 65%)'
-                    }}
-                  />
-                ) : null}
+                <div className="absolute inset-0 bg-black/15" />
               </div>
 
               {/* Navigation Arrow: Left (shown on mouse active) */}
@@ -567,12 +616,7 @@ export function Hero(): JSX.Element {
                       exit="exit"
                       className="flex max-w-[620px] flex-col gap-3"
                     >
-                      {/* 1. Processed logo */}
-                      <div className="flex h-10 max-w-[180px] items-center">
-                        <ChannelLogo channelId={activeChannel.id} channel={activeChannel} context="hero" priority="visible" />
-                      </div>
-
-                      {/* 2. Overline: LIVE NOW */}
+                      {/* 1. Overline: LIVE NOW */}
                       <div className="flex items-center gap-2">
                         <span
                           className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
@@ -586,10 +630,21 @@ export function Hero(): JSX.Element {
                         </span>
                       </div>
 
-                      {/* 3. Title */}
-                      <h1 className="line-clamp-2 text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
-                        {cleanTitle}
-                      </h1>
+                      {/* 2. Channel icon to the left side of the channel name */}
+                      <div className="flex items-center gap-4">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[14px]">
+                          <ChannelLogo
+                            channelId={activeChannel.id}
+                            channel={activeChannel}
+                            context="switcher"
+                            priority="visible"
+                            className="h-full w-full"
+                          />
+                        </div>
+                        <h1 className="line-clamp-2 text-[38px] sm:text-[46px] lg:text-[52px] font-[700] leading-[1.05] tracking-[-0.03em] text-[#F4F4F5]">
+                          {cleanTitle}
+                        </h1>
+                      </div>
 
                       {/* 4. Meta */}
                       {metaParts.length > 0 ? (
@@ -700,29 +755,32 @@ export function Hero(): JSX.Element {
                           aria-label={`Switch to ${channel.name}`}
                           onClick={(e) => {
                             e.stopPropagation()
+                            cancelDwell()
                             if (id !== activeId) {
                               setDirection(index > activeIdx ? 1 : -1)
                               select(id)
                             }
                           }}
                           onMouseEnter={() => {
-                            if (id !== activeId) {
-                              setDirection(index > activeIdx ? 1 : -1)
-                              select(id)
-                            }
+                            startDwell(id, index)
                             showTooltip(id)
                           }}
                           onMouseLeave={() => {
+                            cancelDwell()
                             hideTooltip()
                           }}
                           onFocus={() => {
+                            cancelDwell()
                             if (id !== activeId) {
                               setDirection(index > activeIdx ? 1 : -1)
                               select(id)
                             }
                             showTooltip(id)
                           }}
-                          onBlur={hideTooltip}
+                          onBlur={() => {
+                            cancelDwell()
+                            hideTooltip()
+                          }}
                           className={cn(
                             'relative rounded-[14px] transition-all duration-200',
                             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
@@ -744,11 +802,12 @@ export function Hero(): JSX.Element {
             {debugHero ? (
               <div className="absolute left-[var(--gutter)] top-[76px] z-30 max-h-[70%] w-[380px] overflow-auto rounded-[12px] border border-[rgba(255,255,255,0.14)] bg-black/85 p-3 font-mono text-[12px] leading-relaxed text-[#A1A1A6]">
                 <p className="mb-2 text-[12px] font-[600] text-[#F4F4F5]">
-                  hero debug · verified {verifiedOrdered.length} · failed {failed.length}
+                  hero debug · candidates {candidates.length} · switcher {verifiedOrdered.length}
                 </p>
-                {candidates.slice(0, VERIFY_WINDOW).map((candidate) => {
+                {candidates.slice(0, MAX_SWITCHER).map((candidate) => {
                   const id = candidate.channel.id
-                  const state = verified.includes(id) ? 'ok' : failed.includes(id) ? 'fail' : '…'
+                  const cached = streamProbe.cached(id)
+                  const state = cached === true ? 'ok' : cached === false ? 'fail' : '…'
                   const sources = Object.entries(candidate.sources)
                     .map(([key, value]) => `${key}:${value.toFixed(2)}`)
                     .join(' ')

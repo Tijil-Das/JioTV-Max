@@ -13,6 +13,7 @@ import {
   PictureInPicture2,
   Play,
   Pause,
+  RefreshCw,
   SkipBack,
   SkipForward,
   Volume1,
@@ -28,6 +29,7 @@ import { formatRange, formatTimeLeft, getNowNext } from '@/lib/time'
 import { ApiError, getBridge } from '@/services/api'
 import { channelService } from '@/services/channelService'
 import { streamProbe } from '@/services/streamProbe'
+import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
 import { useMediaPlayer } from '@/hooks/useMediaPlayer'
 import { useLiveEdge } from '@/hooks/useLiveEdge'
 import { useHotkeys } from '@/hooks/useDebounce'
@@ -211,6 +213,7 @@ export function PlayerPage(): JSX.Element {
         if (cancelled) return
         console.error(`[PlayerPage] Failed to resolve stream for ${channel.id}:`, cause)
         setStreamLoading(false)
+        checkAndHandleAuthError(cause)
         const error = cause instanceof ApiError ? cause : null
         setStreamError({
           message: cause instanceof Error ? cause.message : 'The stream could not be resolved.',
@@ -614,27 +617,43 @@ export function PlayerPage(): JSX.Element {
       <AnimatePresence>
         {fatalError ? (
           <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm"
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-6 backdrop-blur-md"
           >
-            <div className="glass-strong w-full max-w-[520px] rounded-panel p-7 text-center">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-danger/25 bg-danger/10 text-danger">
-                <AlertTriangle className="h-6 w-6" />
+            <div className="w-full max-w-[460px] rounded-[20px] border border-white/10 bg-[#121215]/95 p-8 text-center shadow-[0_24px_64px_rgba(0,0,0,0.85)]">
+              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-[var(--red)] shadow-[0_0_20px_rgba(225,29,46,0.2)]">
+                <AlertTriangle className="h-7 w-7" />
               </span>
-              <h2 className="mt-5 font-display text-[19px] font-semibold text-white">
+              <h2 className="mt-5 font-sans text-[20px] font-bold tracking-tight text-[#F4F4F5]">
                 {fatalError.code === 'AUTH_REQUIRED' ? 'Sign in to watch' : 'Playback stopped'}
               </h2>
-              <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">{fatalError.message}</p>
+              <p className="mt-2 text-[14px] leading-relaxed text-[#A1A1A6]">
+                {fatalError.message}
+              </p>
               {stream?.note ? (
-                <p className="mt-2 text-[12px] leading-relaxed text-text-secondary">{stream.note}</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-[#71717A]">{stream.note}</p>
               ) : null}
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                {fatalError.code === 'AUTH_REQUIRED' ? (
+              <div className="mt-7 flex items-center justify-center gap-3">
+                <Button
+                  variant="secondary"
+                  className="min-w-[110px] rounded-[10px] px-5 py-2.5"
+                  onClick={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1)
+                    } else {
+                      navigate('/')
+                    }
+                  }}
+                >
+                  Cancel
+                </Button>
+                {fatalError.code === 'AUTH_REQUIRED' || fatalError.code === 'TOKEN_EXPIRED' ? (
                   <Button
                     variant="primary"
+                    className="min-w-[110px] rounded-[10px] px-5 py-2.5"
                     onClick={() => openLogin('Sign in with your JioTV number to watch this channel.')}
                   >
                     Sign in
@@ -642,10 +661,9 @@ export function PlayerPage(): JSX.Element {
                 ) : (
                   <Button
                     variant="primary"
-                    icon={<ListVideo className="h-4 w-4" />}
+                    className="min-w-[110px] rounded-[10px] px-5 py-2.5"
+                    icon={<RefreshCw className="h-4 w-4" />}
                     onClick={() => {
-                      // Re-fetch a fresh signed URL before retrying so a stale
-                      // hdnea token doesn't immediately fail again.
                       if (mode === 'jio') {
                         resolveStream().then((fresh) => {
                           if (fresh) setStream(fresh)
@@ -664,9 +682,6 @@ export function PlayerPage(): JSX.Element {
                     Retry
                   </Button>
                 )}
-                <Button variant="glass" onClick={() => setDrawerOpen(true)}>
-                  Choose another channel
-                </Button>
               </div>
             </div>
           </motion.div>

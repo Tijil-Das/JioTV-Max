@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Heart } from 'lucide-react'
 import { useChannelStore } from '@/store/useChannelStore'
 import { PageTransition, StateView } from '@/components/ui/StateView'
-import { ChannelGrid } from '@/components/channels/ChannelGrid'
-import { Button } from '@/components/ui/Button'
+import { ChannelCard } from '@/components/home/ChannelCard'
 
-/** My List: favourite channels, filterable with the shared grid. */
+/** My List: favourite channels without filters. */
 export function FavoritesPage(): JSX.Element {
   const navigate = useNavigate()
   const channels = useChannelStore((state) => state.channels)
@@ -46,21 +45,18 @@ export function FavoritesPage(): JSX.Element {
             onAction={() => navigate('/')}
           />
         ) : (
-          <ChannelGrid
-            channels={favoriteChannels}
-            epg={epg}
-            emptyTitle="No favourites match those filters"
-          />
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(clamp(144px,11.6vw,176px),1fr))] gap-4">
+            {favoriteChannels.map((channel) => (
+              <ChannelCard
+                key={channel.id}
+                channel={channel}
+                programs={epg[channel.id]}
+                fluid
+              />
+            ))}
+          </div>
         )}
       </div>
-
-      {favoriteChannels.length > 0 ? (
-        <div className="px-8 pb-10">
-          <Button variant="ghost" onClick={() => navigate('/')}>
-            ← Back to home
-          </Button>
-        </div>
-      ) : null}
     </PageTransition>
   )
 }

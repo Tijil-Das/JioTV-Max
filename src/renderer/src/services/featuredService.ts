@@ -542,7 +542,7 @@ export const featuredService = {
     // 1. Rank marquee Sports & News channels using the multi-factor PopularityEngine
     const ranked = popularityEngine.rankChannels(allChannels, channelState.epg, {
       allowedLanguages: ['English', 'Hindi'],
-      topN: 5
+      topN: 15
     })
 
     if (ranked.length > 0) {
@@ -556,7 +556,7 @@ export const featuredService = {
     // Fallback if no channels match the strict filter
     const eligibleChannels = allChannels.filter(isHeroEligibleChannel)
     const pool = eligibleChannels.length > 0 ? eligibleChannels : allChannels
-    return pool.slice(0, 5).map((channel) => ({
+    return pool.slice(0, 15).map((channel) => ({
       channel,
       score: getChannelProminence(channel),
       sources: {}

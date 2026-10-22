@@ -4,10 +4,14 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useOnline } from '@/hooks/useOnline'
 import { authService } from '@/services/authService'
 import { getBridge } from '@/services/api'
+import { popularityEngine } from '@/services/popularityEngine'
+import { channelService } from '@/services/channelService'
+import { streamProbe } from '@/services/streamProbe'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUIStore } from '@/store/useUIStore'
+import { triggerAuthExpired } from '@/lib/authErrorHandler'
 import { useRelayStore } from '@/store/useRelayStore'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { AppShell } from '@/components/layout/AppShell'
@@ -111,6 +115,37 @@ export default function App(): JSX.Element {
         }
       }
 
+      // Step 3b: If hero is enabled, preload the active hero stream during splash screen
+      const currentSettings = useSettingsStore.getState()
+      if (currentSettings.showHero && currentSettings.livePreviewOnHome) {
+        try {
+          const channels = useChannelStore.getState().channels
+          const epg = useChannelStore.getState().epg
+          const ranked = popularityEngine.rankChannels(channels, epg, {
+            allowedLanguages: ['English', 'Hindi'],
+            topN: 15
+          })
+          for (const candidate of ranked) {
+            try {
+              const stream = await channelService.getStream(
+                candidate.channel,
+                catalogueMode,
+                currentSettings.defaultQuality
+              )
+              if (stream) {
+                streamProbe.setStreamHandoff(candidate.channel.id, stream)
+                break
+              }
+            } catch {
+              // Not entitled / not in user's plan or stream failed
+              streamProbe.markFailure(candidate.channel.id)
+            }
+          }
+        } catch (err) {
+          console.warn('[bootstrap] hero preloading error', err)
+        }
+      }
+
       // Minimum splash duration for a polished feel
       await new Promise<void>((r) => setTimeout(r, 600))
       setSplashVisible(false)
@@ -127,6 +162,17 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Session & token expiration listener ──────────────────────────────
+  useEffect(() => {
+    const bridge = getBridge()
+    if (!bridge?.auth?.onExpired) return
+    const unsubscribe = bridge.auth.onExpired(({ reason }) => {
+      console.warn('[App] Main process reported auth expiration:', reason)
+      triggerAuthExpired(reason)
+    })
+    return unsubscribe
+  }, [])
+
   // ── Native window preferences ────────────────────────────────────────
   useEffect(() => {
     const bridge = getBridge()
@@ -139,7 +185,7 @@ export default function App(): JSX.Element {
     if (previousOnlineRef.current && !online) {
       pushToast({
         title: 'You are offline',
-        description: 'StreamDeck keeps the demo catalogue available while you reconnect.',
+        description: 'Please check your internet connection to continue streaming.',
         variant: 'error',
         duration: 5000
       })

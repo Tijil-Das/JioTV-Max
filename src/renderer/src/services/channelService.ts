@@ -2,6 +2,7 @@ import type { AuthMode, Channel, ChannelFetchPayload, EpgEntry, Program, StreamI
 import { FEATURED_CHANNEL_IDS } from '@/lib/constants'
 import { mockChannels } from '@/mocks/channels'
 import { getMockPrograms } from '@/mocks/epg'
+import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
 import { ApiError, delay, getBridge } from './api'
 
 function qualityToJio(quality: 'auto' | number): 'auto' | 'high' | 'medium' | 'low' {
@@ -26,7 +27,10 @@ export const channelService = {
       throw new ApiError('JioTV channels are available in the desktop app only.', 'NO_BRIDGE')
     }
     const result = await bridge.channels.fetchAll()
-    if (!result.ok) throw new ApiError(result.error, result.code, result.retryable)
+    if (!result.ok) {
+      checkAndHandleAuthError(result)
+      throw new ApiError(result.error, result.code, result.retryable)
+    }
     return result.data
   },
 
@@ -61,6 +65,7 @@ export const channelService = {
     const result = await bridge.channels.getStream(channel.id, qualityToJio(quality))
     if (!result.ok) {
       console.error(`[channelService] bridge.channels.getStream error:`, result.error, result.code)
+      checkAndHandleAuthError(result)
       throw new ApiError(result.error, result.code, result.retryable)
     }
     console.log(`[channelService] bridge.channels.getStream success:`, result.data)

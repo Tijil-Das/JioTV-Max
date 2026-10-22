@@ -86,6 +86,12 @@ export function LoginModal(): JSX.Element | null {
     if (open) {
       setLocalMode(settingsMode === 'demo' ? 'demo' : 'jio')
       reset()
+      try {
+        const remembered = localStorage.getItem('streamdeck-last-phone') || ''
+        if (remembered) setPhone(remembered)
+      } catch {
+        // LocalStorage unavailable
+      }
     }
   }, [open, reset, settingsMode])
 
@@ -128,6 +134,11 @@ export function LoginModal(): JSX.Element | null {
     setSending(true)
     try {
       const result = await authService.requestOtp(phone, mode)
+      try {
+        localStorage.setItem('streamdeck-last-phone', phone)
+      } catch {
+        // ignore
+      }
       setChallenge(result)
       setStep('otp')
       setSecondsLeft(result.expiresInSeconds ?? RESEND_SECONDS)
@@ -278,13 +289,22 @@ export function LoginModal(): JSX.Element | null {
                 <h2 id="login-title" className="mt-2 font-display text-[24px] font-bold tracking-tight text-white">
                   {title}
                 </h2>
+                {step === 'phone' && reason && (reason.toLowerCase().includes('expired') || reason.toLowerCase().includes('token') || reason.toLowerCase().includes('session')) ? (
+                  <div className="mt-3.5 flex items-center gap-2.5 rounded-[10px] border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12.5px] font-medium text-amber-300">
+                    <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                    <span>{reason}</span>
+                  </div>
+                ) : null}
+
                 <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
                   {step === 'otp' ? (
                     <>
                       We sent a six-digit code to <span className="text-white">{masked}</span>.
                     </>
                   ) : (
-                    (reason ?? 'Enter your 10-digit Indian mobile number to sign in.')
+                    reason && (reason.toLowerCase().includes('expired') || reason.toLowerCase().includes('token') || reason.toLowerCase().includes('session'))
+                      ? 'Enter your 10-digit Indian mobile number to renew your session.'
+                      : (reason ?? 'Enter your 10-digit Indian mobile number to sign in.')
                   )}
                 </p>
 

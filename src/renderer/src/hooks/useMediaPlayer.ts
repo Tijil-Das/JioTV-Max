@@ -4,6 +4,7 @@ import Hls, { ErrorDetails, ErrorTypes, Events as HlsEvents } from 'hls.js'
 import shaka from 'shaka-player'
 import type { StreamInfo } from '@shared/types'
 import type { QualityPreference } from '@/store/useSettingsStore'
+import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
 
 // Polyfill browser features for Shaka Player once at module load
 if (typeof window !== 'undefined' && shaka?.polyfill) {
@@ -325,6 +326,12 @@ export function useMediaPlayer({
         clearTimeout(retryTimer.current)
         retryTimer.current = null
       }
+      if (checkAndHandleAuthError(message)) {
+        setReconnecting(false)
+        setError(message)
+        onError?.(message)
+        return
+      }
       if (retryable && autoAttemptsRef.current < 3) {
         autoAttemptsRef.current += 1
         setReconnecting(true)
@@ -358,7 +365,7 @@ export function useMediaPlayer({
       retryTimer.current = null
     }
     if (manualAttemptsRef.current >= 3) {
-      const msg = 'Maximum retry attempts reached (3/3). Please choose another channel.'
+      const msg = 'Maximum retry attempts reached (3/3). Could not load this channel.'
       console.warn('[useMediaPlayer]', msg)
       setError(msg)
       setReconnecting(false)
@@ -676,6 +683,15 @@ export function useMediaPlayer({
             data.response?.text
           )
           if (disposed || !data.fatal) return
+          const httpStatus = data.response?.code ?? 0
+          if (
+            checkAndHandleAuthError(httpStatus) ||
+            checkAndHandleAuthError(data.response?.text) ||
+            checkAndHandleAuthError(data.details)
+          ) {
+            fail('Your streaming session has expired. Please sign in again.', false)
+            return
+          }
           if (data.type === ErrorTypes.NETWORK_ERROR) {
             // A vanished fragment that is behind the live edge means the
             // broadcaster's time-shift window rolled over. Jump forward
@@ -823,6 +839,15 @@ export function useMediaPlayer({
               goLive()
               return
             }
+          }
+
+          if (
+            checkAndHandleAuthError(formatted.httpStatus) ||
+            checkAndHandleAuthError(formatted.message) ||
+            checkAndHandleAuthError(error)
+          ) {
+            fail(formatted.message, false)
+            return
           }
 
           // If Shaka Player throws a NETWORK (1) or DRM (6) error, do not automatically retry
@@ -1021,7 +1046,15 @@ export function useMediaPlayer({
         } catch {
           console.error('[useMediaPlayer] Shaka setup failed (non-serializable):', cause)
         }
-        const { message, isFatalNetworkOrDrm } = formatShakaError(cause)
+        const { message, isFatalNetworkOrDrm, httpStatus } = formatShakaError(cause)
+        if (
+          checkAndHandleAuthError(httpStatus) ||
+          checkAndHandleAuthError(message) ||
+          checkAndHandleAuthError(cause)
+        ) {
+          fail(message, false)
+          return
+        }
         fail(message, !isFatalNetworkOrDrm)
       }
     }

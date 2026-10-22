@@ -178,9 +178,7 @@ export function HomePage(): JSX.Element {
             <div className="mx-8 mt-6 flex items-center gap-3 rounded-2xl border border-warning/25 bg-warning/[0.07] px-4 py-3">
               <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
               <p className="flex-1 text-[12px] text-text-secondary">
-                {source === 'demo'
-                  ? `Live JioTV catalogue unavailable — showing the demo line-up. ${error}`
-                  : error}
+                {error}
               </p>
               <Button
                 size="sm"
@@ -193,7 +191,7 @@ export function HomePage(): JSX.Element {
             </div>
           ) : null}
 
-          <div className="relative z-10">
+          <div className="relative z-10 mt-7 mb-1">
             <CategoryTiles channels={channels} />
           </div>
 

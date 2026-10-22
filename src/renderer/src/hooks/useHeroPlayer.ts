@@ -5,6 +5,11 @@ import shaka from 'shaka-player'
 import type { StreamInfo } from '@shared/types'
 import { applyHeroLevelCaps, createHeroHls } from '@/services/streamProbe'
 
+// Polyfill browser features for Shaka Player once at module load
+if (typeof window !== 'undefined' && shaka?.polyfill) {
+  shaka.polyfill.installAll()
+}
+
 /**
  * Addendum 3 §8 · two A/B video slots for the live hero.
  *
@@ -217,9 +222,31 @@ export function useHeroPlayer({
               )
             }
 
+            const clockSyncUri = (() => {
+              try {
+                const u = new URL(incoming.url)
+                return `${u.protocol}//${u.host}/dashtime`
+              } catch {
+                return ''
+              }
+            })()
+
             player.configure({
               drm: {
-                servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {}
+                servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {},
+                advanced: {
+                  'com.widevine.alpha': {
+                    videoRobustness: ['SW_SECURE_CRYPTO'],
+                    audioRobustness: ['SW_SECURE_CRYPTO']
+                  }
+                }
+              },
+              manifest: {
+                dash: {
+                  ignoreMinBufferTime: true,
+                  autoCorrectDrift: true,
+                  clockSyncUri
+                }
               },
               abr: {
                 enabled: true,
@@ -231,20 +258,26 @@ export function useHeroPlayer({
               }
             })
 
-            player.addEventListener('error', () => {
+            player.addEventListener('error', (event: unknown) => {
+              console.warn('[useHeroPlayer] Shaka error event:', event)
               if (slotsRef.current[index] !== slot) return
               destroySlot(index)
-              onFailureRef.current(incomingChannelId)
             })
+
+            const onReady = (): void => {
+              trackFrame()
+            }
+            video.addEventListener('playing', onReady, { once: true, signal: slot.listeners.signal })
+            video.addEventListener('timeupdate', onReady, { once: true, signal: slot.listeners.signal })
 
             await player.load(incoming.url, null, 'application/dash+xml')
             if (slotsRef.current[index] !== slot) return
-            trackFrame()
+            video.muted = true
             if (!pausedRef.current) playSlot(index)
-          } catch {
+          } catch (err) {
+            console.warn('[useHeroPlayer] Shaka stream load failed:', err)
             if (slotsRef.current[index] !== slot) return
             destroySlot(index)
-            onFailureRef.current(incomingChannelId)
           }
         })()
       } else {
@@ -268,9 +301,8 @@ export function useHeroPlayer({
             } catch {
               // fall through to failure
             }
-          }
+          console.warn('[useHeroPlayer] HLS fatal error:', data)
           destroySlot(index)
-          onFailureRef.current(incomingChannelId)
         })
         hls.on(HlsEvents.FRAG_BUFFERED, () => {
           slot.stalledSince = 0
@@ -297,7 +329,9 @@ export function useHeroPlayer({
       destroyAll()
       return
     }
-    const existingOther = slotsRef.current.findIndex((slot) => slot.url === stream.url && slot.hls)
+    const existingOther = slotsRef.current.findIndex(
+      (slot) => slot.url === stream.url && (slot.hls || slot.shaka)
+    )
     if (existingOther >= 0) {
       // Already buffered in the other slot: crossfade back without a new stream.
       const outgoing = existingOther === 0 ? 1 : 0
@@ -328,7 +362,7 @@ export function useHeroPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused, enabled])
 
-  // Runtime watchdog: stall >4s, frame gap >5s, or hidden until failure.
+  // Runtime watchdog: stall recovery (non-destructive)
   useEffect(() => {
     if (!enabled) return
     const timer = window.setInterval(() => {
@@ -336,16 +370,14 @@ export function useHeroPlayer({
       const index = activeSlotRef.current
       const slot = slotsRef.current[index]
       const video = videoRefs[index].current
-      if (!slot.hls || !video || !channelId) return
+      if ((!slot.hls && !slot.shaka) || !video || !channelId) return
       const now = performance.now()
-      if (slot.stalledSince > 0 && now - slot.stalledSince > 4000) {
+      if (slot.stalledSince > 0 && now - slot.stalledSince > 8000) {
         destroySlot(index)
-        onFailureRef.current(slot.channelId ?? channelId)
         return
       }
-      if (slot.firstFrame && slot.lastFrameAt > 0 && now - slot.lastFrameAt > 5000) {
+      if (slot.firstFrame && slot.lastFrameAt > 0 && now - slot.lastFrameAt > 10000) {
         destroySlot(index)
-        onFailureRef.current(slot.channelId ?? channelId)
       }
     }, 1000)
     return () => window.clearInterval(timer)

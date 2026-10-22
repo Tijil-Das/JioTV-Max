@@ -3,7 +3,6 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
-import { useDarkLogo } from '@/hooks/useDarkLogo'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -136,7 +135,6 @@ export const ChannelLogo = memo(function ChannelLogo({
     return () => cancelAnimationFrame(frame)
   }, [logo])
 
-  const isDarkLogo = useDarkLogo(logo?.objectUrl || channel?.logoUrl)
   const showMonogram = !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
 
   // Inner logo content
@@ -210,16 +208,12 @@ export const ChannelLogo = memo(function ChannelLogo({
     </span>
   )
 
-  // Context "cell" and "switcher": 56 × 56 plate with safe-zone padding and dynamic contrast
+  // Context "cell" and "switcher": 56 × 56 plate with safe-zone padding and uniform static plate
   if (isCell) {
-    const isDark = !showMonogram && isDarkLogo
     return (
       <span
         className={cn(
-          'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] p-2 transition-colors duration-200',
-          isDark
-            ? 'border border-white/20 bg-white/95 shadow-inner'
-            : 'border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
+          'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] p-2 border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
           className
         )}
       >

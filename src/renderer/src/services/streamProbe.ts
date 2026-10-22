@@ -17,7 +17,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
  */
 
 const OK_TTL_MS = 5 * 60_000
-const FAIL_TTL_MS = 10 * 60_000
+const FAIL_TTL_MS = 30_000
 const TOTAL_TIMEOUT_MS = 8000
 const CONCURRENCY = 3
 const SLATE_WIDTH = 32
@@ -241,14 +241,7 @@ async function resolveStream(channelId: string): Promise<StreamInfo | null> {
 async function verifyInternal(channelId: string, stream: StreamInfo | null): Promise<boolean> {
   const resolved = stream ?? (await resolveStream(channelId))
   if (!resolved) return false
-  const stage1Ok = await stage1(resolved.url)
-  if (!stage1Ok) return false
-  // For standard non-DRM HLS streams, run stage2 video frame progress check
-  if (resolved.type === 'hls' && !resolved.isDrm) {
-    return await stage2(channelId, resolved, TOTAL_TIMEOUT_MS)
-  }
-  // DASH and DRM streams are verified via stage 1 manifest accessibility
-  return true
+  return await stage1(resolved.url)
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, channelId: string): Promise<T | false> {

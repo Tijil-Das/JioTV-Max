@@ -172,6 +172,7 @@ export interface StreamDeckApi {
     verifyOtp(phone: string, otp: string): Promise<Result<AuthSession>>
     restore(): Promise<AuthSession | null>
     logout(): Promise<void>
+    onExpired(callback: (payload: { reason: string }) => void): () => void
   }
   channels: {
     fetchAll(): Promise<Result<ChannelFetchPayload>>

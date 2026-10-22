@@ -49,7 +49,12 @@ const api = {
     verifyOtp: (phone: string, otp: string): Promise<Result<AuthSession>> =>
       ipcRenderer.invoke(IPC.verifyOtp, phone, otp),
     restore: (): Promise<AuthSession | null> => ipcRenderer.invoke(IPC.restoreSession),
-    logout: (): Promise<void> => ipcRenderer.invoke(IPC.logout)
+    logout: (): Promise<void> => ipcRenderer.invoke(IPC.logout),
+    onExpired: (callback: (payload: { reason: string }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { reason: string }) => callback(payload)
+      ipcRenderer.on(IPC.authExpired, listener)
+      return () => ipcRenderer.removeListener(IPC.authExpired, listener)
+    }
   },
   channels: {
     fetchAll: (): Promise<Result<ChannelFetchPayload>> => ipcRenderer.invoke(IPC.fetchChannels),

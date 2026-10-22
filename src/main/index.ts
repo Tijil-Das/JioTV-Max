@@ -251,7 +251,10 @@ async function createWindow(): Promise<void> {
     minHeight: 680,
     show: false,
     title: 'JioTv Max',
-    icon: path.join(__dirname, '../../build/icon.png'),
+    icon:
+      process.platform === 'win32' && existsSync(path.join(__dirname, '../../build/icon.ico'))
+        ? path.join(__dirname, '../../build/icon.ico')
+        : path.join(__dirname, '../../build/icon.png'),
     backgroundColor: supportsMaterial ? '#00000000' : '#050507',
     ...(supportsMaterial ? { backgroundMaterial: 'acrylic' as const } : {}),
     titleBarStyle: 'hidden',

@@ -6,7 +6,7 @@ import { useOnline } from '@/hooks/useOnline'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { WindowControls } from './WindowControls'
-import appIcon from '@/assets/icons/app-icon-128.png'
+import appIcon from '@/assets/icons/app-icon-32.png'
 
 const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 

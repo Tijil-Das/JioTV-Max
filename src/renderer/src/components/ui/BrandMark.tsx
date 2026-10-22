@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn'
-import appIcon from '@/assets/icons/app-icon-128.png'
+import appIcon from '@/assets/icons/app-icon-48.png'
 
 /**
  * JioTv Max rounded brand mark.

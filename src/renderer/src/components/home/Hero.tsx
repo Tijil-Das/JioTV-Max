@@ -522,9 +522,9 @@ export function Hero(): JSX.Element {
                 ) : null}
               </div>
 
-              {/* A/B video slots: darkened when idle, full brightness on hover */}
+              {/* A/B video slots: gently softened when idle, full brightness on hover */}
               <div className="absolute inset-0" aria-hidden>
-                <div className="relative h-full w-full overflow-hidden transition-[filter] duration-500 brightness-[0.48] contrast-[1.05] group-hover/hero:brightness-100 group-hover/hero:contrast-100">
+                <div className="relative h-full w-full overflow-hidden transition-[filter] duration-500 brightness-[0.82] group-hover/hero:brightness-100">
                   {[0, 1].map((slot) => (
                     <video
                       key={slot}

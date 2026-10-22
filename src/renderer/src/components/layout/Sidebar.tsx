@@ -18,7 +18,7 @@ import { NAV_ITEMS } from '@/lib/constants'
 import { tween } from '@/lib/motion'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useUIStore } from '@/store/useUIStore'
-import appIcon from '@/assets/icons/app-icon-128.png'
+import appIcon from '@/assets/icons/app-icon-64.png'
 
 const icons: Record<string, LucideIcon> = {
   home: Home,

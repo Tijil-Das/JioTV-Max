@@ -86,7 +86,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "JioTv-Max-${version}-setup.${ext}"
     },
     "nsis": {

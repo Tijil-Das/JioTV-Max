@@ -119,12 +119,93 @@ const LANGUAGE_ALIASES: Record<string, string[]> = {
 }
 
 // ---------------------------------------------------------------------------
+// Known TV vocabulary for compound word splitting (e.g. "sonythree" -> "sony three")
+// ---------------------------------------------------------------------------
+
+const KNOWN_WORDS: string[] = [
+  // Numbers
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'eighteen', 'twentyfour',
+  'first', 'second', 'third', 'fourth', 'fifth',
+  // Quality
+  'hd', 'sd', 'fhd', 'uhd', '4k',
+  // Common TV brands & terms
+  'sony', 'star', 'zee', 'colors', 'sports', 'sport', 'ten', 'max', 'sab', 'pal', 'yay',
+  'wah', 'cinemax', 'cinema', 'cineplex', 'movies', 'movie', 'film', 'filam', 'music',
+  'news', 'khabar', 'samachar', 'india', 'today', 'ndtv', 'abp', 'aaj', 'tak', 'tez',
+  'dd', 'doordarshan', 'national', 'bharati', 'urdu', 'punjabi', 'bengali', 'bangla',
+  'marathi', 'gujarati', 'tamil', 'telugu', 'kannada', 'malayalam', 'bhojpuri', 'oriya',
+  'plus', 'gold', 'bharat', 'utsav', 'action', 'classic', 'jalwa', 'mastiii', 'zoom',
+  'zing', 'pogo', 'cartoon', 'network', 'hungama', 'disney', 'nick', 'sonic', 'discovery',
+  'animal', 'planet', 'nat', 'geo', 'geographic', 'tlc', 'history', 'travel', 'food',
+  'living', 'lifestyle', 'tv', 'enter', 'entertainment', 'rishtey', 'ananda', 'majha',
+  'asmit', 'asmita', 'ganga', 'sanjha', 'bharatvarsh', 'bizz', 'prime', 'times', 'now',
+  'et', 'mirror', 'cnbc', 'aawaz', 'bazaar', 'wion', 'republic', 'live', 'super', 'select'
+]
+
+const KNOWN_WORDS_SET = new Set(KNOWN_WORDS)
+
+/**
+ * Splits glued compound words like "sonythree" -> ["sony", "three"],
+ * "starsports" -> ["star", "sports"], "aajtak" -> ["aaj", "tak"].
+ */
+export function splitCompoundWords(token: string): string[] {
+  if (token.length <= 3) return [token]
+  if (KNOWN_WORDS_SET.has(token)) return [token]
+
+  const memo = new Map<string, string[] | null>()
+
+  function segment(s: string): string[] | null {
+    if (!s) return []
+    if (memo.has(s)) return memo.get(s)!
+
+    if (KNOWN_WORDS_SET.has(s) || /^\d+$/.test(s)) {
+      return [s]
+    }
+
+    for (let len = Math.min(s.length - 1, 15); len >= 2; len--) {
+      const prefix = s.slice(0, len)
+      if (KNOWN_WORDS_SET.has(prefix) || /^\d+$/.test(prefix)) {
+        const rest = s.slice(len)
+        const restSegments = segment(rest)
+        if (restSegments !== null) {
+          const result = [prefix, ...restSegments]
+          memo.set(s, result)
+          return result
+        }
+      }
+    }
+
+    memo.set(s, null)
+    return null
+  }
+
+  const segments = segment(token)
+  return segments && segments.length > 1 ? segments : [token]
+}
+
+/**
+ * Returns true if needle characters appear in haystack in sequential order.
+ */
+function isSubsequence(needle: string, haystack: string): boolean {
+  if (!needle || !haystack) return false
+  let nIdx = 0
+  for (let hIdx = 0; hIdx < haystack.length && nIdx < needle.length; hIdx++) {
+    if (needle[nIdx] === haystack[hIdx]) {
+      nIdx++
+    }
+  }
+  return nIdx === needle.length
+}
+
+// ---------------------------------------------------------------------------
 // Text Preprocessing and Tokenization
 // ---------------------------------------------------------------------------
 
 /**
  * Splits text into clean lowercase tokens, converting punctuation,
  * splitting joined letter-digits (e.g. "sony3" -> "sony 3", "24x7" -> "24 7"),
+ * splitting glued compound words ("sonythree" -> "sony three"),
  * and replacing "+" with "plus" (e.g. "star+" -> "star plus").
  */
 export function tokenize(text: string): string[] {
@@ -136,7 +217,14 @@ export function tokenize(text: string): string[] {
   s = s.replace(/([a-z]+)(\d+)/g, '$1 $2')
   s = s.replace(/(\d+)([a-z]+)/g, '$1 $2')
   s = s.replace(/[^a-z0-9]/g, ' ')
-  return s.split(/\s+/).filter(Boolean)
+  const rawTokens = s.split(/\s+/).filter(Boolean)
+
+  const tokens: string[] = []
+  for (const token of rawTokens) {
+    const segments = splitCompoundWords(token)
+    tokens.push(...segments)
+  }
+  return tokens
 }
 
 /**
@@ -311,6 +399,22 @@ export function scoreChannel(
       if (inOrderCount === nameMatches) {
         score += 150
       }
+    }
+  }
+
+  // Collapsed substring and subsequence matching (e.g. "sony3" or "sonythree" in "sonyten3")
+  const collapsedQuery = queryTokens
+    .map((t) => NUMBER_WORD_MAP[t] ?? t)
+    .join('')
+  const collapsedChannel = channelNameTokens
+    .map((t) => NUMBER_WORD_MAP[t] ?? t)
+    .join('')
+
+  if (collapsedQuery.length >= 3) {
+    if (collapsedChannel.includes(collapsedQuery)) {
+      score += 450
+    } else if (isSubsequence(collapsedQuery, collapsedChannel)) {
+      score += 250
     }
   }
 

@@ -146,7 +146,7 @@ export function SearchBox(): JSX.Element {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={tween(0.16)}
-            className="glass absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[12px]"
+            className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[12px] border border-[rgba(255,255,255,0.12)] bg-[#121215]/95 backdrop-blur-[36px] shadow-[0_24px_64px_rgba(0,0,0,0.92)]"
           >
             {query.length === 0 ? (
               <div className="p-4">

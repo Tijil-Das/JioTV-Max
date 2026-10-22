@@ -118,4 +118,28 @@ describe('smartSearch', () => {
     expect(results.length).toBeGreaterThan(0)
     expect(results[0].id).toBe('star-plus')
   })
+
+  it('matches glued query "sonythree" to "Sony Ten 3 HD"', () => {
+    const results = smartSearchChannels('sonythree', sampleChannels)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].name).toBe('Sony Ten 3 HD')
+  })
+
+  it('matches glued query "sonytwo" to "Sony Ten 2 HD"', () => {
+    const results = smartSearchChannels('sonytwo', sampleChannels)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].name).toBe('Sony Ten 2 HD')
+  })
+
+  it('matches glued query "sonytenthree" to "Sony Ten 3 HD"', () => {
+    const results = smartSearchChannels('sonytenthree', sampleChannels)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].name).toBe('Sony Ten 3 HD')
+  })
+
+  it('matches glued query "starsports" to Star Sports channels', () => {
+    const results = smartSearchChannels('starsports', sampleChannels)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].name).toBe('Star Sports 1')
+  })
 })

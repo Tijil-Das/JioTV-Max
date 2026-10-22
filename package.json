@@ -1,101 +1,18 @@
 {
-  "name": "jiotv-max",
+  "name": "jiotv-max-monorepo",
   "version": "1.0.0",
-  "description": "JioTv Max — a premium desktop live-TV experience for JioTV.",
-  "main": "./out/main/index.js",
-  "author": "StreamDeck",
-  "license": "MIT",
   "private": true,
+  "description": "JioTV Max Monorepo — JioTV-Max-Windows desktop application and Website",
   "scripts": {
-    "postinstall": "node scripts/ensure-castlabs.mjs",
-    "prepare": "node scripts/ensure-castlabs.mjs",
-    "setup:wv": "node scripts/ensure-castlabs.mjs",
-    "predev:wv": "node scripts/ensure-castlabs.mjs",
-    "dev": "electron-vite dev",
-    "dev:wv": "node scripts/dev-wv.mjs",
-    "dev:web": "vite --config vite.web.config.ts --port 5173",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:logos": "vitest run test/logos",
-    "pack:dir": "node scripts/pack.mjs dir",
-    "dist": "node scripts/pack.mjs nsis",
-    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1"
-  },
-  "dependencies": {
-    "@fontsource-variable/inter": "^5.2.8",
-    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
-    "@tanstack/react-virtual": "^3.13.12",
-    "clsx": "^2.1.1",
-    "electron-log": "^5.4.4",
-    "electron-updater": "^6.8.9",
-    "framer-motion": "^12.23.12",
-    "hls.js": "^1.6.13",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-icons": "^5.7.0",
-    "react-router-dom": "^6.30.1",
-    "semver": "^7.8.5",
-    "shaka-player": "4.14.10",
-    "sharp": "^0.35.5",
-    "tailwind-merge": "^3.3.1",
-    "zustand": "^5.0.8"
-  },
-  "devDependencies": {
-    "@types/node": "^22.18.0",
-    "@types/react": "^18.3.24",
-    "@types/react-dom": "^18.3.7",
-    "@types/semver": "^7.8.0",
-    "@vitejs/plugin-react": "^5.0.2",
-    "autoprefixer": "^10.4.21",
-    "electron": "https://github.com/castlabs/electron-releases/archive/refs/tags/v33.3.2+wvcus.tar.gz",
-    "electron-builder": "^26.0.12",
-    "electron-vite": "^6.0.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.4",
-    "vitest": "^3.2.4"
-  },
-  "build": {
-    "appId": "tv.jiotvmax.app",
-    "productName": "JioTv Max",
-    "electronVersion": "33.3.2",
-    "directories": {
-      "output": "release"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "Tijil-Das",
-      "repo": "JioTV-Max"
-    },
-    "files": [
-      "out/**/*",
-      "src/main/installing.html",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.ico",
-      "artifactName": "JioTv-Max-${version}-setup.${ext}"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "runAfterFinish": true,
-      "differentialPackage": true,
-      "createDesktopShortcut": true
-    },
-    "afterPack": "scripts/after-pack.cjs"
+    "dev": "pnpm --filter jiotv-max dev",
+    "dev:wv": "pnpm --filter jiotv-max dev:wv",
+    "dev:web": "pnpm --filter jiotv-max dev:web",
+    "build": "pnpm --filter jiotv-max build",
+    "preview": "pnpm --filter jiotv-max preview",
+    "typecheck": "pnpm --filter jiotv-max typecheck",
+    "test": "pnpm --filter jiotv-max test",
+    "test:watch": "pnpm --filter jiotv-max test:watch",
+    "pack:dir": "pnpm --filter jiotv-max pack:dir",
+    "dist": "pnpm --filter jiotv-max dist"
   }
 }

@@ -1,3 +1,6 @@
+packages:
+  - 'JioTV-Max-Windows'
+
 allowBuilds:
   esbuild: true
   electron-winstaller: true

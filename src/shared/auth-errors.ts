@@ -26,12 +26,30 @@ export const AUTH_ERROR_CODES = new Set([
 
 export const AUTH_HTTP_STATUSES = new Set([401, 403, 419])
 
+export const NON_AUTH_CODES = new Set([
+  'NOT_ENTITLED',
+  'NOT_SUBSCRIBED',
+  'SUBSCRIPTION_REQUIRED',
+  'PACK_REQUIRED',
+  'GEO_BLOCKED',
+  'CHANNEL_BLOCKED',
+  'CONTENT_UNAVAILABLE',
+  'NO_STREAM',
+  'PLAYBACK_FAILED',
+  'INVALID_PHONE',
+  'NETWORK'
+])
+
+const SUBSCRIPTION_LOCK_REGEX =
+  /(subscription|not\s*subscribed|not\s*available\s*on\s*your\s*jio|channel\s*pack|plan\s*upgrade|upgrade\s*your\s*plan|not\s*entitled)/i
+
 const AUTH_MESSAGE_REGEX =
-  /(token.*(expired|invalid|revoked|missing|rejected|failed|not\s*valid)|invalid.*token|session.*(expired|invalid|terminated|rejected|closed)|(re-?authenticate|login\s*again|sign-?in\s*again|please\s*(log\s*in|sign\s*in))|jwt.*expired|user.*not.*authenticated|auth.*required|unauthorized|forbidden|access\s*denied|rejected\s*the\s*session)/i
+  /(token.*(expired|invalid|revoked|missing|rejected|failed|not\s*valid)|invalid.*token|session.*(expired|invalid|terminated|rejected|closed)|(re-?authenticate|login\s*again|sign-?in\s*again|please\s*(log\s*in|sign\s*in))|jwt.*expired|user.*not.*authenticated|auth.*required|rejected\s*the\s*session)/i
 
 /**
  * Determines whether an arbitrary error, HTTP code, object, or message
  * represents an expired, invalid, or missing token / session.
+ * Explicitly guards against subscription package locks and non-entitled channels.
  */
 export function isTokenOrAuthError(input: unknown): boolean {
   if (input === null || input === undefined) return false
@@ -43,18 +61,35 @@ export function isTokenOrAuthError(input: unknown): boolean {
   if (typeof input === 'string') {
     const trimmed = input.trim()
     if (!trimmed) return false
-    if (AUTH_ERROR_CODES.has(trimmed.toUpperCase())) return true
-    if (/\b(401|403|419)\b/.test(trimmed)) return true
+    const upper = trimmed.toUpperCase()
+    if (NON_AUTH_CODES.has(upper)) return false
+    if (AUTH_ERROR_CODES.has(upper)) return true
+    if (SUBSCRIPTION_LOCK_REGEX.test(trimmed)) return false
+    if (/\b(401|403|419)\b/.test(trimmed)) {
+      // If mentions 403 Forbidden or 401 Unauthorized, verify it is not a subscription lock
+      return true
+    }
     return AUTH_MESSAGE_REGEX.test(trimmed)
   }
 
   if (typeof input === 'object') {
     const obj = input as Record<string, unknown>
 
-    // Check code
-    if (typeof obj.code === 'string' && AUTH_ERROR_CODES.has(obj.code.toUpperCase())) {
-      return true
+    // If explicitly marked as NOT_ENTITLED or subscription issue, do not treat as auth failure
+    if (typeof obj.code === 'string') {
+      const codeUpper = obj.code.toUpperCase()
+      if (NON_AUTH_CODES.has(codeUpper)) return false
+      if (AUTH_ERROR_CODES.has(codeUpper)) return true
     }
+
+    // Check message strings for subscription locks before checking auth
+    for (const key of ['message', 'error', 'description', 'errorMessage', 'detail', 'reason']) {
+      const val = obj[key]
+      if (typeof val === 'string' && SUBSCRIPTION_LOCK_REGEX.test(val)) {
+        return false
+      }
+    }
+
     if (typeof obj.code === 'number' && AUTH_HTTP_STATUSES.has(obj.code)) {
       return true
     }

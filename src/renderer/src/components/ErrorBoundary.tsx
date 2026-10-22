@@ -27,7 +27,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         <div className="glass max-w-[520px] rounded-panel p-8 text-center">
           <div className="flex items-center justify-center gap-2.5">
             <BrandMark size={26} />
-            <span className="font-display text-[15px] font-semibold text-white">JioTv Max</span>
+            <span className="font-display text-[15px] font-semibold text-white">
+              JioTv <span className="text-[var(--red)]">Max</span>
+            </span>
           </div>
           <span className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-danger/25 bg-danger/10 text-danger">
             <AlertTriangle className="h-6 w-6" />

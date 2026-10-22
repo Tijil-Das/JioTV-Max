@@ -11,6 +11,12 @@ import { fetchAsset } from './asset-cache'
 import { probeStage1 } from './stream-probe'
 import { SecureStore } from './secure-store'
 import { WindowStateStore } from './window-state'
+import {
+  initUpdater,
+  applyPendingUpdateOnLaunch,
+  closeInstallingPanel,
+  isInstallingUpdate
+} from './updater'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -313,7 +319,10 @@ async function createWindow(): Promise<void> {
   }
   mainWindow.on('resize', persist)
   mainWindow.on('move', persist)
-  mainWindow.on('close', persist)
+  mainWindow.on('close', () => {
+    if (isInstallingUpdate()) return
+    persist()
+  })
 
   const sendFullscreen = (val: boolean): void => {
     mainWindow?.webContents.send(IPC.fullscreenChanged, val)
@@ -574,6 +583,9 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  const started = await applyPendingUpdateOnLaunch()
+  if (started) return // app is quitting to install; do not create the main window
+
   if (hasCastLabsComponents) {
     try {
       console.log('[CDM] Waiting for castLabs components.whenReady()...')
@@ -609,6 +621,8 @@ app.whenReady().then(async () => {
   await jio.init()
   registerIpc()
   await createWindow()
+  closeInstallingPanel()
+  initUpdater(() => mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()
@@ -616,10 +630,12 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  if (isInstallingUpdate()) return
   quitting = true
   void relay.stop()
 })
 
 app.on('window-all-closed', () => {
+  if (isInstallingUpdate()) return
   if (!quitting && process.platform !== 'darwin') app.quit()
 })

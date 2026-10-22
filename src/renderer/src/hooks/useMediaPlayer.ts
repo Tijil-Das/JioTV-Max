@@ -624,7 +624,10 @@ export function useMediaPlayer({
           maxBufferLength: 30,
           capLevelToPlayerSize: false,
           startLevel: -1,
-          abrEwmaDefaultEstimate: 5000000
+          abrEwmaDefaultEstimate: 20_000_000,
+          abrBandWidthFactor: 0.92,
+          abrBandWidthUpFactor: 0.85,
+          abrMaxWithRealBitrate: true
         })
         hlsRef.current = hls
         let mediaRecoveryAttempts = 0
@@ -946,7 +949,10 @@ export function useMediaPlayer({
           },
           abr: {
             enabled: true,
-            defaultBandwidthEstimate: 5_000_000,
+            defaultBandwidthEstimate: 20_000_000,
+            switchInterval: 2,
+            bandwidthUpgradeTarget: 0.82,
+            bandwidthDowngradeTarget: 0.95,
             restrictions: { maxHeight: 1080 }
           },
           streaming: {

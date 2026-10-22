@@ -68,6 +68,8 @@ export function LoginModal(): JSX.Element | null {
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS)
   const inputsRef = useRef<Array<HTMLInputElement | null>>([])
   const phoneRef = useRef<HTMLInputElement>(null)
+  const prevOpenRef = useRef(false)
+  const lastStepTransitionRef = useRef(0)
 
   const code = digits.join('')
 
@@ -83,9 +85,16 @@ export function LoginModal(): JSX.Element | null {
   }, [])
 
   useEffect(() => {
-    if (open) {
+    // Only reset state when transitioning from closed to open
+    if (open && !prevOpenRef.current) {
       setLocalMode(settingsMode === 'demo' ? 'demo' : 'jio')
-      reset()
+      setStep('phone')
+      setError(null)
+      setSending(false)
+      setVerifying(false)
+      setDigits(Array(OTP_LENGTH).fill(''))
+      setChallenge(null)
+      setSecondsLeft(RESEND_SECONDS)
       try {
         const remembered = localStorage.getItem('streamdeck-last-phone') || ''
         if (remembered) setPhone(remembered)
@@ -93,7 +102,8 @@ export function LoginModal(): JSX.Element | null {
         // LocalStorage unavailable
       }
     }
-  }, [open, reset, settingsMode])
+    prevOpenRef.current = open
+  }, [open, settingsMode])
 
   useEffect(() => {
     if (step !== 'otp') return
@@ -140,6 +150,7 @@ export function LoginModal(): JSX.Element | null {
         // ignore
       }
       setChallenge(result)
+      lastStepTransitionRef.current = Date.now()
       setStep('otp')
       setSecondsLeft(result.expiresInSeconds ?? RESEND_SECONDS)
       setDigits(Array(OTP_LENGTH).fill(''))
@@ -287,7 +298,13 @@ export function LoginModal(): JSX.Element | null {
                   {step === 'otp' ? 'Step 2 of 2' : 'Step 1 of 2'}
                 </p>
                 <h2 id="login-title" className="mt-2 font-display text-[24px] font-bold tracking-tight text-white">
-                  {title}
+                  {step === 'otp' ? (
+                    'Enter your code'
+                  ) : (
+                    <>
+                      Sign in to JioTv <span className="text-[var(--red)]">Max</span>
+                    </>
+                  )}
                 </h2>
                 {step === 'phone' && reason && (reason.toLowerCase().includes('expired') || reason.toLowerCase().includes('token') || reason.toLowerCase().includes('session')) ? (
                   <div className="mt-3.5 flex items-center gap-2.5 rounded-[10px] border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12.5px] font-medium text-amber-300">
@@ -428,6 +445,7 @@ export function LoginModal(): JSX.Element | null {
                       size="lg"
                       icon={<ArrowLeft className="h-4 w-4" />}
                       onClick={() => {
+                        if (Date.now() - lastStepTransitionRef.current < 400) return
                         setStep('phone')
                         setError(null)
                       }}
@@ -457,41 +475,6 @@ export function LoginModal(): JSX.Element | null {
                     </Button>
                   )}
                 </div>
-
-                {step === 'phone' ? (
-                  <div className="mt-4 border-t border-white/[0.06] pt-3 text-center">
-                    {mode === 'jio' ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalMode('demo')
-                          setPhone(DEMO_PHONE)
-                          setError(null)
-                        }}
-                        className="text-[12px] text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
-                      >
-                        Don’t have a Jio account? <span className="text-[#E11D2E] hover:underline">Use demo mode</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalMode('jio')
-                          setPhone('')
-                          setError(null)
-                        }}
-                        className="text-[12px] text-[#A1A1A6] transition-colors hover:text-[#F4F4F5]"
-                      >
-                        Switch back to <span className="text-[#E11D2E] hover:underline">JioTV account</span>
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-
-                <p className="mt-5 text-center text-[12px] leading-relaxed text-text-secondary">
-                  By continuing you agree to keep this sign-in on trusted devices only. JioTv Max
-                  stores your Jio tokens in the operating system keychain.
-                </p>
               </motion.div>
             )}
           </AnimatePresence>

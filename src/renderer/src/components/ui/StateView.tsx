@@ -27,7 +27,7 @@ export function PageTransition({
 interface StateViewProps {
   icon?: React.ReactNode
   title: string
-  description: string
+  description: React.ReactNode
   actionLabel?: string
   onAction?: () => void
   secondaryLabel?: string

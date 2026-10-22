@@ -26,7 +26,7 @@ export function BrandMark({
 export function BrandWordmark({ className }: { className?: string }): JSX.Element {
   return (
     <span className={cn('text-[14px] font-[700] tracking-tight text-[#F4F4F5]', className)}>
-      JioTv <span className="text-red">Max</span>
+      JioTv <span className="text-[var(--red)]">Max</span>
     </span>
   )
 }

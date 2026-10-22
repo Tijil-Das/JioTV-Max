@@ -18,6 +18,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { ToastViewport } from '@/components/ui/Toasts'
+import { UpdateBanner } from '@/components/ui/UpdateBanner'
 import { SplashScreen } from '@/components/ui/SplashScreen'
 import { HomePage } from '@/pages/HomePage'
 import { CategoryPage } from '@/pages/CategoryPage'
@@ -274,6 +275,7 @@ export default function App(): JSX.Element {
         </AppShell>
         <LoginModal />
         <ToastViewport />
+        <UpdateBanner />
       </ErrorBoundary>
     </MotionConfig>
   )

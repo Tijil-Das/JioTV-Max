@@ -10,7 +10,11 @@ export function NotFoundPage(): JSX.Element {
         <StateView
           icon={<Compass className="h-7 w-7" />}
           title="This page is off air"
-          description="The address does not match anything in JioTv Max. Head back to the front page and pick a channel."
+          description={
+            <>
+              The address does not match anything in JioTv <span className="text-[var(--red)] font-semibold">Max</span>. Head back to the front page and pick a channel.
+            </>
+          }
           actionLabel="Back home"
           onAction={() => navigate('/')}
         />

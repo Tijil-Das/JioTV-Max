@@ -73,6 +73,18 @@ const api = {
   }
 }
 
+const updater = {
+  getState: (): Promise<{ readyVersion: string | null }> => ipcRenderer.invoke('update:get-state'),
+  onReady: (cb: (version: string) => void) =>
+    ipcRenderer.on('update:ready', (_e: Electron.IpcRendererEvent, version: string) => cb(version)),
+  restart: (): void => {
+    ipcRenderer.send('update:restart')
+  }
+}
+
 contextBridge.exposeInMainWorld('api', api)
+contextBridge.exposeInMainWorld('updater', updater)
 
 export type StreamDeckBridge = typeof api
+export type UpdaterBridgeType = typeof updater
+

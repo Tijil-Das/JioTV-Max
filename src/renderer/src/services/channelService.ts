@@ -65,7 +65,9 @@ export const channelService = {
     const result = await bridge.channels.getStream(channel.id, qualityToJio(quality))
     if (!result.ok) {
       console.error(`[channelService] bridge.channels.getStream error:`, result.error, result.code)
-      checkAndHandleAuthError(result)
+      if (result.code !== 'NOT_ENTITLED') {
+        checkAndHandleAuthError(result)
+      }
       throw new ApiError(result.error, result.code, result.retryable)
     }
     console.log(`[channelService] bridge.channels.getStream success:`, result.data)

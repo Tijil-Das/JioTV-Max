@@ -28,12 +28,15 @@
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@tanstack/react-virtual": "^3.13.12",
     "clsx": "^2.1.1",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
     "framer-motion": "^12.23.12",
     "hls.js": "^1.6.13",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",
+    "semver": "^7.8.5",
     "shaka-player": "4.14.10",
     "sharp": "^0.35.5",
     "tailwind-merge": "^3.3.1",
@@ -43,6 +46,7 @@
     "@types/node": "^22.18.0",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^5.0.2",
     "autoprefixer": "^10.4.21",
     "electron": "https://github.com/castlabs/electron-releases/archive/refs/tags/v33.3.2+wvcus.tar.gz",
@@ -61,19 +65,35 @@
     "directories": {
       "output": "release"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "Tijil-Das",
+      "repo": "JioTV-Max"
+    },
     "files": [
       "out/**/*",
+      "src/main/installing.html",
       "package.json"
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.png",
       "artifactName": "JioTv-Max-${version}-setup.${ext}"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "differentialPackage": true,
       "createDesktopShortcut": true
-    }
+    },
+    "afterPack": "scripts/after-pack.cjs"
   }
 }

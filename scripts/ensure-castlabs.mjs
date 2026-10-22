@@ -181,6 +181,10 @@ async function downloadArchiveResumable(zipPath, partialPath) {
  * Ensures castLabs Electron exists. If missing or incomplete, resumes or downloads it.
  */
 export async function ensureCastlabsElectron(targetDir = findCastlabsDir()) {
+  if (process.platform !== 'win32') {
+    console.log('[castLabs] Non-Windows platform detected; skipping win32 castLabs binary setup.')
+    return null
+  }
   if (isValidInstallation(targetDir)) {
     return targetDir
   }

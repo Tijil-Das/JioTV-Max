@@ -79,7 +79,7 @@ interface ResolvedUpstream {
 type JioQuality = 'auto' | 'high' | 'medium' | 'low'
 
 interface PlaybackResponse {
-  code?: number
+  code?: number | string
   message?: string
   result?: string
   isDRM?: boolean
@@ -818,7 +818,6 @@ export class JioService {
     console.log(`[JioService] Resolving upstream stream for channelId=${channelId}, quality=${quality}`)
     if (!this.session) {
       console.warn('[JioService] getStream failed: AUTH_REQUIRED (no session)')
-      this.notifySessionExpired('Sign in with your JioTV number to watch live channels.')
       return {
         ok: false,
         error: 'Sign in with your JioTV number to watch live channels.',
@@ -858,12 +857,28 @@ export class JioService {
       const parsed = (parsedBody ?? {}) as PlaybackResponse
       console.log(`[JioService] Playback API response status: ${response.status}, code: ${parsed.code ?? 'none'}`)
 
+      // 1. Check for subscription pack locks first before treating as an account-level auth failure
+      const isSubscriptionLock =
+        (parsed.code && parsed.code !== 200 && parsed.code !== '200' && !parsed.result && !parsed.mpd) ||
+        parsed.code === 'NOT_ENTITLED' ||
+        /subscription|not\s*subscribed|not\s*available\s*on\s*your\s*jio|channel\s*pack|plan\s*upgrade/i.test(
+          String(parsed.message || '')
+        )
+
+      if (isSubscriptionLock) {
+        console.warn(`[JioService] Channel subscription lock (code ${parsed.code}): ${parsed.message}`)
+        return {
+          ok: false,
+          error: parsed.message || 'This channel is not available on your Jio account.',
+          code: 'NOT_ENTITLED'
+        }
+      }
+
+      // 2. Only treat as account-level session failure if status is 401/419 or message explicitly indicates token expiration
       const isAuthFailure =
         response.status === 401 ||
-        response.status === 403 ||
         response.status === 419 ||
         parsed.code === 401 ||
-        parsed.code === 403 ||
         parsed.code === 419 ||
         isTokenOrAuthError(parsed.message) ||
         isTokenOrAuthError(errorMessage(parsedBody, response.status))
@@ -887,15 +902,6 @@ export class JioService {
           error: errorMessage(parsedBody, response.status),
           code: 'PLAYBACK_FAILED',
           retryable: response.status >= 500
-        }
-      }
-      // Some subscription-locked channels return HTTP 200 with a failure code.
-      if (parsed.code && parsed.code !== 200 && !parsed.result && !parsed.mpd) {
-        console.warn(`[JioService] Channel subscription lock (code ${parsed.code}): ${parsed.message}`)
-        return {
-          ok: false,
-          error: parsed.message || 'This channel is not available on your Jio account.',
-          code: 'NOT_ENTITLED'
         }
       }
 

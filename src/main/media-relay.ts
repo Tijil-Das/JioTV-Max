@@ -628,7 +628,6 @@ export class MediaRelay {
       try {
         const fresh = await this.streamResolver!(session.channelId, session.quality)
         if (!fresh?.manifestUrl) {
-          this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
           return false
         }
         // Another request already refreshed while this call was in flight.
@@ -648,7 +647,6 @@ export class MediaRelay {
         return true
       } catch (error) {
         console.warn(`[MediaRelay] Token refresh failed for ${session.channelId}:`, error)
-        this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
         return false
       }
     })()
@@ -693,7 +691,7 @@ export class MediaRelay {
       this.captureRotatedToken(session, upstream)
       console.log(`[MediaRelay] Retry upstream status: ${upstream.status}`)
     } else if (session && (upstream.status === 401 || upstream.status === 403)) {
-      this.onAuthExpiredCallback?.('Streaming session expired. Please sign in again.')
+      console.warn(`[MediaRelay] Upstream returned HTTP ${upstream.status} for ${session.channelId}`)
     }
 
     return { upstream, target }
@@ -1368,9 +1366,7 @@ export class MediaRelay {
     console.log(`[MediaRelay] /license upstream status: ${upstream.status}`)
 
     if (!upstream.ok) {
-      if (upstream.status === 401 || upstream.status === 403) {
-        this.onAuthExpiredCallback?.('DRM license authorization failed. Please sign in again.')
-      }
+      console.warn(`[MediaRelay] /license upstream error (HTTP ${upstream.status})`)
       try {
         const textPreview = await upstream.clone().text()
         console.warn(`[MediaRelay] /license upstream error body (HTTP ${upstream.status}):`, textPreview.slice(0, 500))

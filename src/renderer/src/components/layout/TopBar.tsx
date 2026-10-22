@@ -12,8 +12,6 @@ import { WindowControls } from './WindowControls'
  */
 export function TopBar(): JSX.Element {
   const location = useLocation()
-  const online = useOnline()
-  const channels = useChannelStore((state) => state.channels)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -32,6 +30,16 @@ export function TopBar(): JSX.Element {
     }
   }, [location.pathname])
 
+  return (
+    <div className="drag-region sticky top-0 z-30 -mb-[64px] h-[64px]">
+      <div
+        className={cn(
+          'flex h-full items-center justify-between gap-6 pl-12 pr-0 transition-all duration-300',
+          scrolled
+            ? 'border-b border-[rgba(255,255,255,0.07)] bg-[rgba(10,10,11,0.80)] backdrop-blur-[28px]'
+            : 'border-b border-transparent bg-transparent'
+        )}
+      >
         {/* Left: search bar */}
         <div className="no-drag flex items-center">
           <SearchBox />

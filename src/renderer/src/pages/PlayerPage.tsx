@@ -6,11 +6,9 @@ import {
   ArrowLeft,
   CircleHelp,
   Keyboard,
-  ListVideo,
   LockKeyhole,
   Maximize,
   Minimize,
-  PictureInPicture2,
   Play,
   Pause,
   RefreshCw,
@@ -42,12 +40,31 @@ import { useUIStore } from '@/store/useUIStore'
 import { Button, IconButton } from '@/components/ui/Button'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 import { LiveBadge } from '@/components/ui/LiveBadge'
-import { ChannelDrawer } from '@/components/player/ChannelDrawer'
 import { DvrSeekBar } from '@/components/player/DvrSeekBar'
 import { QualityMenu } from '@/components/player/QualityMenu'
 import { ShortcutsOverlay } from '@/components/player/ShortcutsOverlay'
 import { PinDialog } from '@/components/settings/PinDialog'
 import { WindowControls } from '@/components/layout/WindowControls'
+
+function Rewind5Icon(): JSX.Element {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M11 17a6 6 0 1 1 5.9-4.8" />
+      <polyline points="11 21 11 17 15 17" />
+      <text x="11.5" y="14" fill="currentColor" stroke="none" fontSize="7.5" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" fontFamily="sans-serif">5</text>
+    </svg>
+  )
+}
+
+function Forward5Icon(): JSX.Element {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M13 17a6 6 0 1 0-5.9-4.8" />
+      <polyline points="13 21 13 17 9 17" />
+      <text x="12.5" y="14" fill="currentColor" stroke="none" fontSize="7.5" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" fontFamily="sans-serif">5</text>
+    </svg>
+  )
+}
 
 interface StreamFailure {
   message: string
@@ -113,7 +130,6 @@ export function PlayerPage(): JSX.Element {
   const [streamError, setStreamError] = useState<StreamFailure | null>(null)
   const handoffConsumedRef = useRef(false)
   const [attempt, setAttempt] = useState(0)
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const [qualityOpen, setQualityOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [pinOpen, setPinOpen] = useState(false)
@@ -318,7 +334,7 @@ export function PlayerPage(): JSX.Element {
   }, [channelId])
 
   // ---- Interaction helpers ----------------------------------------------
-  const menusOpen = drawerOpen || qualityOpen || helpOpen || pinOpen
+  const menusOpen = qualityOpen || helpOpen || pinOpen
   const { idle, wake } = useIdle(3200, isPlaying && !menusOpen)
   const controlsVisible = !idle || !isPlaying || menusOpen
 
@@ -330,6 +346,36 @@ export function PlayerPage(): JSX.Element {
     wake()
     setPlaying(!isPlaying)
   }, [isPlaying, setPlaying, wake])
+
+  const rewind5 = useCallback(() => {
+    wake()
+    const media = videoRef.current
+    if (!media) return
+    const range = engine.seekRange
+    // Maintain a safe buffer margin from the absolute beginning of the DVR window
+    const minTime = range ? range.start + 1.0 : 0
+    const target = media.currentTime - 5
+    // "if backward 5s till a certain point isn't possible, don't rewind"
+    if (target < minTime) {
+      console.log('[PlayerPage] Cannot rewind 5s: reached earliest live buffer boundary')
+      return
+    }
+    engine.seekTo(target)
+  }, [engine, videoRef, wake])
+
+  const forward5 = useCallback(() => {
+    wake()
+    const media = videoRef.current
+    if (!media) return
+    const range = engine.seekRange
+    const maxTime = range ? range.end - 0.5 : media.duration
+    const target = media.currentTime + 5
+    if (range && target >= maxTime) {
+      engine.goLive()
+      return
+    }
+    engine.seekTo(Math.min(target, maxTime))
+  }, [engine, videoRef, wake])
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -348,16 +394,6 @@ export function PlayerPage(): JSX.Element {
       }
     }
   }, [bridge, setFullscreen])
-
-  const togglePip = useCallback(async () => {
-    const media = videoRef.current
-    if (!media) return
-    if (document.pictureInPictureElement) {
-      await document.exitPictureInPicture().catch(() => undefined)
-    } else if (document.pictureInPictureEnabled && media.requestPictureInPicture) {
-      await media.requestPictureInPicture().catch(() => undefined)
-    }
-  }, [videoRef])
 
   const zap = useCallback(
     (direction: -1 | 1) => {
@@ -383,6 +419,10 @@ export function PlayerPage(): JSX.Element {
       event.preventDefault()
       togglePlay()
     },
+    j: () => rewind5(),
+    l: () => forward5(),
+    '[': () => rewind5(),
+    ']': () => forward5(),
     ArrowUp: (event) => {
       event.preventDefault()
       zap(-1)
@@ -401,20 +441,14 @@ export function PlayerPage(): JSX.Element {
     },
     m: () => toggleMuted(),
     f: () => void toggleFullscreen(),
-    c: () => {
-      setDrawerOpen((value) => !value)
-      wake()
-    },
     q: () => {
       setQualityOpen((value) => !value)
       wake()
     },
-    p: () => void togglePip(),
     '?': () => setHelpOpen((value) => !value),
     Escape: () => {
-      if (qualityOpen || drawerOpen || helpOpen) {
+      if (qualityOpen || helpOpen) {
         setQualityOpen(false)
-        setDrawerOpen(false)
         setHelpOpen(false)
       } else if (isFullscreen) {
         void toggleFullscreen()
@@ -561,22 +595,10 @@ export function PlayerPage(): JSX.Element {
               </p>
             </div>
           </div>
-          <div className="no-drag flex shrink-0 items-center gap-2">
-            {stream?.isDrm ? (
-              <span className="rounded-pill border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-amber-200">
-                Widevine
-              </span>
-            ) : null}
-            {stream ? (
-              <span className="rounded-pill border border-white/10 bg-black/35 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-md">
-                {stream.type === 'dash' ? 'DASH' : 'HLS'} · {qualityLabel}
-              </span>
-            ) : null}
-            {!isFullscreen ? (
-              <div className="ml-2 flex h-8 items-center overflow-hidden rounded-[8px] border border-white/10 bg-black/40 backdrop-blur-md">
-                <WindowControls />
-              </div>
-            ) : null}
+          <div className="no-drag flex shrink-0 items-center">
+            <div className="flex h-8 items-center overflow-hidden rounded-[8px] border border-white/10 bg-black/40 backdrop-blur-md">
+              <WindowControls />
+            </div>
           </div>
         </div>
       </div>
@@ -791,36 +813,71 @@ export function PlayerPage(): JSX.Element {
               value={muted ? 0 : volume}
               onChange={(event) => changeVolume(Number(event.target.value))}
               aria-label="Volume"
-              className="h-1 w-24 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#7C5CFF]"
+              className="h-1 w-24 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#E11D2E]"
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <IconButton label="Previous channel" size="sm" variant="glass" onClick={() => zap(-1)}>
+          <div className="flex items-center gap-2 md:gap-3">
+            <IconButton
+              label="Previous channel (↑)"
+              size="sm"
+              variant="glass"
+              onClick={() => zap(-1)}
+              className="text-white/70 hover:text-white"
+            >
               <SkipBack className="h-4 w-4" />
             </IconButton>
+
+            <button
+              type="button"
+              onClick={rewind5}
+              aria-label="Rewind 5 seconds"
+              title="Rewind 5s (J)"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-white/80 transition-all hover:border-white/25 hover:bg-white/[0.16] hover:text-white active:scale-95"
+            >
+              <Rewind5Icon />
+            </button>
+
             <button
               type="button"
               onClick={togglePlay}
               aria-label={isPlaying ? 'Pause' : 'Play'}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_30px_-8px_rgba(255,255,255,.5)] transition-transform hover:scale-105"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_30px_-8px_rgba(255,255,255,.5)] transition-transform hover:scale-105 active:scale-95"
             >
               {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
             </button>
-            <IconButton label="Next channel" size="sm" variant="glass" onClick={() => zap(1)}>
+
+            <button
+              type="button"
+              onClick={forward5}
+              aria-label="Forward 5 seconds"
+              title="Forward 5s (L)"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-white/80 transition-all hover:border-white/25 hover:bg-white/[0.16] hover:text-white active:scale-95"
+            >
+              <Forward5Icon />
+            </button>
+
+            <IconButton
+              label="Next channel (↓)"
+              size="sm"
+              variant="glass"
+              onClick={() => zap(1)}
+              className="text-white/70 hover:text-white"
+            >
               <SkipForward className="h-4 w-4" />
             </IconButton>
           </div>
 
-          <div className="relative flex flex-1 items-center justify-end gap-1.5">
+          <div className="relative flex flex-1 items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => setQualityOpen((value) => !value)}
               aria-haspopup="menu"
               aria-label="Stream quality"
               aria-expanded={qualityOpen}
-              className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-[12px] font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-white/[0.12]"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/90 backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12]"
             >
+              <span className="h-1.5 w-1.5 rounded-full bg-[#E11D2E]" />
               {qualityLabel}
             </button>
             <AnimatePresence>
@@ -837,17 +894,7 @@ export function PlayerPage(): JSX.Element {
                 />
               ) : null}
             </AnimatePresence>
-            <IconButton
-              label="Channel list"
-              size="sm"
-              variant="glass"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <ListVideo className="h-4 w-4" />
-            </IconButton>
-            <IconButton label="Picture in picture" size="sm" variant="glass" onClick={() => void togglePip()}>
-              <PictureInPicture2 className="h-4 w-4" />
-            </IconButton>
+
             <IconButton
               label="Keyboard shortcuts"
               size="sm"
@@ -856,6 +903,7 @@ export function PlayerPage(): JSX.Element {
             >
               <CircleHelp className="h-4 w-4" />
             </IconButton>
+
             <IconButton
               label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               size="sm"
@@ -868,17 +916,6 @@ export function PlayerPage(): JSX.Element {
         </div>
       </div>
 
-      <ChannelDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        channels={channels}
-        epg={epg}
-        currentChannelId={channelId}
-        onSelect={(nextId) => {
-          setDrawerOpen(false)
-          if (nextId !== channelId) navigate(`/watch/${nextId}`)
-        }}
-      />
       <ShortcutsOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   )

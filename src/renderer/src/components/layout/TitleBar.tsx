@@ -39,7 +39,9 @@ export function TitleBar(): JSX.Element {
         )}
       >
         <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
-        <span className="text-[12px] font-[600] tracking-wide text-[#F4F4F5]">JioTv Max</span>
+        <span className="text-[12px] font-[600] tracking-wide text-[#F4F4F5]">
+          JioTv <span className="text-[var(--red)]">Max</span>
+        </span>
         <span className="mx-1 h-3.5 w-px bg-white/[0.07]" aria-hidden />
         <span className="text-[12px] font-[450] text-[#A1A1A6]">Live television</span>
       </div>

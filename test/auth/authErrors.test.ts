@@ -78,6 +78,20 @@ describe('Auth and Token Error Recognition (Advanced & Foolproof)', () => {
       expect(isTokenOrAuthError(str)).toBe(false)
       expect(isTokenOrAuthError(new Error(str))).toBe(false)
     }
+
+    const subscriptionStrings = [
+      'This channel is not available on your Jio account.',
+      'Subscription required to view this channel.',
+      'You are not subscribed to this channel pack.',
+      'Please upgrade your plan to watch this channel.',
+      'Not entitled to stream this content'
+    ]
+
+    for (const str of subscriptionStrings) {
+      expect(isTokenOrAuthError(str)).toBe(false)
+      expect(isTokenOrAuthError({ code: 'NOT_ENTITLED', message: str })).toBe(false)
+      expect(isTokenOrAuthError({ code: 'NOT_SUBSCRIBED', status: 403, message: str })).toBe(false)
+    }
   })
 
   it('handles null, undefined, empty inputs safely without throwing', () => {

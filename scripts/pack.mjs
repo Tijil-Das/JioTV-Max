@@ -43,13 +43,6 @@ async function run() {
     `--config.electronDist=${castlabsDir}`
   ]
 
-  if (existsSync(sigFile)) {
-    builderArgs.push(
-      `--config.extraFiles.0.from=${sigFile.replace(/\\/g, '/')}`,
-      `--config.extraFiles.0.to=JioTv Max.exe.sig`
-    )
-  }
-
   console.log(`\n[pack] Running ${builderArgs.join(' ')}...\n`)
   const packResult = spawnSync('pnpm', ['exec', ...builderArgs], { stdio: 'inherit', cwd: projectRoot, env, shell: true })
   process.exit(packResult.status ?? 0)

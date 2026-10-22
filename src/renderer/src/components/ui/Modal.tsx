@@ -5,6 +5,7 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { springSoft, tween } from '@/lib/motion'
 import { IconButton } from './Button'
+import { WindowControls } from '@/components/layout/WindowControls'
 
 interface ModalProps {
   open: boolean
@@ -55,6 +56,10 @@ export function Modal({
     <AnimatePresence>
       {open ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          {/* Top-right Windows caption buttons: close, minimize, maximize / restore down */}
+          <div className="no-drag absolute right-0 top-0 z-[110] flex h-10 items-center">
+            <WindowControls />
+          </div>
           <motion.div
           className="absolute inset-0 bg-black/80 backdrop-blur-[4px]"
             variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}

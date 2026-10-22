@@ -3,13 +3,12 @@ import { Modal } from '@/components/ui/Modal'
 
 const rows: Array<[string, string]> = [
   ['Space', 'Play / pause'],
+  ['J / L', 'Rewind / forward 5s'],
   ['↑ / ↓', 'Previous / next channel'],
   ['← / →', 'Volume down / up'],
   ['F', 'Toggle fullscreen'],
   ['M', 'Mute / unmute'],
-  ['C', 'Channel drawer'],
   ['Q', 'Quality menu'],
-  ['P', 'Picture-in-picture'],
   ['?', 'This shortcut sheet'],
   ['Esc', 'Close overlay / leave player']
 ]

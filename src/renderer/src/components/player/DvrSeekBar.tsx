@@ -16,11 +16,11 @@ interface DvrSeekBarProps {
 }
 
 /**
- * Progress bar mapped to Shaka's DVR window (or the HLS seekable range).
+ * Progress bar mapped to DVR window.
  *
- * The left edge is `seekRange.start`, the right edge is the live edge. The
- * badge turns into a grey "-MM:SS" countdown when the viewer rewinds, and a
- * "Go Live" affordance appears beside it.
+ * Theme red timeline bar.
+ * When at live edge or <= 20s behind: clean LiveBadge (no second counters).
+ * When > 20s behind: subtle behind counter + "Go Live" affordance.
  */
 export function DvrSeekBar({
   seekRange,
@@ -44,7 +44,9 @@ export function DvrSeekBar({
   const value = disabled ? start : Math.min(selectableEnd, Math.max(start, rawValue))
   const progress = duration > 0 ? Math.min(100, Math.max(0, ((value - start) / duration) * 100)) : 0
   const behind = Math.max(0, behindLive)
-  const showGoLive = isLive && !atLiveEdge && behind >= 3
+
+  // Only consider delayed if more than 20s behind live
+  const isDelayed = isLive && behind > 20
 
   const seek = (next: number): void => {
     setDragValue(next)
@@ -77,41 +79,40 @@ export function DvrSeekBar({
         onBlur={() => setDragging(false)}
         aria-label="Seek within the live broadcast"
         aria-valuetext={
-          isLive && !atLiveEdge ? `${formatBehindLive(behind)} behind live` : 'Live edge'
+          isDelayed ? `${formatBehindLive(behind)} behind live` : 'Live edge'
         }
         className={cn(
-          'dvr-range h-[5px] min-w-0 flex-1 cursor-pointer appearance-none rounded-pill',
+          'dvr-range h-[4px] min-w-0 flex-1 cursor-pointer appearance-none rounded-pill transition-all',
           disabled && 'cursor-default opacity-50'
         )}
         style={{
           background: disabled
             ? 'rgba(255,255,255,0.12)'
-            : `linear-gradient(to right, #7C5CFF 0%, #22D3EE ${progress}%, rgba(255,255,255,0.14) ${progress}%, rgba(255,255,255,0.14) 100%)`
+            : `linear-gradient(to right, #E11D2E 0%, #E11D2E ${progress}%, rgba(255,255,255,0.18) ${progress}%, rgba(255,255,255,0.18) 100%)`
         }}
       />
 
       {isLive ? (
-        atLiveEdge ? (
+        !isDelayed ? (
           <LiveBadge />
         ) : (
-          <span
-            className="shrink-0 rounded-pill bg-white/15 px-2.5 py-1 text-[12px] font-semibold tabular-nums tracking-[0.08em] text-white/75 backdrop-blur-md"
-            title={`${formatBehindLive(behind)} behind live`}
-          >
-            {formatBehindLive(behind)}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              className="rounded-md border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-white/80"
+              title={`${formatBehindLive(behind)} behind live`}
+            >
+              -{formatBehindLive(behind)}
+            </span>
+            <button
+              type="button"
+              onClick={handleGoLive}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#E11D2E]/40 bg-[#E11D2E]/15 px-2.5 text-[11.5px] font-semibold text-white tracking-wide transition-all hover:bg-[#E11D2E]/25 hover:border-[#E11D2E]/60 active:scale-95 shadow-[0_0_12px_rgba(225,29,46,0.2)]"
+            >
+              <Radio className="h-3 w-3 text-[#E11D2E]" />
+              Go Live
+            </button>
+          </div>
         )
-      ) : null}
-
-      {showGoLive ? (
-        <button
-          type="button"
-          onClick={handleGoLive}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-white/15 bg-white/10 px-2.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-white/90 backdrop-blur-md transition-colors hover:border-white/25 hover:bg-white/20"
-        >
-          <Radio className="h-3 w-3 text-live" />
-          Go Live
-        </button>
       ) : null}
     </div>
   )

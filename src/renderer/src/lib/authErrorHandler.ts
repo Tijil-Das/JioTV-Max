@@ -15,6 +15,11 @@ const COOLDOWN_MS = 2000
  * 5. Pushes an informative toast notification
  */
 export function triggerAuthExpired(rawReason?: unknown): void {
+  // If the sign-in modal is already open, do not re-trigger or interrupt user interaction
+  if (useUIStore.getState().loginOpen) {
+    return
+  }
+
   const now = Date.now()
   if (now - lastAuthTrigger < COOLDOWN_MS) {
     // Already handled within cooldown window

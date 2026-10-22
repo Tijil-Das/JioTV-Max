@@ -29,7 +29,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   loginReason: null,
   searchOpen: false,
   toasts: [],
-  openLogin: (reason) => set({ loginOpen: true, loginReason: reason ?? null }),
+  openLogin: (reason) =>
+    set((state) => ({
+      loginOpen: true,
+      loginReason: reason ?? state.loginReason
+    })),
   closeLogin: () => set({ loginOpen: false, loginReason: null }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   pushToast: (input) => {

@@ -186,3 +186,10 @@ export interface StreamDeckApi {
     clearToken(): Promise<void>
   }
 }
+
+export interface UpdaterBridge {
+  getState(): Promise<{ readyVersion: string | null }>
+  onReady(cb: (version: string) => void): void
+  restart(): void
+}
+

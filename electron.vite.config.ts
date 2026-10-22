@@ -1,7 +1,21 @@
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
+
+function copyInstallingHtmlPlugin(): Plugin {
+  return {
+    name: 'copy-installing-html',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'installing.html',
+        source: readFileSync(resolve('src/main/installing.html'), 'utf-8')
+      })
+    }
+  }
+}
 
 /**
  * Production-only CSP.
@@ -46,7 +60,7 @@ function contentSecurityPolicy(): Plugin {
  */
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copyInstallingHtmlPlugin()],
     resolve: {
       alias: {
         '@shared': resolve('src/shared')

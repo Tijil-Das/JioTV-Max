@@ -212,11 +212,13 @@ export function SettingsPage(): JSX.Element {
           {user ? (
             <div className="rounded-[12px] border border-[rgba(255,255,255,0.07)] bg-[#111113] p-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[10px] bg-[#18181B] text-[15px] font-[700] text-[#A1A1A6]">
-                  {user.name.slice(0, 1).toUpperCase()}
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
+                  <UserRound className="h-5 w-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{user.name}</p>
+                  <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">
+                    {user.name && user.name !== 'Jio Viewer' && user.name !== 'Demo Viewer' ? user.name : 'Profile'}
+                  </p>
                   <p className="truncate text-[12px] text-[#A1A1A6]">
                     +91 ••••• {user.phone.slice(-5)} · {user.mode === 'demo' ? 'Demo account' : 'JioTV account'}
                   </p>

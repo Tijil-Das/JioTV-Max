@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Clapperboard,
@@ -43,6 +43,7 @@ function isActive(pathname: string, to: string): boolean {
 export function Sidebar(): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const status = useAuthStore((state) => state.status)
   const openLogin = useUIStore((state) => state.openLogin)
@@ -71,7 +72,7 @@ export function Sidebar(): JSX.Element {
             <img
               src={appIcon}
               alt=""
-              className="h-7 w-7 shrink-0 rounded-[6px] object-contain drop-shadow-[0_2px_8px_rgba(157,12,165,0.3)]"
+              className="h-7 w-7 shrink-0 rounded-[6px] object-contain"
             />
             <AnimatePresence>
               {expanded ? (
@@ -82,7 +83,7 @@ export function Sidebar(): JSX.Element {
                   transition={tween(0.15)}
                   className="whitespace-nowrap text-[14px] font-[700] tracking-tight text-[#F4F4F5]"
                 >
-                  JioTv <span className="text-[#B815C2]">Max</span>
+                  JioTv <span className="text-[#E11D2E]">Max</span>
                 </motion.span>
               ) : null}
             </AnimatePresence>
@@ -140,16 +141,16 @@ export function Sidebar(): JSX.Element {
         <div className="px-2 pb-4">
           <button
             type="button"
-            onClick={() => openLogin('Sign in to sync your JioTV account.')}
+            onClick={() => (user ? navigate('/settings') : openLogin('Sign in to sync your JioTV account.'))}
             className={cn(
               'flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left',
               'border border-[rgba(255,255,255,0.07)] bg-transparent',
               'hover:bg-white/[0.05] transition-colors duration-[120ms]'
             )}
           >
-            {/* Avatar — monogram on neutral surface, no gradient */}
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#18181B] text-[12px] font-[700] text-[#A1A1A6]">
-              {user ? user.name.slice(0, 1).toUpperCase() : <UserRound className="h-4 w-4" />}
+            {/* Avatar — circular profile icon with head and body */}
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
+              <UserRound className="h-4 w-4" />
             </span>
 
             {expanded ? (
@@ -159,7 +160,7 @@ export function Sidebar(): JSX.Element {
                 className="min-w-0 flex-1"
               >
                 <span className="block truncate text-[12px] font-[500] text-[#F4F4F5]">
-                  {user ? user.name : 'Sign in'}
+                  {user ? 'Profile' : 'Sign in'}
                 </span>
                 <span className="block truncate text-[12px] text-[#A1A1A6]">
                   {user

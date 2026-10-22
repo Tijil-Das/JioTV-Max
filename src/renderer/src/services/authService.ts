@@ -60,7 +60,7 @@ export const authService = {
         user: {
           id: `demo-${phone.replace(/\D/g, '').slice(-10)}`,
           phone: phone.replace(/\D/g, '').slice(-10),
-          name: 'Demo Viewer',
+          name: 'Profile',
           mode: 'demo'
         },
         issuedAt: new Date().toISOString()

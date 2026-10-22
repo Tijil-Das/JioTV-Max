@@ -80,9 +80,9 @@ interface WorkerReply {
   blob?: Blob
 }
 
-const PIPELINE_VERSION = 1
+const PIPELINE_VERSION = 2
 const DB_NAME = 'jiotv-logo-pipeline'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE = 'logos'
 const TILE_SIZE = 144
 const VISIBLE_CONCURRENCY = 2
@@ -99,8 +99,11 @@ function openDatabase(): Promise<IDBDatabase | null> {
       return
     }
     const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result
+      if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE)) {
+        db.deleteObjectStore(STORE)
+      }
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })
     }
     request.onsuccess = () => resolve(request.result)
@@ -284,11 +287,33 @@ async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; mimeType: 
       console.warn('[logo] asset fetch failed', url, result.error)
       return null
     }
+    const raw = result.data.bytes
+    let arrayBuffer: ArrayBuffer
+    if (raw instanceof Uint8Array) {
+      arrayBuffer = raw.buffer.slice(
+        raw.byteOffset,
+        raw.byteOffset + raw.byteLength
+      ) as ArrayBuffer
+    } else if (
+      raw &&
+      typeof raw === 'object' &&
+      'buffer' in raw &&
+      (raw as { buffer: unknown }).buffer instanceof ArrayBuffer
+    ) {
+      const u8 = new Uint8Array(
+        (raw as { buffer: ArrayBuffer }).buffer,
+        (raw as { byteOffset?: number }).byteOffset ?? 0,
+        (raw as { byteLength?: number }).byteLength
+      )
+      arrayBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
+    } else if (raw && Array.isArray((raw as { data?: unknown }).data)) {
+      arrayBuffer = new Uint8Array((raw as { data: number[] }).data).buffer
+    } else {
+      console.warn('[logo] unrecognized bytes payload type', raw)
+      return null
+    }
     return {
-      bytes: result.data.bytes.buffer.slice(
-        result.data.bytes.byteOffset,
-        result.data.bytes.byteOffset + result.data.bytes.byteLength
-      ) as ArrayBuffer,
+      bytes: arrayBuffer,
       mimeType: result.data.mimeType
     }
   }
@@ -343,17 +368,19 @@ async function processLogo(
 
   if (!reply.result || !reply.ok || !reply.blob) {
     const rejected = monogram(channel.id, url)
-    const failureRecord: CachedRecord = {
-      key,
-      url,
-      tier: 'monogram',
-      flags: reply.result?.flags ?? [],
-      spec: reply.result ?? null,
-      blob: null,
-      savedAt: Date.now()
-    }
     memory.set(key, rejected)
-    await writeRecord(failureRecord)
+    if (reply.result && reply.result.tier === 'monogram') {
+      const failureRecord: CachedRecord = {
+        key,
+        url,
+        tier: 'monogram',
+        flags: reply.result?.flags ?? [],
+        spec: reply.result ?? null,
+        blob: null,
+        savedAt: Date.now()
+      }
+      await writeRecord(failureRecord)
+    }
     return rejected
   }
 

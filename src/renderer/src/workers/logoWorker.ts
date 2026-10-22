@@ -90,10 +90,7 @@ workerScope.onmessage = (event) => {
         )
       )
       const { image: _image, ...serializable } = result
-      workerScope.postMessage(
-        { id: request.id, ok: true, result: serializable, blob: png },
-        [png]
-      )
+      workerScope.postMessage({ id: request.id, ok: true, result: serializable, blob: png })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'logo decode failed'
       console.warn(request.channelId, message)

@@ -28,7 +28,11 @@ export function ProfileMenu(): JSX.Element {
     return () => window.removeEventListener('pointerdown', onPointerDown)
   }, [])
 
-  const initials = user?.name?.slice(0, 1).toUpperCase() ?? null
+  const displayName = user
+    ? user.name && user.name !== 'Jio Viewer' && user.name !== 'Demo Viewer'
+      ? user.name
+      : 'Profile'
+    : null
 
   return (
     <div ref={containerRef} className="relative no-drag">
@@ -44,12 +48,12 @@ export function ProfileMenu(): JSX.Element {
             : 'border-[rgba(255,255,255,0.07)] bg-transparent hover:border-[rgba(255,255,255,0.14)] hover:bg-white/[0.05]'
         )}
       >
-        {/* Avatar — neutral monogram on surface-3, no gradient */}
-        <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-[#18181B] text-[12px] font-[700] text-[#A1A1A6]">
-          {initials ?? <UserRound className="h-3.5 w-3.5" />}
+        {/* Avatar — circular profile icon */}
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
+          <UserRound className="h-3.5 w-3.5" />
         </span>
         <span className="hidden max-w-[100px] truncate text-[13px] font-[500] text-[#A1A1A6] lg:block">
-          {user ? user.name : status === 'authenticating' ? 'Connecting…' : 'Sign in'}
+          {displayName ?? (status === 'authenticating' ? 'Connecting…' : 'Sign in')}
         </span>
         <ChevronDown className={cn('h-3.5 w-3.5 text-[#A1A1A6] transition-transform duration-[120ms]', open && 'rotate-180')} />
       </button>
@@ -64,13 +68,13 @@ export function ProfileMenu(): JSX.Element {
             exit="exit"
             className="glass absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-[12px] p-2"
           >
-            {/* User identity — no gradient avatar */}
+            {/* User identity */}
             <div className="flex items-center gap-3 rounded-[8px] bg-white/[0.04] px-3 py-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-[#18181B] text-[14px] font-[700] text-[#A1A1A6]">
-                {initials}
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
+                <UserRound className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{user.name}</p>
+                <p className="truncate text-[13px] font-[600] text-[#F4F4F5]">{displayName}</p>
                 <p className="truncate text-[12px] text-[#A1A1A6]">
                   +91 ••••• {user.phone.slice(-5)} · {user.mode === 'demo' ? 'Demo' : 'JioTV'}
                 </p>

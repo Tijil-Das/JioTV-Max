@@ -68,8 +68,11 @@ async function readCache(
       fs.readFile(path.join(directory, `${key}.json`), 'utf8')
     ])
     const meta = JSON.parse(metaRaw) as { mimeType?: string }
+    const copy = new Uint8Array(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    )
     return {
-      bytes: new Uint8Array(bytes),
+      bytes: copy,
       mimeType: meta.mimeType || 'application/octet-stream',
       cached: true
     }

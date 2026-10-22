@@ -292,7 +292,7 @@ export class JioService {
       user: {
         id: this.session.credentials.crm || this.session.phone,
         phone: this.session.phone,
-        name: this.session.name,
+        name: this.session.name === 'Jio Viewer' ? 'Profile' : this.session.name || 'Profile',
         mode: 'jio'
       },
       issuedAt: this.session.issuedAt
@@ -395,7 +395,7 @@ export class JioService {
           deviceId: this.deviceId
         },
         phone,
-        name: 'Jio Viewer',
+        name: 'Profile',
         issuedAt: new Date().toISOString()
       }
       await this.persist()

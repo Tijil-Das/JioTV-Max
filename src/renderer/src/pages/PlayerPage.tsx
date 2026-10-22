@@ -385,7 +385,14 @@ export function PlayerPage(): JSX.Element {
   const { handleContainerClick, triggerSkip, seekOverlay } = useDoubleTapSeek({
     videoRef,
     seekRange: engine.seekRange,
-    onSingleClick: togglePlay,
+    onSingleClick: () => {
+      if (qualityOpen || helpOpen) {
+        setQualityOpen(false)
+        setHelpOpen(false)
+        return
+      }
+      togglePlay()
+    },
     onCenterDoubleClick: () => {
       if (bridge) void bridge.setFullscreen(true).catch(() => undefined)
       if (typeof document !== 'undefined' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
@@ -628,7 +635,15 @@ export function PlayerPage(): JSX.Element {
     >
       <div
         className="absolute inset-0 cursor-pointer"
-        onClick={handleContainerClick}
+        onClick={(e) => {
+          if (qualityOpen || helpOpen) {
+            e.stopPropagation()
+            setQualityOpen(false)
+            setHelpOpen(false)
+            return
+          }
+          handleContainerClick(e)
+        }}
       >
         <video
           ref={videoRef}
@@ -961,16 +976,25 @@ export function PlayerPage(): JSX.Element {
               </button>
               <AnimatePresence>
                 {qualityOpen ? (
-                  <QualityMenu
-                    levels={engine.levels}
-                    activeLevel={engine.activeLevel}
-                    activeHeight={activeHeight}
-                    onSelect={(level) => {
-                      engine.setLevel(level)
-                      setQuality(level === 'auto' ? 'auto' : engine.levels[level]?.height ?? quality)
-                    }}
-                    onClose={() => setQualityOpen(false)}
-                  />
+                  <>
+                    <div
+                      className="fixed inset-0 z-40 bg-transparent"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setQualityOpen(false)
+                      }}
+                    />
+                    <QualityMenu
+                      levels={engine.levels}
+                      activeLevel={engine.activeLevel}
+                      activeHeight={activeHeight}
+                      onSelect={(level) => {
+                        engine.setLevel(level)
+                        setQuality(level === 'auto' ? 'auto' : engine.levels[level]?.height ?? quality)
+                      }}
+                      onClose={() => setQualityOpen(false)}
+                    />
+                  </>
                 ) : null}
               </AnimatePresence>
             </div>

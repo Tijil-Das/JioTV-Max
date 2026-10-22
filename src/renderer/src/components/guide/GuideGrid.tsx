@@ -169,7 +169,7 @@ export function GuideGrid({
                       programs={programs}
                       selected={isHighlighted}
                       onClick={() => onOpenChannel(channel.id)}
-                      className="rounded-none"
+                      className="h-full rounded-none"
                     />
                   </div>
 

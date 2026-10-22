@@ -87,7 +87,7 @@ export function ChannelDrawer({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 flex flex-col gap-2">
               {visible.map((channel) => (
                 <ChannelListRow
                   key={channel.id}

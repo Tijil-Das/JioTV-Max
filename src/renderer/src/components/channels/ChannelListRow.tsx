@@ -39,7 +39,7 @@ export const ChannelListRow = memo(function ChannelListRow({
       onClick={onClick}
       aria-current={selected ? 'true' : undefined}
       className={cn(
-        'relative flex h-14 w-full items-center gap-3 overflow-hidden rounded-[8px] px-3 text-left transition-colors duration-150',
+        'relative flex h-16 w-full items-center gap-3 overflow-hidden rounded-[10px] px-3 py-1 text-left transition-colors duration-150',
         selected ? 'bg-[rgba(255,255,255,0.06)]' : 'hover:bg-white/[0.035]',
         className
       )}
@@ -47,7 +47,7 @@ export const ChannelListRow = memo(function ChannelListRow({
       {selected ? (
         <span
           aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-[2px] bg-[var(--red-line)]"
+          className="absolute inset-y-1.5 left-0 w-[2px] rounded-r bg-[var(--red-line)]"
         />
       ) : null}
       <span className="w-11 shrink-0 text-right text-[14px] font-[600] tabular-nums leading-none text-[#A1A1A6]">

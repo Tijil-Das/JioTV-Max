@@ -20,6 +20,7 @@ export function SearchBox(): JSX.Element {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -66,6 +67,13 @@ export function SearchBox(): JSX.Element {
     window.addEventListener('pointerdown', onPointerDown)
     return () => window.removeEventListener('pointerdown', onPointerDown)
   }, [])
+
+  useEffect(() => {
+    if (activeIndex >= 0 && listRef.current) {
+      const activeEl = listRef.current.children[activeIndex] as HTMLElement | undefined
+      activeEl?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeIndex])
 
   const openChannel = (channel: Channel, term?: string) => {
     if (term) addRecentSearch(term)
@@ -202,7 +210,7 @@ export function SearchBox(): JSX.Element {
                 </p>
               </div>
             ) : (
-              <ul className="max-h-[380px] overflow-y-auto p-2">
+              <ul ref={listRef} className="max-h-[420px] overflow-y-auto p-2 flex flex-col gap-2">
                 {results.map((channel, index) => (
                   <li
                     key={channel.id}

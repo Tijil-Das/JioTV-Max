@@ -1,7 +1,7 @@
 # JioTv Max 📺
 
 <p align="center">
-  <img src="src/renderer/src/assets/icons/app-icon-256.png" alt="JioTv Max Logo" width="128" height="128" />
+  <img src="Website/assets/app-icon-256.png" alt="JioTv Max Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -264,50 +264,24 @@ pnpm dist
 
 ## Project Structure
 
+The repository is organized into two primary, independent categories:
+
 ```
 JioTV Max/
-├── build/                      # App icon and installer artwork
-├── scripts/
-│   ├── dev-wv.mjs              # Launcher for castLabs Electron with Widevine
-│   └── make-icon.ps1           # High-resolution vector icon generator
-├── src/
-│   ├── main/                   # Electron Main Process
-│   │   ├── asset-cache.ts      # Main process secure asset fetcher & disk cache
-│   │   ├── index.ts            # Window creation, IPC orchestration, capture harness
-│   │   ├── jio-format.ts       # Base64 phone number serializer (+91 normalization)
-│   │   ├── jio-headers.ts      # Akamai token, Android player & okhttp User-Agents
-│   │   ├── jio-service.ts      # JioTV OTP, catalogue, playback & EPG APIs
-│   │   ├── media-relay.ts      # 127.0.0.1 Loopback streaming proxy & license relay
-│   │   ├── secure-store.ts     # safeStorage Windows DPAPI encryption
-│   │   ├── stream-probe.ts     # Pre-flight playlist & media chunk probe
-│   │   └── window-state.ts     # Window dimension and position persistence
-│   ├── preload/
-│   │   └── index.ts            # Strongly-typed contextBridge (window.api)
-│   ├── shared/
-│   │   ├── ipc.ts              # IPC channel constants
-│   │   └── types.ts            # Canonical Channel, Program, StreamInfo interfaces
-│   └── renderer/               # React 18 Application (Vite)
-│       └── src/
-│           ├── assets/         # App icons and local assets
-│           ├── components/
-│           │   ├── auth/       # LoginModal, 6-box OTP input, shake animation
-│           │   ├── channels/   # ChannelGrid, ChannelListRow
-│           │   ├── guide/      # GuideGrid virtualized 24h EPG & ruler
-│           │   ├── home/       # Hero carousel, ChannelCard, ChannelRow
-│           │   ├── layout/     # AppShell, TitleBar, WindowControls, Sidebar, SearchBox
-│           │   ├── player/     # ChannelDrawer, DvrSeekBar, QualityMenu, ShortcutsOverlay
-│           │   └── ui/         # ChannelLogo, LiveBadge, Buttons, Modals, SplashScreen
-│           ├── hooks/          # useMediaPlayer, useLiveEdge, useProcessedLogo, useNow
-│           ├── lib/
-│           │   ├── logo/       # Pipeline normalization, bounding box, worker client
-│           │   ├── constants.ts# Quality options, categories, navigation items
-│           │   └── time.ts     # EPG timestamp arithmetic & formatting
-│           ├── pages/          # Home, Guide, Category, Favorites, Settings, Player
-│           ├── store/          # Zustand state slices (Channel, Player, Auth, UI, Relay)
-│           ├── styles/         # globals.css, theme definitions, Tailwind root
-│           └── workers/        # logoWorker.ts (OffscreenCanvas logo normalization)
-└── test/
-    └── logos/                  # Vitest logo pipeline fixtures and test suite
+├── JioTV-Max-Windows/          # Desktop application for Windows 10 & 11
+│   ├── .github/workflows/      # Automated CI & release build workflows
+│   ├── build/                  # App icon and installer artwork
+│   ├── scripts/                # Widevine launcher, installer & signing hooks
+│   ├── src/                    # Electron Main, Preload, and React 18 Renderer
+│   ├── test/ & tests/          # Comprehensive Vitest test suites (203+ tests)
+│   ├── package.json            # Windows application dependencies & scripts
+│   ├── pnpm-lock.yaml          # Frozen dependency lockfile
+│   └── electron.vite.config.ts # Electron-Vite configuration
+└── Website/                    # Landing site and promotional web assets
+    ├── assets/                 # Brand icons and website imagery
+    ├── index.html              # Responsive landing page
+    ├── script.js               # Interactive showcase scripts & download resolver
+    └── style.css               # Clean modern typography and dark theme styling
 ```
 
 ---

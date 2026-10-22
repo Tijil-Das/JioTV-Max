@@ -97,5 +97,12 @@
       "createDesktopShortcut": true
     },
     "afterPack": "scripts/after-pack.cjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "electron-winstaller",
+      "electron"
+    ]
   }
 }

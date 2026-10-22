@@ -6,9 +6,7 @@ settings:
 
 importers:
 
-  .: {}
-
-  JioTV-Max-Windows:
+  .:
     dependencies:
       '@fontsource-variable/inter':
         specifier: ^5.2.8

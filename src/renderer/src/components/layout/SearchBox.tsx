@@ -10,6 +10,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { getNowNext } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
 import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
+import { highestQuality } from '@/lib/constants'
 import type { Channel } from '@shared/types'
 
 /**
@@ -213,24 +214,28 @@ export function SearchBox(): JSX.Element {
                         aria-selected={index === activeIndex}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => openChannel(channel, query.trim())}
-                          className={cn(
-                          'flex w-full items-center gap-3 rounded-[8px] px-2.5 py-2 text-left transition-colors duration-[120ms]',
-                          index === activeIndex ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-[8px] py-2 pr-3 text-left transition-colors duration-[120ms]',
+                          index === activeIndex
+                            ? 'border-l-2 border-l-[var(--red)] bg-white/[0.06] pl-2'
+                            : 'border-l-2 border-l-transparent pl-2 hover:bg-white/[0.04]'
                         )}
                       >
-                        {/* Tabular channel number to left (text-3, 12px) */}
-                        <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                        {/* Tabular channel number: 40px column (text-3, 12px) */}
+                        <span className="w-10 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
                           {channel.number}
                         </span>
-                        {/* Fixed 72 x 40px logo cell */}
+                        {/* Fixed 64 x 44px logo cell */}
                         <ChannelLogoCell channel={channel} />
-                        {/* Channel name and program to right */}
+                        {/* Channel name (14/600) and muted line (12px text-3) */}
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-[600] text-[#F4F4F5]">
+                          <span className="block truncate text-[14px] font-[600] text-[#F4F4F5]">
                             {channel.name}
                           </span>
                           <span className="block truncate text-[12px] text-[#66666C]">
-                            {current ? `Now · ${current.title}` : `${channel.category} · ${channel.language}`}
+                            {current
+                              ? current.title
+                              : `${channel.language || channel.category} · ${highestQuality(channel)}`}
                           </span>
                         </span>
                       </button>

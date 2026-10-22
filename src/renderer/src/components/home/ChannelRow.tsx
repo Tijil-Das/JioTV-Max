@@ -1,11 +1,8 @@
-import { useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { useRowScroll } from '@/hooks/useRowScroll'
-import { useRelayStore } from '@/store/useRelayStore'
-import { getLogoMetricsSync } from '@/lib/logoMetrics'
 import { ChannelCard } from './ChannelCard'
 import { ChannelCardSkeleton } from '@/components/ui/Skeleton'
 
@@ -21,12 +18,11 @@ interface ChannelRowProps {
 }
 
 /**
- * Horizontally scrolling shelf.
+ * Horizontally scrolling shelf (Addendum 2).
  * - Title flush-left at 48px gutter.
  * - Standard row: 6 tiles visible at 1440px width, 16px gap (gap-4).
  * - Tile width: clamp(168px, 14vw, 220px).
- * - Light plate 20% cap rule: if light plates exceed 20% of the row,
- *   excess light-plate channels render with a 72% #E9E9EC inset badge on dark plate.
+ * - All tiles sit on quiet #0C0C0E dark plates. No light plates anywhere.
  */
 export function ChannelRow({
   title,
@@ -38,32 +34,16 @@ export function ChannelRow({
   progressByChannel
 }: ChannelRowProps): JSX.Element {
   const navigate = useNavigate()
-  const { ref, canScrollLeft, canScrollRight, scrollByPage, onWheel } = useRowScroll<HTMLDivElement>()
-  const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
-
-  // Calculate light plate distribution to enforce the 20% cap
-  const { channelInsetBadgeMap } = useMemo(() => {
-    const maxAllowedLight = Math.max(1, Math.round(channels.length * 0.2))
-    let lightCount = 0
-    const insetMap = new Map<string, boolean>()
-
-    for (const ch of channels) {
-      const src = ch.logoUrl ? logoProxyUrl(ch.logoUrl) : ''
-      const metrics = getLogoMetricsSync(src)
-      if (metrics?.useLightPlate) {
-        lightCount++
-        if (lightCount > maxAllowedLight) {
-          insetMap.set(ch.id, true)
-        }
-      }
-    }
-    return { channelInsetBadgeMap: insetMap }
-  }, [channels, logoProxyUrl])
+  const { ref, canScrollLeft, canScrollRight, scrollByPage, onWheel } =
+    useRowScroll<HTMLDivElement>()
 
   if (!loading && channels.length === 0) return <></>
 
   return (
-    <section className={cn('relative', className)} aria-labelledby={`row-${title.replace(/\s+/g, '-').toLowerCase()}`}>
+    <section
+      className={cn('relative', className)}
+      aria-labelledby={`row-${title.replace(/\s+/g, '-').toLowerCase()}`}
+    >
       {/* Header — flush left at 48px gutter, no subtitle */}
       <header className="mb-4 flex items-center justify-between gap-6 px-12">
         <h2
@@ -124,7 +104,6 @@ export function ChannelRow({
                   channel={ch}
                   programs={epg[ch.id]}
                   resumeProgress={progressByChannel?.[ch.id]}
-                  insetBadge={channelInsetBadgeMap.get(ch.id) ?? false}
                 />
               </div>
             ))}

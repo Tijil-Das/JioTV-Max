@@ -18,21 +18,22 @@ interface ChannelCardProps {
   resumeProgress?: number
   className?: string
   fluid?: boolean
-  /** Force the dark-plate + 72% light inset badge variant when row light plates exceed 20% */
-  insetBadge?: boolean
   onNavigate?: () => void
 }
 
 /**
- * 4:3 Channel Logo Tile (rows and grids).
- * - Quiet plate: surface-2 (#111113) or light plate (#E9E9EC) for dark logos.
- * - Normalized brand mark centered on plate.
- * - Max one badge: 6px red live dot with soft pulse top-left.
- * - Hover: plate lifts to surface-3, border to hairline-strong, spring scale 1.03, logo scales 1.04.
- * - 36px solid white play circle bottom-right on hover (never obscures logo).
- * - 2px red progress bar flush at bottom only on hover/focus or Continue Watching.
- * - Meta below tile: Line 1: Channel name (14/600). Line 2: Program title (12/450) or "Language · Number".
- * - If real 16:9 program artwork exists: renders 16:9 artwork with 28px logo bug in top-left scrim chip.
+ * 4:3 Channel Logo Tile (Addendum 2).
+ * - Quiet dark plate: #0C0C0E fill with faint top-down lift, hairline border (rgba(255,255,255,0.06)).
+ * - Hover: fill rises to #151518, border to hairline-strong, scale 1.03 (spring, damping 28).
+ * - Top-left: 6px red LIVE dot with soft pulse.
+ * - Top-right: channel number in 11px text-3 tabular numerals (70% opacity at rest, 100% on hover).
+ * - Center: processed logo mark in 56% x 38% box, centered with visual-center offset.
+ * - Bottom-right: 36px white play circle on hover (never overlaps logo).
+ * - Bottom edge: 2px flush red progress line (hover or Continue Watching only).
+ * - Below plate:
+ *   - Line 1: Channel name (14/600 text-1) + Favorite heart aligned to right on hover (16px text-2).
+ *   - Line 2: Program title (12/450 text-3) or "Language · Quality" (e.g. "Hindi · HD").
+ * - If real 16:9 program artwork exists: renders 16:9 still with 24px logo bug top-left.
  */
 export const ChannelCard = memo(function ChannelCard({
   channel,
@@ -40,7 +41,6 @@ export const ChannelCard = memo(function ChannelCard({
   resumeProgress,
   className,
   fluid = false,
-  insetBadge = false,
   onNavigate
 }: ChannelCardProps) {
   const navigate = useNavigate()
@@ -65,18 +65,18 @@ export const ChannelCard = memo(function ChannelCard({
     navigate(`/watch/${channel.id}`)
   }
 
-  // Check if real 16:9 artwork exists (never fake thumbnail)
+  // Real 16:9 program artwork (never fake thumbnail)
   const hasArtwork = Boolean(current?.artworkUrl)
 
-  // Contrast rule: dark/low-contrast logos switch plate to #E9E9EC
-  const useLightPlate = Boolean(metrics?.useLightPlate) && !insetBadge
+  // Quality label
+  const quality = highestQuality(channel)
 
-  // Meta line 2: program title, or fallback to "Language · Number"
+  // Meta line 2: current program title, or fallback to "Language · Quality"
   const metaLine2 = current?.title
     ? current.title
-    : `${channel.language || 'General'} · ${channel.number}`
+    : `${channel.language || 'General'} · ${quality}`
 
-  const quality = highestQuality(channel)
+  const isWhiteKnockout = metrics?.tier === 'white-knockout'
 
   return (
     <motion.article
@@ -99,15 +99,16 @@ export const ChannelCard = memo(function ChannelCard({
           'relative block w-full overflow-hidden rounded-[12px] text-left outline-none transition-[background-color,border-color] duration-200',
           'focus-visible:outline-2 focus-visible:outline-[var(--red-line)] focus-visible:outline-offset-2',
           hasArtwork ? 'aspect-video' : 'aspect-[4/3]',
-          // Plate styling
-          hasArtwork
-            ? 'bg-[#111113] border border-[rgba(255,255,255,0.07)] group-hover:border-[rgba(255,255,255,0.14)]'
-            : useLightPlate
-              ? 'bg-[#E9E9EC] border border-[rgba(0,0,0,0.08)] group-hover:bg-[#F4F4F6] group-hover:border-[rgba(0,0,0,0.18)]'
-              : 'bg-[#111113] border border-[rgba(255,255,255,0.07)] group-hover:bg-[#18181B] group-hover:border-[rgba(255,255,255,0.14)]'
+          // Quiet dark plate recipe: #0C0C0E fill with hairline border; rises to #151518 on hover
+          'bg-[#0C0C0E] border border-[rgba(255,255,255,0.06)] group-hover:bg-[#151518] group-hover:border-[rgba(255,255,255,0.14)]'
         )}
+        style={{
+          // Faint top-down lift inside the plate per Section 1
+          backgroundImage:
+            'radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,0.035), transparent 60%)'
+        }}
       >
-        {/* Real artwork case: 16:9 program still with logo bug top-left */}
+        {/* Real artwork case: 16:9 still with logo bug top-left */}
         {hasArtwork ? (
           <div className="relative h-full w-full">
             <img
@@ -116,11 +117,15 @@ export const ChannelCard = memo(function ChannelCard({
               loading="lazy"
               className="h-full w-full object-cover"
             />
-            {/* Top-left: 55% black scrim chip with 28px logo bug + 6px red live dot */}
+            {/* Top-left: if white knockout, direct on scrim; otherwise 55% black scrim chip */}
             <div className="absolute left-2.5 top-2.5 flex items-center gap-2">
-              <span className="flex items-center rounded-[6px] bg-black/55 px-1.5 py-1 backdrop-blur-sm">
+              {isWhiteKnockout ? (
                 <ChannelLogo channel={channel} size="bug" metrics={metrics} />
-              </span>
+              ) : (
+                <span className="flex items-center rounded-[6px] bg-black/55 px-1.5 py-1 backdrop-blur-sm">
+                  <ChannelLogo channel={channel} size="bug" metrics={metrics} />
+                </span>
+              )}
               {channel.isLive ? (
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E11D2E] opacity-75" />
@@ -130,9 +135,9 @@ export const ChannelCard = memo(function ChannelCard({
             </div>
           </div>
         ) : (
-          /* Standard 4:3 Logo Tile */
-          <div className="relative flex h-full w-full items-center justify-center p-3">
-            {/* 6px Red live dot in top-left corner */}
+          /* Standard 4:3 Logo Tile (Addendum 2 Section 1 & 3) */
+          <div className="relative flex h-full w-full items-center justify-center">
+            {/* Top-left: 6px Red LIVE dot with soft pulse (non-live: nothing) */}
             {channel.isLive ? (
               <span
                 className="absolute left-3 top-3 z-10 flex h-1.5 w-1.5 pointer-events-none"
@@ -143,24 +148,23 @@ export const ChannelCard = memo(function ChannelCard({
               </span>
             ) : null}
 
-            {/* Logo presentation on the plate (scales 1.04 on hover) */}
-            <div
-              className={cn(
-                'relative flex h-full w-full items-center justify-center transition-transform duration-200 ease-out group-hover:scale-[1.04]',
-                insetBadge && 'rounded-[10px] bg-[#E9E9EC] p-2 h-[72%] w-[72%]'
-              )}
+            {/* Top-right: channel number in 11px text-3 tabular numerals (70% rest, 100% hover) */}
+            <span
+              className="absolute right-3 top-2.5 z-10 text-[11px] font-[500] tabular-nums text-[#66666C] opacity-70 transition-opacity duration-150 group-hover:opacity-100 pointer-events-none select-none"
+              aria-label={`Channel number ${channel.number}`}
             >
-              <ChannelLogo
-                channel={channel}
-                size="tile"
-                metrics={metrics}
-              />
+              {channel.number}
+            </span>
+
+            {/* Center: processed logo mark, nothing else on the plate */}
+            <div className="relative flex h-full w-full items-center justify-center transition-transform duration-200 ease-out group-hover:scale-[1.04]">
+              <ChannelLogo channel={channel} size="tile" metrics={metrics} />
             </div>
 
-            {/* Play affordance: 36px solid white circle at bottom-right corner (never hides logo) */}
+            {/* Bottom-right: 36px solid white play circle with black glyph (hover only, never overlaps logo) */}
             <span
               className={cn(
-                'absolute bottom-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md',
+                'absolute bottom-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md pointer-events-none',
                 'opacity-0 scale-90 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
                 'group-hover:opacity-100 group-hover:scale-100',
                 'group-focus-visible:opacity-100 group-focus-visible:scale-100'
@@ -172,7 +176,7 @@ export const ChannelCard = memo(function ChannelCard({
           </div>
         )}
 
-        {/* 2px Red progress line flush with bottom edge: only on hover/focus or Continue Watching */}
+        {/* Bottom edge: 2px flush red progress line (hover or Continue Watching only) */}
         {(isContinueWatching || isHovered) && progress > 0 ? (
           <span className="absolute inset-x-0 bottom-0 z-20 h-[2px] bg-white/10 pointer-events-none">
             <span
@@ -183,38 +187,39 @@ export const ChannelCard = memo(function ChannelCard({
         ) : null}
       </button>
 
-      {/* Meta row — below the tile, outside it */}
+      {/* Under the plate */}
       <div className="mt-2.5 flex items-start justify-between gap-1.5 px-0.5">
         <div className="min-w-0 flex-1">
-          {/* Line 1: Channel name (14/600, text-1, 1-line ellipsis) */}
-          <p className="truncate text-[14px] font-[600] leading-snug text-[#F4F4F5]">
-            {channel.name}
-          </p>
-          {/* Line 2: Program title (12/450, text-3, ellipsis) */}
+          {/* Line 1: Channel name (14/600 text-1, ellipsis) */}
+          <div className="flex items-center justify-between gap-1.5">
+            <p className="truncate text-[14px] font-[600] leading-snug text-[#F4F4F5]">
+              {channel.name}
+            </p>
+            {/* Heart/favorite appears only on hover, aligned to right of line 1, 16px text-2 */}
+            <button
+              type="button"
+              aria-label={isFavorite ? `Remove ${channel.name} from My List` : `Add ${channel.name} to My List`}
+              aria-pressed={isFavorite}
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFavorite(channel.id)
+              }}
+              className={cn(
+                'shrink-0 rounded-[6px] p-0.5 text-[#A1A1A6] transition-all duration-150',
+                isFavorite
+                  ? 'text-[#E11D2E] opacity-100'
+                  : 'opacity-0 hover:text-[#F4F4F5] group-hover:opacity-100 focus-visible:opacity-100'
+              )}
+            >
+              <Heart className={cn('h-4 w-4', isFavorite && 'fill-current text-[#E11D2E]')} />
+            </button>
+          </div>
+
+          {/* Line 2: Program title (12/450 text-3, ellipsis) or "Language · Quality" */}
           <p className="mt-0.5 truncate text-[12px] font-[450] leading-tight text-[#66666C]">
             {metaLine2}
-            {quality === 'HD' || quality === '4K' ? ` · ${quality}` : ''}
           </p>
         </div>
-
-        {/* Favorite heart icon */}
-        <button
-          type="button"
-          aria-label={isFavorite ? `Remove ${channel.name} from My List` : `Add ${channel.name} to My List`}
-          aria-pressed={isFavorite}
-          onClick={(e) => {
-            e.stopPropagation()
-            toggleFavorite(channel.id)
-          }}
-          className={cn(
-            'shrink-0 rounded-[8px] p-1 transition-colors duration-150',
-            isFavorite
-              ? 'text-[#E11D2E]'
-              : 'text-[#66666C] opacity-0 hover:text-[#F4F4F5] group-hover:opacity-100 focus-visible:opacity-100'
-          )}
-        >
-          <Heart className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
-        </button>
       </div>
     </motion.article>
   )

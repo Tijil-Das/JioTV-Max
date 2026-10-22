@@ -28,18 +28,17 @@ interface ChannelLogoProps {
   channel: Channel
   size?: LogoSizeVariant
   className?: string
-  /** Optional pre-resolved metrics to avoid duplicate hook lookups */
+  /** Optional pre-resolved metrics to avoid duplicate lookups */
   metrics?: CachedLogoMetrics | null
   /** @deprecated — kept for API compatibility */
   glow?: boolean
 }
 
 /**
- * Normalized channel brand mark presentation.
- * - Trims transparent padding to true bounding box via SVG viewBox
- * - Aspect ratio normalization: wide wordmarks and tall emblems feel equal in visual weight
- * - Density compensation & light-on-dark irradiation scaling
- * - Center-of-mass visual translation
+ * Normalized channel brand mark presentation (Addendum 2).
+ * - Processed tiers: as-is (L >= 0.30), white knockout (L < 0.30 & S < 0.25), neutral halo (L < 0.30 & S >= 0.25)
+ * - Transparent bounding box trimming via SVG viewBox
+ * - Visual center of mass translation offset
  * - Upscaling cap (1.5x max, 1x if under 120px)
  * - Shimmering plate during load (opacity only)
  * - 300ms fade-in once normalized
@@ -60,13 +59,11 @@ export const ChannelLogo = memo(function ChannelLogo({
   const error = !rawSrc || (!externalMetrics && hookResult.error)
 
   const [ready, setReady] = useState<boolean>(() => {
-    // If metrics were already in memory cache at mount time, show immediately
     return Boolean(externalMetrics || getLogoMetricsSync(rawSrc))
   })
 
   useEffect(() => {
     if (metrics) {
-      // Fade in smoothly over 300ms once normalized metrics are available
       const id = requestAnimationFrame(() => setReady(true))
       return () => cancelAnimationFrame(id)
     }
@@ -113,41 +110,38 @@ export const ChannelLogo = memo(function ChannelLogo({
 
   if (!metrics) return null
 
-  const { bbox, nativeWidth, nativeHeight, shiftXPercent, shiftYPercent, widthPercent } = metrics
+  const { bbox, nativeWidth, nativeHeight, shiftXPercent, shiftYPercent, processedSrc, tier } =
+    metrics
 
   // Upscaling cap: if source under 120px wide, show at native size; else cap at 1.5x
   const maxPxWidth =
-    bbox.width < 120
-      ? `${bbox.width}px`
-      : `${Math.round(bbox.width * 1.5)}px`
+    bbox.width < 120 ? `${bbox.width}px` : `${Math.round(bbox.width * 1.5)}px`
 
   // Sizing styles per variant
   let containerStyle: React.CSSProperties = {}
   let outerClass = 'relative flex items-center justify-center w-full h-full'
 
   if (size === 'tile') {
-    // Standard 4:3 card plate: normalized width (40% - 68%), max 72% height
+    // Addendum 2 Section 1: Logo box is 56% of plate width by 38% of plate height
     containerStyle = {
-      width: `${widthPercent}%`,
-      aspectRatio: `${bbox.width} / ${bbox.height}`,
+      width: '56%',
+      height: '38%',
       maxWidth: maxPxWidth,
-      maxHeight: '72%'
+      maxHeight: '38%'
     }
   } else if (size === 'cell') {
-    // 72x40px guide/list row logo cell with 6px padding inside
+    // 64x44px cell with 6px padding inside (Section 4)
     containerStyle = {
-      maxWidth: '60px',
-      maxHeight: '28px',
-      aspectRatio: `${bbox.width} / ${bbox.height}`,
+      maxWidth: '52px',
+      maxHeight: '32px',
       width: '100%',
       height: '100%'
     }
   } else if (size === 'bug') {
-    // Artwork corner bug: max 28px tall, sitting inside scrim chip
+    // Artwork corner bug: max 24px tall (Section 5)
     containerStyle = {
       maxHeight: '24px',
-      maxWidth: '64px',
-      aspectRatio: `${bbox.width} / ${bbox.height}`,
+      maxWidth: '56px',
       width: 'auto',
       height: '24px'
     }
@@ -155,8 +149,7 @@ export const ChannelLogo = memo(function ChannelLogo({
     containerStyle = {
       maxWidth: '380px',
       maxHeight: '160px',
-      aspectRatio: `${bbox.width} / ${bbox.height}`,
-      width: `${Math.min(70, widthPercent * 1.1)}%`,
+      width: '60%',
       height: 'auto'
     }
   } else if (size in legacyBoxMap) {
@@ -165,7 +158,6 @@ export const ChannelLogo = memo(function ChannelLogo({
     containerStyle = {
       maxWidth: '85%',
       maxHeight: '85%',
-      aspectRatio: `${bbox.width} / ${bbox.height}`,
       width: '100%',
       height: '100%'
     }
@@ -173,6 +165,14 @@ export const ChannelLogo = memo(function ChannelLogo({
 
   return (
     <div className={cn(outerClass, className)}>
+      {/* Tier 3 Neutral Halo: circle at 70% of logo box, rgba(255,255,255,0.06), blurred 24px */}
+      {tier === 'neutral-halo' ? (
+        <span
+          className="pointer-events-none absolute h-[70%] w-[70%] rounded-full bg-white/[0.06] blur-[24px]"
+          aria-hidden="true"
+        />
+      ) : null}
+
       <div
         className={cn(
           'relative flex items-center justify-center transition-opacity duration-300 pointer-events-none select-none',
@@ -190,11 +190,11 @@ export const ChannelLogo = memo(function ChannelLogo({
           aria-hidden="true"
         >
           <image
-            href={rawSrc}
-            xlinkHref={rawSrc}
+            href={processedSrc || rawSrc}
+            xlinkHref={processedSrc || rawSrc}
             width={nativeWidth}
             height={nativeHeight}
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid meet"
           />
         </svg>
       </div>
@@ -203,9 +203,9 @@ export const ChannelLogo = memo(function ChannelLogo({
 })
 
 /**
- * Fixed 72 x 40px logo cell for guide and list rows (Section 5).
- * - surface-2 plate (#111113), 8px radius, 6px padding inside
- * - Switches to light plate (#E9E9EC) for dark logos
+ * Fixed 64 x 44px logo cell for guide and list rows (Addendum 2 Section 4).
+ * - Plate recipe: #0C0C0E fill, hairline border, 8px radius, 6px inner padding
+ * - Absolutely no white or light cells anywhere
  * - All logo cells share identical dimensions across the column
  */
 export const ChannelLogoCell = memo(function ChannelLogoCell({
@@ -218,15 +218,12 @@ export const ChannelLogoCell = memo(function ChannelLogoCell({
   const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
   const rawSrc = channel.logoUrl ? logoProxyUrl(channel.logoUrl) : ''
   const { metrics } = useLogoMetrics(rawSrc)
-  const useLightPlate = Boolean(metrics?.useLightPlate)
 
   return (
     <div
       className={cn(
-        'relative flex h-[40px] w-[72px] shrink-0 items-center justify-center rounded-[8px] p-1.5 transition-colors duration-150',
-        useLightPlate
-          ? 'bg-[#E9E9EC] border border-[rgba(0,0,0,0.08)]'
-          : 'bg-[#111113] border border-[rgba(255,255,255,0.07)]',
+        'relative flex h-[44px] w-[64px] shrink-0 items-center justify-center rounded-[8px] p-1.5 transition-colors duration-150',
+        'bg-[#0C0C0E] border border-[rgba(255,255,255,0.06)]',
         className
       )}
     >
@@ -234,4 +231,3 @@ export const ChannelLogoCell = memo(function ChannelLogoCell({
     </div>
   )
 })
-

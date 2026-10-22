@@ -7,6 +7,7 @@ import { easePremium } from '@/lib/motion'
 import { getNowNext } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
 import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
+import { highestQuality } from '@/lib/constants'
 
 interface ChannelDrawerProps {
   open: boolean
@@ -107,16 +108,16 @@ export function ChannelDrawer({
                         : 'border-transparent hover:border-white/10 hover:bg-white/[0.05]'
                     )}
                   >
-                    {/* Channel number in tabular numerals to its left (text-3, 12px) */}
-                    <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                    {/* Channel number in tabular numerals: 40px column (text-3, 12px) */}
+                    <span className="w-10 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
                       {channel.number}
                     </span>
-                    {/* Fixed 72 x 40px logo cell */}
+                    {/* Fixed 64 x 44px logo cell */}
                     <ChannelLogoCell channel={channel} />
-                    {/* Name and program to its right */}
+                    {/* Name (14/600) and muted line (12px text-3) */}
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span className="truncate text-[13px] font-[600] text-[#F4F4F5]">
+                        <span className="truncate text-[14px] font-[600] text-[#F4F4F5]">
                           {channel.name}
                         </span>
                         {active ? (
@@ -125,8 +126,10 @@ export function ChannelDrawer({
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-[#66666C]">
-                        {current ? current.title : `${channel.category} · ${channel.language}`}
+                      <span className="mt-0.5 block truncate text-[12px] text-[#66666C]">
+                        {current
+                          ? current.title
+                          : `${channel.language || channel.category} · ${highestQuality(channel)}`}
                       </span>
                     </span>
                   </button>

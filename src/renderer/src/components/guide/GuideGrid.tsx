@@ -13,6 +13,7 @@ import {
 } from '@/lib/time'
 import { ChannelLogo, ChannelLogoCell } from '@/components/ui/ChannelLogo'
 import { LiveBadge } from '@/components/ui/LiveBadge'
+import { highestQuality } from '@/lib/constants'
 
 const PX_PER_MINUTE = 4
 const CHANNEL_COLUMN = 240
@@ -167,27 +168,27 @@ export function GuideGrid({
                     type="button"
                     onClick={() => onOpenChannel(channel.id)}
                     className={cn(
-                      'flex shrink-0 items-center gap-2.5 border-r border-white/[0.07] px-3 text-left transition-colors hover:bg-white/[0.05]',
+                      'flex shrink-0 items-center gap-3 border-r border-white/[0.07] px-3 text-left transition-colors hover:bg-white/[0.05]',
                       isHighlighted && 'bg-white/[0.08]'
                     )}
                     style={{ width: CHANNEL_COLUMN }}
                   >
-                    {/* Tabular channel number to left (text-3, 12px) */}
-                    <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                    {/* Tabular channel number: 40px column (text-3, 12px) */}
+                    <span className="w-10 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
                       {channel.number}
                     </span>
-                    {/* Fixed 72 x 40px logo cell */}
+                    {/* Fixed 64 x 44px logo cell */}
                     <ChannelLogoCell channel={channel} />
-                    {/* Channel name to right */}
+                    {/* Name (14/600) and muted line (12px text-3) */}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-[600] text-[#F4F4F5]">
+                      <span className="block truncate text-[14px] font-[600] text-[#F4F4F5]">
                         {channel.name}
                       </span>
-                      {current ? (
-                        <span className="mt-0.5 block truncate text-[11px] text-[#66666C]">
-                          {current.title}
-                        </span>
-                      ) : null}
+                      <span className="mt-0.5 block truncate text-[12px] text-[#66666C]">
+                        {current
+                          ? current.title
+                          : `${channel.language || 'General'} · ${highestQuality(channel)}`}
+                      </span>
                     </span>
                   </button>
 

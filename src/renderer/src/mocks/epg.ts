@@ -281,8 +281,8 @@ export function buildFallbackEpg(channels: Channel[]): Record<string, Program[]>
       programs.push({
         id: `${channel.id}-fallback-${cursor}`,
         channelId: channel.id,
-        title: index % 2 === 0 ? `${channel.name} Live` : `Tonight on ${channel.name}`,
-        description: `Live programming from ${channel.name}. The full schedule will appear once JioTV publishes it.`,
+        title: index % 2 === 0 ? `${channel.name} Live` : `${channel.name} Broadcast`,
+        description: `Live broadcast on ${channel.name}.`,
         start: new Date(cursor).toISOString(),
         end: new Date(end).toISOString(),
         genre: channel.category === 'news' ? 'News' : 'Live'

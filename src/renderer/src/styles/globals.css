@@ -31,10 +31,10 @@
   --red-tint:  rgba(225, 29, 46, 0.12);
   --red-line:  rgba(225, 29, 46, 0.55);
 
-  /* Light plate variant for dark/low-contrast brand marks */
-  --light-plate:        #E9E9EC;
-  --light-plate-hover:  #F4F4F6;
-  --light-plate-border: rgba(0, 0, 0, 0.08);
+  /* Quiet dark plate tokens per Addendum 2 (max plate brightness is #18181B) */
+  --plate-rest:         #0C0C0E;
+  --plate-hover:        #151518;
+  --plate-border:       rgba(255, 255, 255, 0.06);
 
   /* Glass recipe — used only for player overlay, popovers, and scrolled top bar */
   --glass-bg:     rgba(10, 10, 11, 0.72);

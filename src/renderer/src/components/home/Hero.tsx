@@ -9,6 +9,8 @@ import { formatRange, getNowNext } from '@/lib/time'
 import { easePremium } from '@/lib/motion'
 import { useNow } from '@/hooks/useNow'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useRelayStore } from '@/store/useRelayStore'
+import { useLogoMetrics } from '@/lib/logoMetrics'
 import { Button } from '@/components/ui/Button'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 import { LiveBadge, QualityBadge } from '@/components/ui/LiveBadge'
@@ -56,6 +58,11 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
   const active = items[index % items.length]
   const { channel, current } = active
   const quality = highestQuality(channel)
+
+  const logoProxyUrl = useRelayStore((s) => s.logoProxyUrl)
+  const rawSrc = channel.logoUrl ? logoProxyUrl(channel.logoUrl) : ''
+  const { metrics } = useLogoMetrics(rawSrc)
+  const isWhiteKnockout = metrics?.tier === 'white-knockout'
 
   const go = (d: -1 | 1) => setIndex((v) => (v + d + items.length) % items.length)
 
@@ -137,7 +144,7 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
           transition={{ duration: still ? 0.01 : 0.6, ease: easePremium }}
           className="absolute right-0 top-0 flex h-full w-[48%] items-center justify-center"
         >
-          <ChannelLogo channel={channel} size="hero" />
+          <ChannelLogo channel={channel} size="hero" metrics={metrics} />
         </motion.div>
       </AnimatePresence>
 
@@ -155,9 +162,13 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
             {/* Overline with red dot and optional artwork logo bug */}
             <div className="flex items-center gap-3">
               {current?.artworkUrl ? (
-                <span className="flex items-center rounded-[6px] bg-black/55 px-2 py-1 backdrop-blur-sm">
-                  <ChannelLogo channel={channel} size="bug" />
-                </span>
+                isWhiteKnockout ? (
+                  <ChannelLogo channel={channel} size="bug" metrics={metrics} />
+                ) : (
+                  <span className="flex items-center rounded-[6px] bg-black/55 px-2 py-1 backdrop-blur-sm">
+                    <ChannelLogo channel={channel} size="bug" metrics={metrics} />
+                  </span>
+                )
               ) : null}
               {channel.isLive ? (
                 <span className="relative flex h-1.5 w-1.5">

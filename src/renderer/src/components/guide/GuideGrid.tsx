@@ -11,11 +11,11 @@ import {
   minutesSinceDayStart,
   programBlockRect
 } from '@/lib/time'
-import { ChannelLogo } from '@/components/ui/ChannelLogo'
+import { ChannelLogo, ChannelLogoCell } from '@/components/ui/ChannelLogo'
 import { LiveBadge } from '@/components/ui/LiveBadge'
 
 const PX_PER_MINUTE = 4
-const CHANNEL_COLUMN = 190
+const CHANNEL_COLUMN = 240
 const ROW_HEIGHT = 84
 const RULER_HEIGHT = 48
 const DAY_MINUTES = 24 * 60
@@ -167,23 +167,27 @@ export function GuideGrid({
                     type="button"
                     onClick={() => onOpenChannel(channel.id)}
                     className={cn(
-                      'flex shrink-0 items-center gap-3 border-r border-white/[0.07] px-3 text-left transition-colors hover:bg-white/[0.05]',
-                      isHighlighted && 'bg-accent/[0.08]'
+                      'flex shrink-0 items-center gap-2.5 border-r border-white/[0.07] px-3 text-left transition-colors hover:bg-white/[0.05]',
+                      isHighlighted && 'bg-white/[0.08]'
                     )}
                     style={{ width: CHANNEL_COLUMN }}
                   >
-                    <ChannelLogo channel={channel} size="sm" />
+                    {/* Tabular channel number to left (text-3, 12px) */}
+                    <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                      {channel.number}
+                    </span>
+                    {/* Fixed 72 x 40px logo cell */}
+                    <ChannelLogoCell channel={channel} />
+                    {/* Channel name to right */}
                     <span className="min-w-0 flex-1">
-                      <span
-                        className="block truncate text-[12px] font-medium text-text-primary"
-                        style={isHighlighted ? { color: channel.brandColor } : undefined}
-                      >
+                      <span className="block truncate text-[13px] font-[600] text-[#F4F4F5]">
                         {channel.name}
                       </span>
-                      <span className="mt-0.5 flex items-center gap-2 text-[10px] text-text-muted">
-                        {channel.number}
-                        {current ? <span className="truncate">{current.title}</span> : null}
-                      </span>
+                      {current ? (
+                        <span className="mt-0.5 block truncate text-[11px] text-[#66666C]">
+                          {current.title}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
 

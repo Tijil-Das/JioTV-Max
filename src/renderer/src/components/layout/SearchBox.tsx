@@ -9,7 +9,7 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { getNowNext } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
-import { ChannelLogo } from '@/components/ui/ChannelLogo'
+import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
 import type { Channel } from '@shared/types'
 
 /**
@@ -214,21 +214,24 @@ export function SearchBox(): JSX.Element {
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => openChannel(channel, query.trim())}
                           className={cn(
-                          'flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors duration-[120ms]',
+                          'flex w-full items-center gap-3 rounded-[8px] px-2.5 py-2 text-left transition-colors duration-[120ms]',
                           index === activeIndex ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
                         )}
                       >
-                        <ChannelLogo channel={channel} size="sm" />
+                        {/* Tabular channel number to left (text-3, 12px) */}
+                        <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                          {channel.number}
+                        </span>
+                        {/* Fixed 72 x 40px logo cell */}
+                        <ChannelLogoCell channel={channel} />
+                        {/* Channel name and program to right */}
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-[500] text-[#F4F4F5]">
+                          <span className="block truncate text-[13px] font-[600] text-[#F4F4F5]">
                             {channel.name}
                           </span>
                           <span className="block truncate text-[12px] text-[#66666C]">
                             {current ? `Now · ${current.title}` : `${channel.category} · ${channel.language}`}
                           </span>
-                        </span>
-                        <span className="shrink-0 text-[11px] font-[500] tabular-nums text-[#66666C]">
-                          {channel.number}
                         </span>
                       </button>
                     </li>

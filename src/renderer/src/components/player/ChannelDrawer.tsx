@@ -6,7 +6,7 @@ import { cn } from '@/lib/cn'
 import { easePremium } from '@/lib/motion'
 import { getNowNext } from '@/lib/time'
 import { useNow } from '@/hooks/useNow'
-import { ChannelLogo } from '@/components/ui/ChannelLogo'
+import { ChannelLogoCell } from '@/components/ui/ChannelLogo'
 
 interface ChannelDrawerProps {
   open: boolean
@@ -101,28 +101,33 @@ export function ChannelDrawer({
                     type="button"
                     onClick={() => onSelect(channel.id)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+                      'flex w-full items-center gap-3 rounded-[10px] border px-2.5 py-2 text-left transition-colors',
                       active
-                        ? 'border-accent/40 bg-accent/[0.12]'
+                        ? 'border-[var(--red)]/40 bg-[var(--red)]/[0.12]'
                         : 'border-transparent hover:border-white/10 hover:bg-white/[0.05]'
                     )}
                   >
-                    <ChannelLogo channel={channel} size="sm" glow={active} />
+                    {/* Channel number in tabular numerals to its left (text-3, 12px) */}
+                    <span className="w-6 shrink-0 text-right text-[12px] font-[500] tabular-nums text-[#66666C]">
+                      {channel.number}
+                    </span>
+                    {/* Fixed 72 x 40px logo cell */}
+                    <ChannelLogoCell channel={channel} />
+                    {/* Name and program to its right */}
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span className="truncate text-[12.5px] font-medium text-white">{channel.name}</span>
+                        <span className="truncate text-[13px] font-[600] text-[#F4F4F5]">
+                          {channel.name}
+                        </span>
                         {active ? (
-                          <span className="rounded-pill bg-accent px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-wider text-white">
+                          <span className="rounded-[4px] bg-[var(--red)] px-1.5 py-[1px] text-[9px] font-[700] uppercase tracking-wider text-white">
                             Playing
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-text-muted">
+                      <span className="mt-0.5 block truncate text-[11px] text-[#66666C]">
                         {current ? current.title : `${channel.category} · ${channel.language}`}
                       </span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-text-muted">
-                      {channel.number}
                     </span>
                   </button>
                 )

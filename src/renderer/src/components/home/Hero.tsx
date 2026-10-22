@@ -84,7 +84,15 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
           exit={{ opacity: 0 }}
           transition={{ duration: still ? 0.01 : 0.6, ease: easePremium }}
           className="absolute inset-0 bg-[#0A0A0B]"
-        />
+        >
+          {current?.artworkUrl ? (
+            <img
+              src={current.artworkUrl}
+              alt=""
+              className="h-full w-full object-cover object-center opacity-35"
+            />
+          ) : null}
+        </motion.div>
       </AnimatePresence>
 
       {/* Subtle radial lift centered on the channel logo area */}
@@ -144,9 +152,19 @@ export function Hero({ channels, epg }: HeroProps): JSX.Element {
             transition={{ duration: still ? 0.01 : 0.28, ease: easePremium }}
             className="max-w-[560px]"
           >
-            {/* Overline */}
-            <div className="flex items-center gap-2.5">
-              <LiveBadge size="sm" />
+            {/* Overline with red dot and optional artwork logo bug */}
+            <div className="flex items-center gap-3">
+              {current?.artworkUrl ? (
+                <span className="flex items-center rounded-[6px] bg-black/55 px-2 py-1 backdrop-blur-sm">
+                  <ChannelLogo channel={channel} size="bug" />
+                </span>
+              ) : null}
+              {channel.isLive ? (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E11D2E] opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#E11D2E]" />
+                </span>
+              ) : null}
               <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
                 {channel.name}
               </span>

@@ -31,6 +31,11 @@
   --red-tint:  rgba(225, 29, 46, 0.12);
   --red-line:  rgba(225, 29, 46, 0.55);
 
+  /* Light plate variant for dark/low-contrast brand marks */
+  --light-plate:        #E9E9EC;
+  --light-plate-hover:  #F4F4F6;
+  --light-plate-border: rgba(0, 0, 0, 0.08);
+
   /* Glass recipe — used only for player overlay, popovers, and scrolled top bar */
   --glass-bg:     rgba(10, 10, 11, 0.72);
   --glass-blur:   blur(28px) saturate(140%);
@@ -174,6 +179,16 @@ button:focus {
   transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
   animation: shimmer 1.4s linear infinite;
+}
+
+/* Shimmering plate (1.4s, opacity only) with no placeholder logo shape */
+.shimmer-plate {
+  animation: shimmerOpacity 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmerOpacity {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
 }
 
 /* -------------------------------------------------------------------------

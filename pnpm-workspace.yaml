@@ -2,5 +2,5 @@ allowBuilds:
   esbuild: true
   electron-winstaller: true
   electron: true
-minimumReleaseAgeExclude:
-  - electron@32.3.3
+  electron@https://github.com/castlabs/electron-releases/archive/refs/tags/v33.3.2+wvcus.tar.gz: true
+optimisticRepeatInstall: false

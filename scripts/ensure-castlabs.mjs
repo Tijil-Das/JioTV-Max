@@ -15,7 +15,8 @@ import {
   createWriteStream,
   statSync,
   renameSync,
-  rmSync
+  rmSync,
+  writeFileSync
 } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -34,14 +35,16 @@ export const EXPECTED_TOTAL_BYTES = 115246424
  * Searches for existing castLabs Electron installations in order of priority:
  * 1. CLI argument
  * 2. CASTLABS_ELECTRON_DIR environment variable
- * 3. Project-local .castlabs directory
- * 4. %LOCALAPPDATA%\castlabs
- * 5. Legacy workstation drive T:\DevLibs (if present)
+ * 3. Project-local node_modules/electron/dist
+ * 4. Project-local .castlabs directory
+ * 5. %LOCALAPPDATA%\castlabs
+ * 6. Legacy workstation drive T:\DevLibs (if present)
  */
 export function findCastlabsDir() {
   const candidates = [
     process.argv[2],
     process.env.CASTLABS_ELECTRON_DIR,
+    join(projectRoot, 'node_modules', 'electron', 'dist'),
     join(projectRoot, '.castlabs', 'castlabs-electron-33'),
     process.env.LOCALAPPDATA
       ? join(process.env.LOCALAPPDATA, 'castlabs', 'castlabs-electron-33')
@@ -55,7 +58,13 @@ export function findCastlabsDir() {
     }
   }
 
-  // Fallback target directory to install into
+  // Fallback target directory to install into:
+  // Prefer node_modules/electron/dist if node_modules/electron exists
+  const nodeModulesElectron = join(projectRoot, 'node_modules', 'electron')
+  if (existsSync(nodeModulesElectron)) {
+    return join(nodeModulesElectron, 'dist')
+  }
+
   return (
     process.env.CASTLABS_ELECTRON_DIR ||
     join(projectRoot, '.castlabs', 'castlabs-electron-33')
@@ -63,16 +72,17 @@ export function findCastlabsDir() {
 }
 
 /**
- * Validates that the installation is complete and not a corrupted/partial extraction.
+ * Validates that the installation is complete and has Widevine VMP signature.
  */
 export function isValidInstallation(dir) {
   if (!dir || !existsSync(dir)) return false
   const exe = join(dir, 'electron.exe')
-  if (!existsSync(exe)) return false
+  const sig = join(dir, 'electron.exe.sig')
+  if (!existsSync(exe) || !existsSync(sig)) return false
 
   try {
     const stat = statSync(exe)
-    // Valid electron.exe is at least 50MB
+    // Valid castLabs electron.exe is at least 50MB
     return stat.size > 50 * 1024 * 1024
   } catch {
     return false
@@ -220,6 +230,14 @@ export async function ensureCastlabsElectron(targetDir = findCastlabsDir()) {
     throw new Error(
       `Extraction failed: electron.exe missing or invalid at ${join(targetDir, 'electron.exe')}`
     )
+  }
+
+  // Ensure node_modules/electron/path.txt points to electron.exe
+  const electronPkgDir = join(projectRoot, 'node_modules', 'electron')
+  if (existsSync(electronPkgDir)) {
+    try {
+      writeFileSync(join(electronPkgDir, 'path.txt'), 'electron.exe')
+    } catch {}
   }
 
   console.log(`\n[castLabs] Setup verified successfully!`)

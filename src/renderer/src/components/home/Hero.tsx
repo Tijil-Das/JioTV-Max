@@ -31,11 +31,11 @@ import { ChannelLogo, ChannelLogoCell } from '@/components/ui/ChannelLogo'
  * (1fr → 0fr, 300ms) and leaves no placeholder.
  */
 
-const MAX_SWITCHER = 6
+const MAX_SWITCHER = 5
 const RERANK_MS = 15 * 60_000
 const HOVER_DWELL_MS = 250
-const VERIFY_WINDOW = 12
-const SWITCHER_WANTED = 3
+const VERIFY_WINDOW = 20
+const SWITCHER_WANTED = 5
 
 export function Hero(): JSX.Element {
   const navigate = useNavigate()
@@ -62,6 +62,15 @@ export function Hero(): JSX.Element {
   const [documentVisible, setDocumentVisible] = useState(
     typeof document === 'undefined' ? true : !document.hidden
   )
+  const [direction, setDirection] = useState<1 | -1>(1)
+  const [mouseActive, setMouseActive] = useState(false)
+  const mouseTimerRef = useRef<number | null>(null)
+
+  const onMouseMove = useCallback(() => {
+    setMouseActive(true)
+    if (mouseTimerRef.current) window.clearTimeout(mouseTimerRef.current)
+    mouseTimerRef.current = window.setTimeout(() => setMouseActive(false), 3000)
+  }, [])
 
   const sectionRef = useRef<HTMLElement>(null)
   const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -125,14 +134,22 @@ export function Hero(): JSX.Element {
     }
   }, [candidates, windowSize])
 
-  const verifiedOrdered = useMemo(
-    () =>
-      candidates
-        .map((candidate) => candidate.channel.id)
-        .filter((id) => verified.includes(id))
-        .slice(0, MAX_SWITCHER),
-    [candidates, verified]
-  )
+  const verifiedOrdered = useMemo(() => {
+    const verifiedIds = candidates
+      .map((candidate) => candidate.channel.id)
+      .filter((id) => verified.includes(id) && !failed.includes(id))
+    if (verifiedIds.length >= MAX_SWITCHER) {
+      return verifiedIds.slice(0, MAX_SWITCHER)
+    }
+    const combined = [...verifiedIds]
+    for (const c of candidates) {
+      if (combined.length >= MAX_SWITCHER) break
+      if (!combined.includes(c.channel.id) && !failed.includes(c.channel.id)) {
+        combined.push(c.channel.id)
+      }
+    }
+    return combined.slice(0, MAX_SWITCHER)
+  }, [candidates, verified, failed])
   const verifiedKey = verifiedOrdered.join('|')
 
   // ---- Active channel: prefer the last good hero across sessions -----------

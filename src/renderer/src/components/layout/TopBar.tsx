@@ -61,18 +61,21 @@ export function TopBar(): JSX.Element {
             : 'border-b border-transparent bg-transparent'
         )}
       >
-        {/* Page title — flush left, no subtitle */}
-        {!isHome && title ? (
-          <h1 className="no-drag min-w-0 truncate text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]">
-            {title}
-          </h1>
-        ) : (
-          <div className="min-w-0 flex-1" />
-        )}
-
-        {/* Right: search + profile + window controls */}
-        <div className="no-drag flex h-full shrink-0 items-center gap-3">
+        {/* Left: page title (if not home) + search bar */}
+        <div className="no-drag flex items-center gap-5">
+          {!isHome && title ? (
+            <h1 className="min-w-0 truncate text-[20px] font-[600] tracking-[-0.01em] text-[#F4F4F5]">
+              {title}
+            </h1>
+          ) : null}
           <SearchBox />
+        </div>
+
+        {/* Middle: draggable empty spacer */}
+        <div className="min-w-0 flex-1" />
+
+        {/* Right: profile circle + window controls */}
+        <div className="no-drag flex h-full shrink-0 items-center gap-3">
           <ProfileMenu />
           <WindowControls className="ml-1" />
         </div>

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, Heart, LogOut, Settings, UserRound } from 'lucide-react'
+import { Heart, LogOut, Settings, UserRound } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { popover } from '@/lib/motion'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUIStore } from '@/store/useUIStore'
 
-/** Avatar menu — single profile control, glass popover, no gradient avatar. */
+/** Avatar menu — circular profile control, glass popover. */
 export function ProfileMenu(): JSX.Element {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -41,21 +41,16 @@ export function ProfileMenu(): JSX.Element {
         onClick={() => (user ? setOpen((v) => !v) : openLogin('Sign in to start watching.'))}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={displayName ?? 'Profile'}
+        title={displayName ?? (status === 'authenticating' ? 'Connecting…' : 'Sign in')}
         className={cn(
-          'flex h-10 items-center gap-2 rounded-[8px] border px-2.5 transition-colors duration-[120ms]',
+          'flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-[120ms]',
           open
-            ? 'border-[rgba(255,255,255,0.14)] bg-white/[0.07]'
-            : 'border-[rgba(255,255,255,0.07)] bg-transparent hover:border-[rgba(255,255,255,0.14)] hover:bg-white/[0.05]'
+            ? 'border-[rgba(255,255,255,0.24)] bg-white/[0.10] text-[#F4F4F5]'
+            : 'border-[rgba(255,255,255,0.07)] bg-[#111113] text-[#A1A1A6] hover:border-[rgba(255,255,255,0.18)] hover:bg-[#18181B] hover:text-[#F4F4F5]'
         )}
       >
-        {/* Avatar — circular profile icon */}
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#18181B] text-[#A1A1A6]">
-          <UserRound className="h-3.5 w-3.5" />
-        </span>
-        <span className="hidden max-w-[100px] truncate text-[13px] font-[500] text-[#A1A1A6] lg:block">
-          {displayName ?? (status === 'authenticating' ? 'Connecting…' : 'Sign in')}
-        </span>
-        <ChevronDown className={cn('h-3.5 w-3.5 text-[#A1A1A6] transition-transform duration-[120ms]', open && 'rotate-180')} />
+        <UserRound className="h-4 w-4" />
       </button>
 
       <AnimatePresence>

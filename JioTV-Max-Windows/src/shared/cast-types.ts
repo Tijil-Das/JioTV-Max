@@ -2,7 +2,7 @@
  * Unified casting type definitions and IPC contracts.
  */
 
-export type CastProtocol = 'chromecast' | 'dlna' | 'airplay' | 'mock'
+export type CastProtocol = 'chromecast' | 'dlna' | 'airplay' | 'kodi' | 'mock'
 
 export type CastDevice = {
   id: string
@@ -33,6 +33,8 @@ export interface CastMediaInput {
   headers?: Record<string, string>
   isDecryptedRelay?: boolean
   isDrm?: boolean
+  licenseUrl?: string
+  channelId?: string
 }
 
 export interface CastStatePayload {

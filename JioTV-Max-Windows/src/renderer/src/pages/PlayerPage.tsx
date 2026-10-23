@@ -7,7 +7,9 @@ import {
   Keyboard,
   LockKeyhole,
   Maximize,
+  Maximize2,
   Minimize,
+  PictureInPicture2,
   Play,
   Pause,
   RefreshCw,
@@ -15,7 +17,8 @@ import {
   SkipForward,
   Volume1,
   Volume2,
-  VolumeX
+  VolumeX,
+  X
 } from 'lucide-react'
 import type { StreamInfo } from '@shared/types'
 import { cn } from '@/lib/cn'
@@ -94,6 +97,8 @@ export function PlayerPage(): JSX.Element {
   const toggleMuted = usePlayerStore((state) => state.toggleMuted)
   const isFullscreen = usePlayerStore((state) => state.isFullscreen)
   const setFullscreen = usePlayerStore((state) => state.setFullscreen)
+  const isMiniPlayer = usePlayerStore((state) => state.isMiniPlayer)
+  const setMiniPlayer = usePlayerStore((state) => state.setMiniPlayer)
   const setControlsVisible = usePlayerStore((state) => state.setControlsVisible)
   const setBuffering = usePlayerStore((state) => state.setBuffering)
   const setCurrentChannel = usePlayerStore((state) => state.setCurrentChannel)
@@ -245,7 +250,9 @@ export function PlayerPage(): JSX.Element {
       isLive: Boolean(stream.isLive),
       contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
       headers: stream.headers,
-      isDrm: Boolean(stream.isDrm)
+      isDrm: Boolean(stream.isDrm),
+      licenseUrl: stream.drm?.licenseUrl,
+      channelId: String(channel.id)
     }
   }, [stream, channel])
 
@@ -390,30 +397,41 @@ export function PlayerPage(): JSX.Element {
     }
   }, [bridge, setFullscreen])
 
-  const lastPausedAtRef = useRef<number | null>(null)
+  // Miniplayer bridge synchronisation and teardown on unmount
+  useEffect(() => {
+    if (!bridge) return
+    void bridge.isMiniPlayer().then((mini) => {
+      setMiniPlayer(mini)
+    })
+    const off = bridge.onMiniPlayerChange((mini) => {
+      setMiniPlayer(mini)
+    })
+    return () => {
+      off?.()
+      if (usePlayerStore.getState().isMiniPlayer) {
+        void bridge.exitMiniPlayer().catch(() => undefined)
+        setMiniPlayer(false)
+      }
+    }
+  }, [bridge, setMiniPlayer])
 
   useEffect(() => {
     const media = videoRef.current
     if (!media) return
     if (isPlaying) {
-      const pausedAt = lastPausedAtRef.current
-      lastPausedAtRef.current = null
-      if (pausedAt && stream?.isLive && !userRewoundRef.current) {
-        const pausedFor = Date.now() - pausedAt
-        if (pausedFor >= 20_000) {
-          userRewoundRef.current = false
-          engine.goLive()
-        }
+      if (media.paused) {
+        media.play().catch((err: unknown) => {
+          // Never flip playing state on AbortError (interrupted by seek or concurrent state transition)
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          setPlaying(false)
+        })
       }
-      void media.play().catch((err: unknown) => {
-        // console.warn('[PlayerPage] media.play() was prevented/blocked:', err)
-        setPlaying(false)
-      })
     } else {
-      lastPausedAtRef.current = Date.now()
-      media.pause()
+      if (!media.paused) {
+        media.pause()
+      }
     }
-  }, [isPlaying, stream, videoRef, setPlaying, engine])
+  }, [isPlaying, videoRef, setPlaying])
 
   useEffect(() => {
     const media = videoRef.current
@@ -480,13 +498,105 @@ export function PlayerPage(): JSX.Element {
     }
   }, [bridge, setFullscreen])
 
+  const toggleMiniPlayer = useCallback(async () => {
+    wake()
+    if (bridge) {
+      try {
+        const next = await bridge.toggleMiniPlayer()
+        setMiniPlayer(next)
+        return
+      } catch {
+        // Fall back to HTML5 Picture-in-Picture
+      }
+    }
+    const media = videoRef.current
+    if (media && document.pictureInPictureEnabled) {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture().catch(() => {})
+      } else {
+        await media.requestPictureInPicture().catch(() => {})
+      }
+    }
+  }, [bridge, setMiniPlayer, videoRef, wake])
+  // Miniplayer window dragging & click-to-play
+  const dragStartPosRef = useRef<{ screenX: number; screenY: number } | null>(null)
+  const isDraggingWindowRef = useRef(false)
+
+  const handleMiniPlayerPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    dragStartPosRef.current = { screenX: e.screenX, screenY: e.screenY }
+    isDraggingWindowRef.current = false
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // non-fatal
+    }
+  }, [])
+
+  const handleMiniPlayerPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragStartPosRef.current) return
+    const dx = e.screenX - dragStartPosRef.current.screenX
+    const dy = e.screenY - dragStartPosRef.current.screenY
+
+    if (!isDraggingWindowRef.current) {
+      if (Math.hypot(dx, dy) >= 4) {
+        isDraggingWindowRef.current = true
+      } else {
+        return
+      }
+    }
+
+    dragStartPosRef.current = { screenX: e.screenX, screenY: e.screenY }
+    void bridge?.moveWindowBy(dx, dy)
+  }, [bridge])
+
+  const handleMiniPlayerPointerUp = useCallback((e: React.PointerEvent) => {
+    if (!dragStartPosRef.current) return
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // non-fatal
+    }
+
+    const wasDragging = isDraggingWindowRef.current
+    dragStartPosRef.current = null
+    isDraggingWindowRef.current = false
+
+    if (!wasDragging) {
+      togglePlay()
+    }
+  }, [togglePlay])
+
+  const handleMiniPlayerPointerCancel = useCallback((e: React.PointerEvent) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {}
+    dragStartPosRef.current = null
+    isDraggingWindowRef.current = false
+  }, [])
+
+  // Miniplayer volume slider hover & drag state
+  const [miniVolumeHovered, setMiniVolumeHovered] = useState(false)
+  const [isDraggingMiniVol, setIsDraggingMiniVol] = useState(false)
+  const showMiniVolume = miniVolumeHovered || isDraggingMiniVol
+
+  useEffect(() => {
+    if (!isDraggingMiniVol) return
+    const handleUp = () => setIsDraggingMiniVol(false)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [isDraggingMiniVol])
+
   // Tracks whether the viewer deliberately seeked backward into DVR history
   const userRewoundRef = useRef(false)
 
-  // Reset rewind and pause states when changing channels
+  // Reset rewind state when changing channels
   useEffect(() => {
     userRewoundRef.current = false
-    lastPausedAtRef.current = null
   }, [channelId])
 
   const handleSeek = useCallback(
@@ -681,6 +791,8 @@ export function PlayerPage(): JSX.Element {
     },
     m: () => handleToggleMute(),
     f: () => void toggleFullscreen(),
+    p: () => void toggleMiniPlayer(),
+    i: () => void toggleMiniPlayer(),
     q: () => {
       setQualityOpen((value) => !value)
       wake()
@@ -690,6 +802,8 @@ export function PlayerPage(): JSX.Element {
       if (qualityOpen || helpOpen) {
         setQualityOpen(false)
         setHelpOpen(false)
+      } else if (isMiniPlayer) {
+        void toggleMiniPlayer()
       } else if (isFullscreen) {
         void toggleFullscreen()
       } else {
@@ -769,14 +883,14 @@ export function PlayerPage(): JSX.Element {
   return (
     <div
       className={cn(
-        'relative flex h-full w-full flex-col overflow-hidden bg-black select-none',
-        !controlsVisible && 'player-idle'
+        'relative flex h-full w-full flex-col overflow-hidden bg-black select-none group',
+        !controlsVisible && !isMiniPlayer && 'player-idle'
       )}
       onPointerMove={wake}
       onPointerDown={wake}
     >
       {/* Windowed Top Bar */}
-      {!isFullscreen ? (
+      {!isFullscreen && !isMiniPlayer ? (
         <header className="drag-region relative z-30 flex h-[36px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
           <div className="no-drag flex items-center gap-2">
             <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
@@ -796,8 +910,8 @@ export function PlayerPage(): JSX.Element {
       {/* Video Stage Area */}
       <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-black flex items-center justify-center">
         <div
-          className="absolute inset-0 cursor-pointer flex items-center justify-center"
-          onClick={(e) => {
+          className="absolute inset-0 cursor-pointer flex items-center justify-center select-none"
+          onClick={!isMiniPlayer ? (e) => {
             if (qualityOpen || helpOpen) {
               e.stopPropagation()
               setQualityOpen(false)
@@ -805,7 +919,12 @@ export function PlayerPage(): JSX.Element {
               return
             }
             handleContainerClick(e)
-          }}
+          } : undefined}
+          onPointerDown={isMiniPlayer ? handleMiniPlayerPointerDown : undefined}
+          onPointerMove={isMiniPlayer ? handleMiniPlayerPointerMove : undefined}
+          onPointerUp={isMiniPlayer ? handleMiniPlayerPointerUp : undefined}
+          onPointerCancel={isMiniPlayer ? handleMiniPlayerPointerCancel : undefined}
+          onDoubleClick={isMiniPlayer ? () => void toggleMiniPlayer() : undefined}
         >
           <video
             ref={videoRef}
@@ -813,8 +932,193 @@ export function PlayerPage(): JSX.Element {
             autoPlay={autoplay}
             className="pointer-events-none h-full w-full bg-black object-contain"
           />
-          <SeekOverlay {...seekOverlay} />
+          {!isMiniPlayer ? <SeekOverlay {...seekOverlay} /> : null}
         </div>
+
+        {/* MiniPlayer Mode Overlays */}
+        {isMiniPlayer ? (
+          <div className="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between">
+            {/* Top header bar: draggable region, channel info + restore/close buttons */}
+            <div
+              className="pointer-events-auto flex h-11 w-full items-center justify-between bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+              onPointerDown={handleMiniPlayerPointerDown}
+              onPointerMove={handleMiniPlayerPointerMove}
+              onPointerUp={handleMiniPlayerPointerUp}
+              onPointerCancel={handleMiniPlayerPointerCancel}
+            >
+              <div className="flex items-center gap-2 min-w-0 pr-2 pointer-events-none">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md overflow-hidden bg-white/10 border border-white/15">
+                  <ChannelLogo channel={channel} size="sm" />
+                </span>
+                <span className="truncate text-[12px] font-medium tracking-tight text-white/95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] max-w-[170px]">
+                  {channel.name}
+                </span>
+                {stream?.isLive ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#E11D2E]/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white shadow-sm">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                    Live
+                  </span>
+                ) : null}
+              </div>
+
+              <div
+                className="flex items-center gap-1.5 shrink-0"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void toggleMiniPlayer()
+                  }}
+                  title="Restore Full Window (P)"
+                  aria-label="Restore Full Window (P)"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white/85 hover:text-white backdrop-blur-md border border-white/15 transition-all duration-150 hover:scale-105 active:scale-95 shadow-sm"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 stroke-[2.2]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleBack()
+                  }}
+                  title="Close Miniplayer"
+                  aria-label="Close Miniplayer"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-[#E11D2E] text-white/85 hover:text-white backdrop-blur-md border border-white/15 hover:border-[#E11D2E]/60 transition-all duration-150 hover:scale-105 active:scale-95 shadow-sm"
+                >
+                  <X className="h-3.5 w-3.5 stroke-[2.2]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Central Play/Pause button on hover */}
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  togglePlay()
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                className="pointer-events-auto flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.65)] transition-all duration-200 hover:scale-110 active:scale-95 hover:border-white/40"
+                style={{ width: '52px', height: '52px' }}
+              >
+                {isPlaying ? (
+                  <Pause className="h-6 w-6 fill-white text-white drop-shadow-md" />
+                ) : (
+                  <Play className="h-6 w-6 fill-white text-white ml-0.5 drop-shadow-md" />
+                )}
+              </button>
+            </div>
+
+            {/* Bottom bar: Mute button and Live Edge recovery */}
+            <div
+              className="pointer-events-auto flex h-10 w-full items-center justify-between bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+              onPointerDown={handleMiniPlayerPointerDown}
+              onPointerMove={handleMiniPlayerPointerMove}
+              onPointerUp={handleMiniPlayerPointerUp}
+              onPointerCancel={handleMiniPlayerPointerCancel}
+            >
+              <div
+                className="relative flex items-center group/vol"
+                onMouseEnter={() => setMiniVolumeHovered(true)}
+                onMouseLeave={() => setMiniVolumeHovered(false)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerMove={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onWheel={(e) => {
+                  e.stopPropagation()
+                  const delta = e.deltaY < 0 ? 0.05 : -0.05
+                  const curr = muted ? 0 : volume
+                  const next = Math.min(1, Math.max(0, Number((curr + delta).toFixed(2))))
+                  if (muted && delta > 0) toggleMuted()
+                  changeVolume(next)
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleToggleMute()
+                  }}
+                  title={muted ? 'Unmute (M)' : 'Mute (M)'}
+                  aria-label={muted ? 'Unmute' : 'Mute'}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white/85 hover:text-white backdrop-blur-md border border-white/15 transition-all duration-150 hover:scale-105 active:scale-95 shadow-sm"
+                >
+                  {muted || volume === 0 ? (
+                    <VolumeX className="h-3.5 w-3.5 text-red-400" />
+                  ) : volume > 0.5 ? (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Volume1 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+
+                {/* Mouse drag volume level setter */}
+                <div
+                  className={cn(
+                    'flex items-center overflow-hidden transition-all duration-200 ease-out',
+                    showMiniVolume
+                      ? 'w-[76px] opacity-100 pl-2 pointer-events-auto'
+                      : 'w-0 opacity-0 pl-0 pointer-events-none'
+                  )}
+                >
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.02}
+                    value={muted ? 0 : volume}
+                    onChange={(event) => {
+                      const val = Number(event.target.value)
+                      if (muted && val > 0) {
+                        toggleMuted()
+                      }
+                      changeVolume(val)
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation()
+                      setIsDraggingMiniVol(true)
+                    }}
+                    onPointerUp={(e) => {
+                      e.stopPropagation()
+                      setIsDraggingMiniVol(false)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Miniplayer volume level"
+                    className="mini-volume-range h-3 w-[68px] appearance-none"
+                    style={{
+                      '--track-bg': `linear-gradient(to right, #E11D2E ${(muted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.28) ${(muted ? 0 : volume) * 100}%)`
+                    } as React.CSSProperties}
+                  />
+                </div>
+              </div>
+
+              {liveEdge.isDelayed && stream?.isLive ? (
+                <div
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerUp={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleGoLive()
+                    }}
+                    className="text-[10px] font-semibold text-amber-400 hover:text-white bg-black/70 hover:bg-black/90 rounded-full px-2.5 py-1 border border-amber-400/40 transition-colors shadow-sm"
+                    title="Behind live — Click to jump to live edge"
+                  >
+                    Go Live
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         {/* Casting remote overlay */}
         {isCasting ? (
@@ -861,37 +1165,39 @@ export function PlayerPage(): JSX.Element {
       </AnimatePresence>
 
       {/* Top player overlay (Back button + Channel details) */}
-      <div
-        className={cn(
-          'pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/60 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
-          controlsVisible ? 'opacity-100' : 'opacity-0'
-        )}
-      >
-        <div className="pointer-events-none flex items-start justify-between gap-6">
-          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-3">
-            <IconButton
-              label="Back"
-              variant="glass"
-              onClick={() => void handleBack()}
-              className="h-9 w-9 rounded-xl"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </IconButton>
-            <ChannelLogo channel={channel} size="sm" />
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[13px] font-semibold text-white">
-                <span className="truncate">{channel.name}</span>
-                <LiveBadge />
-              </p>
-              <p className="mt-0.5 truncate text-[12px] text-white/70">
-                {channel.number}
-                {current ? ` · ${current.title}` : ''}
-                {current ? ` · ${formatRange(current.start, current.end)}` : ''}
-              </p>
+      {!isMiniPlayer ? (
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/60 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
+            controlsVisible ? 'opacity-100' : 'opacity-0'
+          )}
+        >
+          <div className="pointer-events-none flex items-start justify-between gap-6">
+            <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-3">
+              <IconButton
+                label="Back"
+                variant="glass"
+                onClick={() => void handleBack()}
+                className="h-9 w-9 rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </IconButton>
+              <ChannelLogo channel={channel} size="sm" />
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[13px] font-semibold text-white">
+                  <span className="truncate">{channel.name}</span>
+                  <LiveBadge />
+                </p>
+                <p className="mt-0.5 truncate text-[12px] text-white/70">
+                  {channel.number}
+                  {current ? ` · ${current.title}` : ''}
+                  {current ? ` · ${formatRange(current.start, current.end)}` : ''}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
 
       {/* Buffering: only the spinner itself (thicker stroke, no background circle or pill) */}
@@ -1041,11 +1347,12 @@ export function PlayerPage(): JSX.Element {
       />
 
       {/* Bottom control layer */}
-      <div
-        className={cn(
-          'pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300',
-          controlsVisible ? 'opacity-100' : 'opacity-0'
-        )}
+      {!isMiniPlayer ? (
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300',
+            controlsVisible ? 'opacity-100' : 'opacity-0'
+          )}
         style={{
           paddingLeft: `${Math.round(20 * ctrlScale)}px`,
           paddingRight: `${Math.round(20 * ctrlScale)}px`,
@@ -1239,6 +1546,18 @@ export function PlayerPage(): JSX.Element {
             </div>
 
             <div className="pointer-events-auto flex items-center" style={{ gap: `${Math.round(4 * ctrlScale)}px` }}>
+              <button
+                type="button"
+                onClick={() => void toggleMiniPlayer()}
+                title="Miniplayer (P)"
+                aria-label="Miniplayer (P)"
+                className="flex items-center justify-center text-white/75 transition-colors hover:text-white active:scale-95"
+                style={{
+                  padding: `${Math.round(6 * ctrlScale)}px`
+                }}
+              >
+                <PictureInPicture2 style={{ width: Math.round(20 * ctrlScale), height: Math.round(20 * ctrlScale) }} />
+              </button>
               <CastButton scale={ctrlScale} isCastable={Boolean(stream?.url)} />
               <button
                 type="button"
@@ -1260,9 +1579,10 @@ export function PlayerPage(): JSX.Element {
           </div>
         </div>
       </div>
+    ) : null}
 
       {/* Persistent Go Live affordance when UI controls disappear due to inactivity */}
-      {!controlsVisible && liveEdge.isDelayed && stream?.isLive ? (
+      {!isMiniPlayer && !controlsVisible && liveEdge.isDelayed && stream?.isLive ? (
         <div
           className="absolute z-30 flex items-center transition-opacity duration-300"
           style={{

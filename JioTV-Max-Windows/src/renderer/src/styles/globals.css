@@ -273,6 +273,59 @@ video::-webkit-media-controls {
   opacity: 0.4;
 }
 
+/* -------------------------------------------------------------------------
+   Miniplayer volume slider — dynamic track fill, red circular thumb
+   ------------------------------------------------------------------------- */
+.mini-volume-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.mini-volume-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--track-bg, rgba(255, 255, 255, 0.25));
+}
+
+.mini-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 9999px;
+  background: #E11D2E;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.mini-volume-range:hover::-webkit-slider-thumb,
+.mini-volume-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+  background: #EF3340;
+}
+
+.mini-volume-range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--track-bg, rgba(255, 255, 255, 0.25));
+}
+
+.mini-volume-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: none;
+  background: #E11D2E;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+
 /* Hero auto-advance progress bar */
 .hero-progress {
   transform-origin: left center;

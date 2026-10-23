@@ -126,6 +126,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
 
   const getProtocolLabel = (dev: CastDevice) => {
     if (dev.protocol === 'chromecast') return 'Google Cast'
+    if (dev.protocol === 'kodi') return 'Kodi (Widevine DRM)'
     if (dev.protocol === 'dlna') return 'DLNA / UPnP'
     if (dev.protocol === 'airplay') return 'AirPlay'
     return 'Mock TV'
@@ -413,7 +414,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
             >
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-white/10 p-2 text-zinc-300 group-hover:text-white">
-                  <Smartphone className="w-4 h-4" />
+                  <Tv className="w-4 h-4 text-[#E11D2E]" />
                 </div>
                 <div>
                   <p className="font-medium text-sm text-zinc-200 group-hover:text-white">

@@ -140,14 +140,27 @@ export class ChromecastAdapter extends DeviceAdapter {
       `[ChromecastAdapter] Loading stream on ${this.activeDevice.friendlyName}: ${castLogger.maskUrl(streamUrl)}`
     )
 
+    const isDrm = media.isDrm === true || streamUrl.includes('.mpd') || media.contentType?.includes('dash')
+    const licenseUrl = isDrm ? streamUrl.replace(/\/manifest\.mpd(\?.*)?$/, '/license$1') : undefined
+
     const mediaObject: any = {
       url: streamUrl,
-      contentType: media.contentType || (streamUrl.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4'),
+      contentType: isDrm
+        ? 'application/dash+xml'
+        : media.contentType || (streamUrl.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4'),
       streamType: media.isLive ? 'LIVE' : 'BUFFERED',
       cover: {
         title: media.title,
         url: media.imageUrl || ''
-      }
+      },
+      customData: isDrm && licenseUrl
+        ? {
+            drm: {
+              licenseUrl,
+              protectionSystem: 'widevine'
+            }
+          }
+        : undefined
     }
 
     return new Promise<void>((resolve, reject) => {

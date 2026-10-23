@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, net, powerSaveBlocker, protocol, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, net, powerSaveBlocker, protocol, shell, screen } from 'electron'
 import { promises as fs, readdirSync, existsSync, readFileSync, cpSync } from 'node:fs'
 import { join as pathJoin } from 'node:path'
 import path from 'node:path'
@@ -23,6 +23,7 @@ import { ChromecastAdapter } from './casting/chromecast-adapter'
 import { DlnaAdapter } from './casting/dlna-adapter'
 import { MockAdapter } from './casting/mock-adapter'
 import { AirPlayAdapter } from './casting/airplay-adapter'
+import { KodiAdapter } from './casting/kodi-adapter'
 import { registerCastIpc } from './casting/ipc-handlers'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -78,6 +79,72 @@ let mainWindow: BrowserWindow | null = null
 let appSuspensionBlockerId: number | null = null
 let displaySleepBlockerId: number | null = null
 let quitting = false
+let isMiniPlayer = false
+let preMiniPlayerBounds: Electron.Rectangle | null = null
+let preMiniPlayerMaximized = false
+
+function enterMiniPlayer(): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (isMiniPlayer) return true
+
+  if (mainWindow.isFullScreen()) {
+    mainWindow.setFullScreen(false)
+    mainWindow.webContents.send(IPC.fullscreenChanged, false)
+  }
+
+  preMiniPlayerMaximized = mainWindow.isMaximized()
+  preMiniPlayerBounds = preMiniPlayerMaximized ? mainWindow.getNormalBounds() : mainWindow.getBounds()
+
+  if (preMiniPlayerMaximized) {
+    mainWindow.unmaximize()
+  }
+
+  const currentDisplay = screen.getDisplayMatching(preMiniPlayerBounds)
+  const workArea = currentDisplay.workArea
+  const miniWidth = 384
+  const miniHeight = 216
+  const margin = 20
+
+  const miniX = Math.round(workArea.x + workArea.width - miniWidth - margin)
+  const miniY = Math.round(workArea.y + workArea.height - miniHeight - margin)
+
+  mainWindow.setMinimumSize(280, 158)
+  mainWindow.setBounds({
+    x: miniX,
+    y: miniY,
+    width: miniWidth,
+    height: miniHeight
+  })
+  mainWindow.setAlwaysOnTop(true, 'screen-saver')
+  isMiniPlayer = true
+  SnapController.getByWindowId(mainWindow.id)?.setMiniPlayerMode(true)
+  mainWindow.webContents.send(IPC.miniPlayerChanged, true)
+  return true
+}
+
+function exitMiniPlayer(): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (!isMiniPlayer) return false
+
+  mainWindow.setAlwaysOnTop(false)
+  mainWindow.setMinimumSize(480, 320)
+
+  if (preMiniPlayerBounds) {
+    mainWindow.setBounds(preMiniPlayerBounds)
+  }
+  if (preMiniPlayerMaximized) {
+    mainWindow.maximize()
+  }
+
+  isMiniPlayer = false
+  SnapController.getByWindowId(mainWindow.id)?.setMiniPlayerMode(false)
+  mainWindow.webContents.send(IPC.miniPlayerChanged, false)
+  return false
+}
+
+function toggleMiniPlayer(): boolean {
+  return isMiniPlayer ? exitMiniPlayer() : enterMiniPlayer()
+}
 
 const relay = new MediaRelay()
 const windowStateStore = new WindowStateStore(app.getPath('userData'))
@@ -345,6 +412,12 @@ async function createWindow(): Promise<void> {
 
   const persist = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
+    if (isMiniPlayer) {
+      if (preMiniPlayerBounds) {
+        windowStateStore.saveBounds(preMiniPlayerBounds, preMiniPlayerMaximized)
+      }
+      return
+    }
     const maximized = mainWindow.isMaximized()
     const bounds = maximized ? mainWindow.getNormalBounds() : mainWindow.getBounds()
     windowStateStore.saveBounds(bounds, maximized)
@@ -458,6 +531,10 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.windowMaximize, (): boolean => {
     if (!mainWindow) return false
+    if (isMiniPlayer) {
+      exitMiniPlayer()
+      return true
+    }
     if (mainWindow.isFullScreen()) {
       mainWindow.setFullScreen(false)
       mainWindow.webContents.send(IPC.fullscreenChanged, false)
@@ -485,6 +562,16 @@ function registerIpc(): void {
     if (!mainWindow) return false
     mainWindow.setAlwaysOnTop(Boolean(value), 'floating')
     return mainWindow.isAlwaysOnTop()
+  })
+
+  ipcMain.handle(IPC.miniPlayerEnter, (): boolean => enterMiniPlayer())
+  ipcMain.handle(IPC.miniPlayerExit, (): boolean => exitMiniPlayer())
+  ipcMain.handle(IPC.miniPlayerToggle, (): boolean => toggleMiniPlayer())
+  ipcMain.handle(IPC.miniPlayerGetState, (): boolean => isMiniPlayer)
+  ipcMain.handle(IPC.windowMoveBy, (_event, dx: number, dy: number): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const [x, y] = mainWindow.getPosition()
+    mainWindow.setPosition(Math.round(x + dx), Math.round(y + dy), false)
   })
 
   ipcMain.handle(IPC.setPlayerActive, (_event, active: boolean): void => {
@@ -592,6 +679,7 @@ app.whenReady().then(async () => {
 
   const castManager = CastManager.getInstance()
   castManager.registerAdapter(new ChromecastAdapter())
+  castManager.registerAdapter(new KodiAdapter())
   castManager.registerAdapter(new DlnaAdapter())
   if (process.env.CAST_MOCK === '1') {
     castManager.registerAdapter(new MockAdapter())

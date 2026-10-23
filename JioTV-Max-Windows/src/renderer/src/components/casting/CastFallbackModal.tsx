@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Smartphone, Copy, Check, X, Loader2 } from 'lucide-react'
+import { Tv, Copy, Check, X, Loader2 } from 'lucide-react'
 import type { CastMediaInput } from '@shared/cast-types'
 import { CAST_STRINGS } from './cast-strings'
 import { useCastStore } from './useCastStore'
@@ -49,7 +49,7 @@ export function CastFallbackModal({ media }: CastFallbackModalProps): JSX.Elemen
         >
           <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
             <div className="flex items-center gap-2">
-              <Smartphone className="w-5 h-5 text-[#E11D2E]" />
+              <Tv className="w-5 h-5 text-[#E11D2E]" />
               <h3 className="font-semibold text-sm">{CAST_STRINGS.fallbackModalTitle}</h3>
             </div>
             <button

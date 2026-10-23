@@ -13,6 +13,7 @@ export class SnapController {
   private childHwnd: bigint | null = null
   private lastBounds: SnapBounds | null = null
   private isDisposed = false
+  private isMiniPlayer = false
   private currentState: SnapButtonState = 'idle'
   private readonly supported: boolean
   private readonly supportReason?: string
@@ -41,6 +42,24 @@ export class SnapController {
 
     this.supported = true
     this.initWindowListeners()
+  }
+
+  public setMiniPlayerMode(isMini: boolean): void {
+    this.isMiniPlayer = isMini
+    if (isMini) {
+      this.setOverlayVisibility(false)
+      if (this.childHwnd !== null && this.addon) {
+        try {
+          this.addon.updateRect(this.childHwnd, -1000, -1000, 0, 0)
+        } catch {
+          // non-fatal
+        }
+      }
+    } else {
+      if (!this.win.isDestroyed()) {
+        this.requestRendererBounds()
+      }
+    }
   }
 
   public static getOrCreate(win: BrowserWindow): SnapController {
@@ -97,7 +116,7 @@ export class SnapController {
     if (this.win.isDestroyed()) return
 
     const onLayoutChange = (): void => {
-      if (this.isDisposed || this.win.isDestroyed()) return
+      if (this.isDisposed || this.win.isDestroyed() || this.isMiniPlayer) return
       this.reassertTop()
       this.requestRendererBounds()
     }
@@ -109,14 +128,14 @@ export class SnapController {
 
     // Window move end (drag finished or snapped into a zone)
     this.win.on('moved', () => {
-      if (this.isDisposed || this.win.isDestroyed()) return
+      if (this.isDisposed || this.win.isDestroyed() || this.isMiniPlayer) return
       this.reassertTop()
       this.requestRendererBounds()
     })
 
     // Reassert top of Z-order whenever window gains focus
     this.win.on('focus', () => {
-      if (this.isDisposed || this.win.isDestroyed()) return
+      if (this.isDisposed || this.win.isDestroyed() || this.isMiniPlayer) return
       this.reassertTop()
     })
 
@@ -125,8 +144,10 @@ export class SnapController {
     })
 
     this.win.on('leave-full-screen', () => {
-      this.setOverlayVisibility(true)
-      onLayoutChange()
+      if (!this.isMiniPlayer) {
+        this.setOverlayVisibility(true)
+        onLayoutChange()
+      }
     })
 
     this.win.on('minimize', () => {
@@ -134,12 +155,14 @@ export class SnapController {
     })
 
     this.win.on('restore', () => {
-      this.setOverlayVisibility(true)
-      onLayoutChange()
+      if (!this.isMiniPlayer) {
+        this.setOverlayVisibility(true)
+        onLayoutChange()
+      }
     })
 
     this.win.webContents.on('did-finish-load', () => {
-      if (this.isDisposed || this.win.isDestroyed()) return
+      if (this.isDisposed || this.win.isDestroyed() || this.isMiniPlayer) return
       this.reassertTop()
       this.requestRendererBounds()
     })
@@ -154,7 +177,15 @@ export class SnapController {
   }
 
   public updateButtonBounds(bounds: SnapBounds | null): void {
-    if (this.isDisposed || !this.isSupported() || !this.addon || this.win.isDestroyed()) {
+    if (this.isDisposed || !this.isSupported() || !this.addon || this.win.isDestroyed() || this.isMiniPlayer) {
+      if (this.isMiniPlayer && this.childHwnd !== null && this.addon) {
+        this.setOverlayVisibility(false)
+        try {
+          this.addon.updateRect(this.childHwnd, -1000, -1000, 0, 0)
+        } catch {
+          // non-fatal
+        }
+      }
       return
     }
 
@@ -182,12 +213,12 @@ export class SnapController {
       }
     } else {
       this.addon.updateRect(this.childHwnd, bounds.x, bounds.y, bounds.width, bounds.height)
-      this.setOverlayVisibility(!this.win.isFullScreen() && !this.win.isMinimized())
+      this.setOverlayVisibility(!this.win.isFullScreen() && !this.win.isMinimized() && !this.isMiniPlayer)
     }
   }
 
   private reassertTop(): void {
-    if (this.childHwnd === null || !this.addon || this.win.isDestroyed()) return
+    if (this.isMiniPlayer || this.childHwnd === null || !this.addon || this.win.isDestroyed()) return
     if (this.win.isFullScreen() || this.win.isMinimized()) return
     try {
       this.addon.bringToTop(this.childHwnd)
@@ -197,7 +228,7 @@ export class SnapController {
   }
 
   private requestRendererBounds(): void {
-    if (this.win.isDestroyed() || this.isDisposed) return
+    if (this.isMiniPlayer || this.win.isDestroyed() || this.isDisposed) return
     if (this.win.isFullScreen() || this.win.isMinimized()) return
     try {
       this.win.webContents.send(IPC.snapRequestBoundsUpdate)
@@ -208,6 +239,7 @@ export class SnapController {
 
   private setOverlayVisibility(visible: boolean): void {
     if (this.childHwnd === null || !this.addon) return
+    if (this.isMiniPlayer) visible = false
     try {
       this.addon.setVisible(this.childHwnd, visible)
     } catch {

@@ -11,6 +11,7 @@ interface PlayerState {
   quality: QualityPreference
   isFullscreen: boolean
   controlsVisible: boolean
+  isMiniPlayer: boolean
   isBuffering: boolean
   error: string | null
   engine: PlaybackType | null
@@ -21,6 +22,7 @@ interface PlayerState {
   toggleMuted: () => void
   setQuality: (quality: QualityPreference) => void
   setFullscreen: (value: boolean) => void
+  setMiniPlayer: (value: boolean) => void
   setControlsVisible: (value: boolean) => void
   setBuffering: (value: boolean) => void
   setError: (message: string | null) => void
@@ -37,6 +39,7 @@ export const usePlayerStore = create<PlayerState>()(
       muted: false,
       quality: 1080,
       isFullscreen: false,
+      isMiniPlayer: false,
       controlsVisible: true,
       isBuffering: false,
       error: null,
@@ -48,6 +51,7 @@ export const usePlayerStore = create<PlayerState>()(
       toggleMuted: () => set({ muted: !get().muted }),
       setQuality: (quality) => set({ quality }),
       setFullscreen: (isFullscreen) => set({ isFullscreen }),
+      setMiniPlayer: (isMiniPlayer) => set({ isMiniPlayer }),
       setControlsVisible: (controlsVisible) => set({ controlsVisible }),
       setBuffering: (isBuffering) => set({ isBuffering }),
       setError: (error) => set({ error }),
@@ -56,6 +60,7 @@ export const usePlayerStore = create<PlayerState>()(
         set({
           currentChannelId: null,
           isPlaying: false,
+          isMiniPlayer: false,
           controlsVisible: true,
           isBuffering: false,
           error: null,

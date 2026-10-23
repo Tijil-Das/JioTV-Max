@@ -399,7 +399,9 @@ export function useMediaPlayer({
     if (player && typeof player.goToLive === 'function') {
       try {
         player.goToLive()
-        void video.play().catch(() => undefined)
+        if (video.paused) {
+          void video.play().catch(() => undefined)
+        }
         syncSeekRange()
         return
       } catch {
@@ -413,7 +415,9 @@ export function useMediaPlayer({
       if (typeof livePos === 'number' && Number.isFinite(livePos) && livePos > 0) {
         try {
           video.currentTime = livePos
-          void video.play().catch(() => undefined)
+          if (video.paused) {
+            void video.play().catch(() => undefined)
+          }
           syncSeekRange()
           return
         } catch {
@@ -440,7 +444,9 @@ export function useMediaPlayer({
     } catch {
       return
     }
-    void video.play().catch(() => undefined)
+    if (video.paused) {
+      void video.play().catch(() => undefined)
+    }
     syncSeekRange()
   }, [getLiveSeekRange, syncSeekRange])
 

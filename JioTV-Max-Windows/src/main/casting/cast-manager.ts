@@ -234,15 +234,17 @@ export class CastManager extends EventEmitter {
     // If an existing device shares the exact same host and friendly name,
     // prefer Chromecast protocol over DLNA.
     for (const [existingId, existing] of this.deviceRegistry.entries()) {
-      if (existing.host === device.host && existing.name.toLowerCase() === device.name.toLowerCase()) {
-        if (existing.protocol === 'chromecast' && device.protocol === 'dlna') {
-          // Keep the existing chromecast entry and update its timestamp
+      const sameHost = existing.host === device.host
+      const sameName = existing.name.toLowerCase() === device.name.toLowerCase()
+      const isKodiMatch = sameHost && existing.name.toLowerCase().includes('kodi') && device.name.toLowerCase().includes('kodi')
+
+      if ((sameHost && sameName) || isKodiMatch) {
+        if ((existing.protocol === 'chromecast' || existing.protocol === 'kodi') && device.protocol === 'dlna') {
           existing.lastSeen = Date.now()
           this.deviceRegistry.set(existingId, existing)
           return
         }
-        if (existing.protocol === 'dlna' && device.protocol === 'chromecast') {
-          // Replace dlna with chromecast
+        if (existing.protocol === 'dlna' && (device.protocol === 'chromecast' || device.protocol === 'kodi')) {
           this.deviceRegistry.delete(existingId)
         }
       }

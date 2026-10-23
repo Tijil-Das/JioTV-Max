@@ -70,6 +70,9 @@ export function registerCastIpc(castManager: CastManager): void {
         isLive: Boolean(media.isLive),
         contentType: sanitizeString(media.contentType, 64) || undefined,
         isDecryptedRelay: Boolean(media.isDecryptedRelay),
+        isDrm: Boolean(media.isDrm),
+        licenseUrl: isValidHttpUrl(media.licenseUrl) ? media.licenseUrl : undefined,
+        channelId: sanitizeString(media.channelId, 64) || undefined,
         headers:
           media.headers && typeof media.headers === 'object'
             ? Object.fromEntries(

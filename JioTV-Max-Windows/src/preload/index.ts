@@ -49,6 +49,16 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.windowMaximizedChanged, listener)
   },
   setAlwaysOnTop: (value: boolean): Promise<boolean> => ipcRenderer.invoke(IPC.setAlwaysOnTop, value),
+  enterMiniPlayer: (): Promise<boolean> => ipcRenderer.invoke(IPC.miniPlayerEnter),
+  exitMiniPlayer: (): Promise<boolean> => ipcRenderer.invoke(IPC.miniPlayerExit),
+  toggleMiniPlayer: (): Promise<boolean> => ipcRenderer.invoke(IPC.miniPlayerToggle),
+  isMiniPlayer: (): Promise<boolean> => ipcRenderer.invoke(IPC.miniPlayerGetState),
+  onMiniPlayerChange: (callback: (isMini: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, isMini: boolean) => callback(isMini)
+    ipcRenderer.on(IPC.miniPlayerChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.miniPlayerChanged, listener)
+  },
+  moveWindowBy: (dx: number, dy: number): Promise<void> => ipcRenderer.invoke(IPC.windowMoveBy, dx, dy),
   setPlayerActive: (active: boolean): Promise<void> => ipcRenderer.invoke(IPC.setPlayerActive, active),
   assets: {
     fetch: (url: string): Promise<Result<AssetFetchPayload>> => ipcRenderer.invoke(IPC.assetFetch, url)

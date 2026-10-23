@@ -159,6 +159,12 @@ export interface StreamDeckApi {
   isMaximized(): Promise<boolean>
   onMaximizedChange(callback: (maximized: boolean) => void): () => void
   setAlwaysOnTop(value: boolean): Promise<boolean>
+  enterMiniPlayer(): Promise<boolean>
+  exitMiniPlayer(): Promise<boolean>
+  toggleMiniPlayer(): Promise<boolean>
+  isMiniPlayer(): Promise<boolean>
+  onMiniPlayerChange(callback: (isMini: boolean) => void): () => void
+  moveWindowBy(dx: number, dy: number): Promise<void>
   setPlayerActive(active: boolean): Promise<void>
   assets: {
     fetch(url: string): Promise<Result<AssetFetchPayload>>

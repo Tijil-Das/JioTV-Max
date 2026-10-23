@@ -244,8 +244,8 @@ export class DlnaAdapter extends DeviceAdapter {
 
     castLogger.info(`[DlnaAdapter] Loading media on ${this.activeDevice.name}: ${castLogger.maskUrl(streamUrl)}`)
 
-    if (media.isDrm || media.contentType?.includes('dash') || media.url.includes('.mpd')) {
-      const msg = `Channel "${media.title}" is DRM protected (Widevine) and cannot be played directly on DLNA TVs. Please select a non-DRM channel (e.g. Star, Zee, News, Sports) or use "Open on another device" below.`
+    if (media.isDrm === true || media.contentType?.includes('dash') || media.url.includes('.mpd')) {
+      const msg = 'This channel requires DRM support. Please use Chromecast, a Smart TV browser, or Kodi to cast this stream.'
       castLogger.warn(`[DlnaAdapter] Cannot cast DRM channel to DLNA: ${media.title}`)
       this.emit('error', {
         code: 'unsupported_format',

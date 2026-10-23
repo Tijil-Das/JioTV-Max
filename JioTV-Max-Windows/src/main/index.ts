@@ -593,7 +593,7 @@ app.whenReady().then(async () => {
   const castManager = CastManager.getInstance()
   castManager.registerAdapter(new ChromecastAdapter())
   castManager.registerAdapter(new DlnaAdapter())
-  if (process.env.CAST_MOCK === '1' || !app.isPackaged) {
+  if (process.env.CAST_MOCK === '1') {
     castManager.registerAdapter(new MockAdapter())
   }
   castManager.registerAdapter(new AirPlayAdapter())

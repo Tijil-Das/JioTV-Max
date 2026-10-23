@@ -3,6 +3,7 @@ import MediaRendererClient from 'upnp-mediarenderer-client'
 import http from 'node:http'
 import { DeviceAdapter } from './device-adapter'
 import type { CastDevice, CastMediaInput, CastPlaybackSubstate, CastErrorCode } from '@shared/cast-types'
+import { getLanIpAddress } from './network-utils'
 import { castLogger } from './logger'
 
 interface DlnaDeviceRecord {
@@ -34,21 +35,29 @@ export class DlnaAdapter extends DeviceAdapter {
       })
 
       this.ssdp.on('response', (headers: any, statusCode: number, rinfo: any) => {
-        if (statusCode !== 200 || !headers.LOCATION) return
-        this.fetchDeviceDescription(headers.LOCATION, rinfo.address)
+        const locationUrl = headers.LOCATION || headers.location || headers.Location
+        if (statusCode !== 200 || !locationUrl) return
+        this.fetchDeviceDescription(locationUrl, rinfo.address)
       })
 
-      // Send initial SSDP M-SEARCH for MediaRenderer:1
+      // Send initial SSDP M-SEARCH for MediaRenderer:1, AVTransport, and ssdp:all
       this.ssdp.search('urn:schemas-upnp-org:device:MediaRenderer:1')
+      this.ssdp.search('urn:schemas-upnp-org:service:AVTransport:1')
+      this.ssdp.search('ssdp:all')
 
-      // Re-send M-SEARCH every 5 seconds while discovery is active
+      // Probe local renderers (such as Kodi or Windows Media Player on the same laptop)
+      this.probeLocalRenderers()
+
+      // Re-send M-SEARCH every 4 seconds while discovery is active
       this.searchInterval = setInterval(() => {
         try {
           this.ssdp?.search('urn:schemas-upnp-org:device:MediaRenderer:1')
+          this.ssdp?.search('urn:schemas-upnp-org:service:AVTransport:1')
+          this.probeLocalRenderers()
         } catch (err) {
           castLogger.warn('[DlnaAdapter] Re-search warning:', err)
         }
-      }, 5000)
+      }, 4000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       castLogger.error('[DlnaAdapter] Failed to initialize SSDP client:', err)
@@ -57,6 +66,21 @@ export class DlnaAdapter extends DeviceAdapter {
         message: 'Could not search for DLNA TVs on your network.',
         details: msg
       })
+    }
+  }
+
+  private probeLocalRenderers(): void {
+    const lanIp = getLanIpAddress()
+    const ports = [1180, 8080, 2869, 1080, 1480, 1580]
+    const ips = ['127.0.0.1']
+    if (lanIp && lanIp !== '127.0.0.1') ips.push(lanIp)
+
+    for (const ip of ips) {
+      for (const port of ports) {
+        this.fetchDeviceDescription(`http://${ip}:${port}/`, ip)
+        this.fetchDeviceDescription(`http://${ip}:${port}/description.xml`, ip)
+        this.fetchDeviceDescription(`http://${ip}:${port}/DeviceDescription.xml`, ip)
+      }
     }
   }
 
@@ -83,6 +107,14 @@ export class DlnaAdapter extends DeviceAdapter {
       const manufacturerMatch = xml.match(/<manufacturer>([\s\S]*?)<\/manufacturer>/i)
 
       if (!nameMatch) return
+
+      // Ensure device is an actual playable media renderer or player
+      const isPlayable =
+        xml.includes('MediaRenderer') ||
+        xml.includes('AVTransport') ||
+        xml.includes('RenderingControl') ||
+        /kodi|vlc|player|tv|renderer/i.test(xml)
+      if (!isPlayable) return
 
       const rawUdn = udnMatch ? udnMatch[1].trim() : ''
       const friendlyName = nameMatch[1].trim()

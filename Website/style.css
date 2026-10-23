@@ -445,6 +445,25 @@ a {
   line-height: 1.5;
 }
 
+.footer-contribute {
+  max-width: 580px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+.footer-contribute a {
+  color: var(--text-1);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.footer-contribute a:hover {
+  color: var(--red);
+}
+
 .footer-links {
   display: flex;
   gap: 20px;

@@ -1,38 +1,131 @@
 /**
  * JioTv Max — Official Landing Page JavaScript
- * Clean, lightweight, direct-download.
+ * Clean, lightweight, OS-aware GitHub release resolver.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const GITHUB_REPO = 'Tijil-Das/JioTV-Max'
-  // Direct default fallback to the published release binary
-  let latestExeDownloadUrl =
+  
+  // Default fallback target (Windows 64-bit release)
+  let latestDownloadUrl =
     'https://github.com/Tijil-Das/JioTV-Max/releases/download/v1.0.0/JioTv-Max-1.0.0-setup.exe'
-  let latestExeFilename = 'JioTv-Max-1.0.0-setup.exe'
+  let latestFilename = 'JioTv-Max-1.0.0-setup.exe'
+  let latestVersion = 'v1.0.0'
   let isResolvingRelease = false
 
   function detectOS() {
     const ua = navigator.userAgent || ''
-    if (/Windows/i.test(ua)) return 'Windows'
-    if (/Macintosh|Mac OS X/i.test(ua)) return 'macOS'
-    if (/Linux/i.test(ua)) return 'Linux'
+    const platform = navigator.platform || ''
+    if (/Win/i.test(platform) || /Windows/i.test(ua)) return 'Windows'
+    if (/Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua)) return 'macOS'
+    if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'Linux'
     if (/Android/i.test(ua)) return 'Android'
     if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS'
     return 'Windows'
   }
 
+  const userOS = detectOS()
+
+  function findAssetForOS(assets, os) {
+    if (!Array.isArray(assets) || assets.length === 0) return null
+
+    // Exclude blockmaps and checksum files
+    const cleanAssets = assets.filter((asset) => {
+      const name = (asset.name || '').toLowerCase()
+      return !name.includes('blockmap') && !name.endsWith('.yml') && !name.endsWith('.sha512') && !name.endsWith('.txt')
+    })
+
+    if (os === 'Windows') {
+      return cleanAssets.find((a) => {
+        const name = a.name.toLowerCase()
+        return name.endsWith('.exe') || name.endsWith('.msi')
+      })
+    }
+
+    if (os === 'macOS') {
+      return (
+        cleanAssets.find((a) => {
+          const name = a.name.toLowerCase()
+          return name.endsWith('.dmg') || name.endsWith('.pkg')
+        }) ||
+        cleanAssets.find((a) => {
+          const name = a.name.toLowerCase()
+          return name.endsWith('.zip') && (name.includes('mac') || name.includes('darwin'))
+        })
+      )
+    }
+
+    if (os === 'Linux') {
+      return cleanAssets.find((a) => {
+        const name = a.name.toLowerCase()
+        return name.endsWith('.appimage') || name.endsWith('.deb') || name.endsWith('.rpm') || (name.endsWith('.tar.gz') && name.includes('linux'))
+      })
+    }
+
+    return null
+  }
+
   function triggerDirectDownload(url, filename) {
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', filename || 'JioTv-Max-1.0.0-setup.exe')
+    link.setAttribute('download', filename || 'JioTv-Max-setup.exe')
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
   }
 
+  function applyReleaseData(version, downloadUrl, filename, targetOS, hasDirectAsset) {
+    latestVersion = version || latestVersion
+    latestDownloadUrl = downloadUrl || latestDownloadUrl
+    latestFilename = filename || latestFilename
+
+    // 1. Update all download trigger links
+    const downloadButtons = document.querySelectorAll('.download-trigger')
+    downloadButtons.forEach((btn) => {
+      btn.setAttribute('href', latestDownloadUrl)
+      btn.setAttribute('download', latestFilename)
+    })
+
+    // 2. Update version pill in hero
+    const pillBadge = document.querySelector('.hero-pill-badge')
+    if (pillBadge) {
+      pillBadge.textContent = `${latestVersion} RELEASE`
+    }
+
+    // 3. Update all version text spans
+    const versionSpans = document.querySelectorAll('.app-version-tag')
+    versionSpans.forEach((el) => {
+      el.textContent = latestVersion
+    })
+
+    // 4. Update button text according to detected OS & availability
+    const buttonTexts = document.querySelectorAll('.btn-download-text')
+    buttonTexts.forEach((el) => {
+      if (hasDirectAsset && targetOS !== 'Windows') {
+        el.textContent = `Download for ${targetOS}`
+      } else {
+        el.textContent = 'Download for Windows'
+      }
+    })
+
+    // 5. Update nav button text
+    const navBtnText = document.querySelector('.nav-btn-text')
+    if (navBtnText) {
+      navBtnText.textContent = 'Download'
+    }
+
+    // 6. Update OS notes if a non-Windows direct asset was resolved
+    if (hasDirectAsset && targetOS !== 'Windows') {
+      const osSpans = document.querySelectorAll('.app-os-tag')
+      osSpans.forEach((el) => {
+        el.textContent = `${targetOS} (64-bit)`
+      })
+    }
+  }
+
   async function resolveLatestRelease() {
-    if (isResolvingRelease) return latestExeDownloadUrl
+    if (isResolvingRelease) return latestDownloadUrl
     isResolvingRelease = true
 
     try {
@@ -42,47 +135,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (response.ok) {
         const releaseData = await response.json()
-        if (Array.isArray(releaseData.assets)) {
-          const exeAsset = releaseData.assets.find(
-            (asset) =>
-              typeof asset.name === 'string' &&
-              asset.name.toLowerCase().endsWith('.exe') &&
-              !asset.name.toLowerCase().includes('blockmap')
+        const version = releaseData.tag_name || 'v1.0.0'
+        const assets = releaseData.assets || []
+
+        // Attempt to find asset for user's detected OS
+        const osAsset = findAssetForOS(assets, userOS)
+        // Fallback to Windows executable
+        const windowsAsset = findAssetForOS(assets, 'Windows')
+
+        const selectedAsset = osAsset || windowsAsset
+        const hasDirectAsset = Boolean(osAsset)
+
+        if (selectedAsset && selectedAsset.browser_download_url) {
+          applyReleaseData(
+            version,
+            selectedAsset.browser_download_url,
+            selectedAsset.name,
+            userOS,
+            hasDirectAsset
           )
-
-          if (exeAsset && exeAsset.browser_download_url) {
-            latestExeDownloadUrl = exeAsset.browser_download_url
-            latestExeFilename = exeAsset.name
-
-            // Update all download button hrefs and download attributes
-            const downloadButtons = document.querySelectorAll('.download-trigger')
-            downloadButtons.forEach((btn) => {
-              btn.setAttribute('href', latestExeDownloadUrl)
-              btn.setAttribute('download', latestExeFilename)
-            })
-
-            // Update version badges across the site
-            if (releaseData.tag_name) {
-              const pillBadge = document.querySelector('.hero-pill-badge')
-              if (pillBadge) pillBadge.textContent = `${releaseData.tag_name} RELEASE`
-
-              const noteSpans = document.querySelectorAll('.hero-badge-note span, .download-note')
-              noteSpans.forEach((el) => {
-                if (el.textContent.includes('v1.0.0')) {
-                  el.textContent = el.textContent.replace(/v[0-9.]+/g, releaseData.tag_name)
-                }
-              })
-            }
-          }
+        } else {
+          // If no binary asset found, update version numbers with existing fallback
+          applyReleaseData(version, latestDownloadUrl, latestFilename, userOS, false)
         }
       }
     } catch (err) {
-      console.warn('Using direct v1.0.0 release fallback:', err)
+      console.warn('Could not query GitHub releases API, using default fallback:', err)
     } finally {
       isResolvingRelease = false
     }
 
-    return latestExeDownloadUrl
+    return latestDownloadUrl
   }
 
   // Pre-fetch latest release on load so click is instantaneous
@@ -94,15 +177,15 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault()
 
-      showToast('Downloading the latest version')
+      showToast(`Downloading JioTv Max ${latestVersion}`)
 
       // If resolving is in flight, await it quickly, then trigger direct download
-      const targetUrl = latestExeDownloadUrl || (await resolveLatestRelease())
-      triggerDirectDownload(targetUrl, latestExeFilename)
+      const targetUrl = latestDownloadUrl || (await resolveLatestRelease())
+      triggerDirectDownload(targetUrl, latestFilename)
     })
   })
 
-  // Clean in-page toast notification (no glowing effects)
+  // Clean in-page toast notification
   function showToast(message) {
     let toast = document.getElementById('site-toast')
     if (!toast) {

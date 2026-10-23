@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import appIcon from '@/assets/icons/app-icon-256.png'
+import { APP_TAGLINE } from '@/lib/constants'
 
 interface SplashScreenProps {
   visible: boolean
@@ -43,7 +44,7 @@ export function SplashScreen({ visible }: SplashScreenProps): JSX.Element {
               <p className="font-sans text-[24px] font-[700] tracking-[-0.02em] text-[#F4F4F5]">
                 JioTv <span className="text-[#E11D2E]">Max</span>
               </p>
-              <p className="mt-1 text-[13px] text-[#A1A1A6]">Live television, beautifully staged</p>
+              <p className="mt-1 text-[13px] text-[#A1A1A6]">{APP_TAGLINE}</p>
             </div>
 
             {/* Progress bar — same red as the icon colour theme */}

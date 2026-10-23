@@ -1,18 +1,38 @@
 /**
  * JioTv Max — Official Landing Page JavaScript
- * Clean, lightweight, dependency-free.
+ * Clean, lightweight, direct-download.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // GitHub Latest Release Windows Binary (.exe) Auto-Resolver & Downloader
   const GITHUB_REPO = 'Tijil-Das/JioTV-Max'
-  const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases/latest`
-  let latestExeDownloadUrl = null
+  // Direct default fallback to the published release binary
+  let latestExeDownloadUrl =
+    'https://github.com/Tijil-Das/JioTV-Max/releases/download/v1.0.0/JioTv-Max-1.0.0-setup.exe'
+  let latestExeFilename = 'JioTv-Max-1.0.0-setup.exe'
   let isResolvingRelease = false
 
+  function detectOS() {
+    const ua = navigator.userAgent || ''
+    if (/Windows/i.test(ua)) return 'Windows'
+    if (/Macintosh|Mac OS X/i.test(ua)) return 'macOS'
+    if (/Linux/i.test(ua)) return 'Linux'
+    if (/Android/i.test(ua)) return 'Android'
+    if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS'
+    return 'Windows'
+  }
+
+  function triggerDirectDownload(url, filename) {
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename || 'JioTv-Max-1.0.0-setup.exe')
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   async function resolveLatestRelease() {
-    if (latestExeDownloadUrl) return latestExeDownloadUrl
-    if (isResolvingRelease) return null
+    if (isResolvingRelease) return latestExeDownloadUrl
     isResolvingRelease = true
 
     try {
@@ -20,84 +40,74 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { Accept: 'application/vnd.github.v3+json' }
       })
 
-      if (!response.ok) {
-        throw new Error(`GitHub API returned HTTP ${response.status}`)
-      }
+      if (response.ok) {
+        const releaseData = await response.json()
+        if (Array.isArray(releaseData.assets)) {
+          const exeAsset = releaseData.assets.find(
+            (asset) =>
+              typeof asset.name === 'string' &&
+              asset.name.toLowerCase().endsWith('.exe') &&
+              !asset.name.toLowerCase().includes('blockmap')
+          )
 
-      const releaseData = await response.json()
+          if (exeAsset && exeAsset.browser_download_url) {
+            latestExeDownloadUrl = exeAsset.browser_download_url
+            latestExeFilename = exeAsset.name
 
-      if (Array.isArray(releaseData.assets)) {
-        // Look for the Windows installer setup .exe
-        const exeAsset = releaseData.assets.find(
-          (asset) =>
-            typeof asset.name === 'string' &&
-            asset.name.toLowerCase().endsWith('.exe') &&
-            !asset.name.toLowerCase().includes('blockmap')
-        )
-
-        if (exeAsset && exeAsset.browser_download_url) {
-          latestExeDownloadUrl = exeAsset.browser_download_url
-
-          // Update all download buttons with direct binary download link and filename
-          const downloadButtons = document.querySelectorAll('.download-trigger')
-          downloadButtons.forEach((btn) => {
-            btn.setAttribute('href', latestExeDownloadUrl)
-            btn.setAttribute('download', exeAsset.name)
-          })
-
-          // Dynamically update version badges across the site
-          if (releaseData.tag_name) {
-            const pillBadge = document.querySelector('.hero-pill-badge')
-            if (pillBadge) pillBadge.textContent = `${releaseData.tag_name} RELEASE`
-
-            const noteSpans = document.querySelectorAll('.hero-badge-note span, .download-note')
-            noteSpans.forEach((el) => {
-              if (el.textContent.includes('v1.0.0')) {
-                el.textContent = el.textContent.replace('v1.0.0', releaseData.tag_name)
-              }
+            // Update all download button hrefs and download attributes
+            const downloadButtons = document.querySelectorAll('.download-trigger')
+            downloadButtons.forEach((btn) => {
+              btn.setAttribute('href', latestExeDownloadUrl)
+              btn.setAttribute('download', latestExeFilename)
             })
-          }
 
-          return latestExeDownloadUrl
+            // Update version badges across the site
+            if (releaseData.tag_name) {
+              const pillBadge = document.querySelector('.hero-pill-badge')
+              if (pillBadge) pillBadge.textContent = `${releaseData.tag_name} RELEASE`
+
+              const noteSpans = document.querySelectorAll('.hero-badge-note span, .download-note')
+              noteSpans.forEach((el) => {
+                if (el.textContent.includes('v1.0.0')) {
+                  el.textContent = el.textContent.replace(/v[0-9.]+/g, releaseData.tag_name)
+                }
+              })
+            }
+          }
         }
       }
     } catch (err) {
-      console.warn('Could not auto-resolve GitHub release asset:', err)
+      console.warn('Using direct v1.0.0 release fallback:', err)
     } finally {
       isResolvingRelease = false
     }
 
-    return null
+    return latestExeDownloadUrl
   }
 
   // Pre-fetch latest release on load so click is instantaneous
   resolveLatestRelease()
 
+  // Handle direct download clicks
   const downloadButtons = document.querySelectorAll('.download-trigger')
   downloadButtons.forEach((btn) => {
     btn.addEventListener('click', async (e) => {
-      // If we already have the direct binary link resolved, let native navigation trigger download
-      if (latestExeDownloadUrl) {
-        showToast('Starting download for Windows...')
-        return
-      }
-
-      // If clicked before the initial fetch completed, prevent default and resolve immediately
       e.preventDefault()
-      showToast('Finding latest Windows installer...')
 
-      const url = await resolveLatestRelease()
-      if (url) {
-        showToast('Starting download for Windows...')
-        window.location.href = url
+      const userOS = detectOS()
+      if (userOS === 'Windows') {
+        showToast('Starting direct download for Windows (64-bit)...')
       } else {
-        // Fallback to releases page
-        window.location.href = RELEASES_PAGE
+        showToast(`JioTv Max is built for Windows 10/11 x64. Downloading Windows setup for ${userOS}...`)
       }
+
+      // If resolving is in flight, await it quickly, then trigger direct download
+      const targetUrl = latestExeDownloadUrl || (await resolveLatestRelease())
+      triggerDirectDownload(targetUrl, latestExeFilename)
     })
   })
 
-  // Clean In-Page Toast Notification (no glowing effects)
+  // Clean in-page toast notification (no glowing effects)
   function showToast(message) {
     let toast = document.getElementById('site-toast')
     if (!toast) {
@@ -131,6 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       toast.style.opacity = '0'
       toast.style.transform = 'translateX(-50%) translateY(16px)'
-    }, 3200)
+    }, 3500)
   }
 })

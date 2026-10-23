@@ -7,19 +7,26 @@ import { execa } from 'execa'
 import fs from 'node:fs'
 import path from 'node:path'
 import semver from 'semver'
+import { getLatestRelease, downloadManifest, getReleaseByTag } from './github.js'
 
 export interface RepoContext {
   /** Absolute path to the git repo root */
   gitRoot: string
   /** Absolute path to the app's package.json directory */
   appDir: string
-  /** Current app version from package.json */
+  /** Local version from package.json */
+  localVersion: string
+  /** Live published Windows app version from GitHub Releases / latest.yml (central source of truth) */
+  remotePublishedVersion: string | null
+  /** Effective app version to bump from (max of GitHub source of truth and local) */
   appVersion: string
+  /** Whether the effective version was synchronized from GitHub */
+  isRemoteSynced: boolean
   /** Package manager used in the app dir */
   packageManager: 'pnpm' | 'npm' | 'yarn'
   /** Current git branch */
   branch: string
-  /** Latest local tag (e.g. "v1.0.0") or null */
+  /** Latest tag (e.g. "v1.0.1") from git/GitHub */
   lastTag: string | null
   /** GitHub owner/repo, derived from remote origin URL */
   owner: string
@@ -85,18 +92,10 @@ export async function discoverRepo(): Promise<RepoContext> {
   const { stdout: branchOut } = await execa('git', ['branch', '--show-current'], { cwd: root })
   const branch = branchOut.trim()
 
-  // 4. Last tag
-  let lastTag: string | null = null
+  // 4. Fetch latest tags from origin so local git tag cache is never stale
   try {
-    const { stdout: tagOut } = await execa(
-      'git',
-      ['describe', '--tags', '--abbrev=0', '--match', 'v*'],
-      { cwd: root }
-    )
-    lastTag = tagOut.trim() || null
-  } catch {
-    lastTag = null
-  }
+    await execa('git', ['fetch', 'origin', '--tags', '--quiet'], { cwd: root })
+  } catch {}
 
   // 5. App dir — find package.json with electron-builder config
   const candidateAppDirs = [
@@ -118,12 +117,72 @@ export async function discoverRepo(): Promise<RepoContext> {
     }
   }
 
-  // 6. App version
+  // 6. Local version from package.json
   const appPjPath = path.join(appDir, 'package.json')
   const appPj = JSON.parse(fs.readFileSync(appPjPath, 'utf8'))
-  const appVersion: string = appPj.version
+  const localVersion: string = appPj.version
 
-  // 7. Package manager
+  // 7. Last tag from local git (now fetched)
+  let lastTag: string | null = null
+  try {
+    const { stdout: tagOut } = await execa(
+      'git',
+      ['describe', '--tags', '--abbrev=0', '--match', 'v*'],
+      { cwd: root }
+    )
+    lastTag = tagOut.trim() || null
+  } catch {
+    lastTag = null
+  }
+
+  // 8. Central source of truth: Query GitHub Releases & Windows latest.yml manifest
+  let remotePublishedVersion: string | null = null
+  try {
+    const latestRelease = await getLatestRelease(owner, repo)
+    if (latestRelease && !latestRelease.draft) {
+      // Find latest.yml asset (central Windows update manifest)
+      const manifestAsset = latestRelease.assets?.find((a) => a.name === 'latest.yml')
+      if (manifestAsset?.browser_download_url) {
+        const manifest = await downloadManifest(manifestAsset.browser_download_url)
+        if (manifest) {
+          const m = manifest.match(/^version:\s*(.+)$/m)
+          if (m) {
+            remotePublishedVersion = semver.clean(m[1].trim())
+          }
+        }
+      }
+      // If latest.yml didn't yield version, fall back to release tag_name
+      if (!remotePublishedVersion && latestRelease.tag_name) {
+        remotePublishedVersion = semver.clean(latestRelease.tag_name)
+      }
+
+      // If remote tag is newer than local lastTag, update lastTag to GitHub's reality
+      if (latestRelease.tag_name) {
+        const cleanLatest = semver.clean(latestRelease.tag_name)
+        const cleanLast = lastTag ? semver.clean(lastTag) : null
+        if (!cleanLast || (cleanLatest && semver.gt(cleanLatest, cleanLast))) {
+          lastTag = latestRelease.tag_name
+        }
+      }
+    }
+  } catch {}
+
+  // Effective version to bump from:
+  // GitHub Releases / Windows latest.yml is the central source of truth.
+  // If remote version exists and is semver-valid:
+  // If remote is greater than local, local machine has stale version; we synchronize from GitHub.
+  let isRemoteSynced = false
+  let appVersion = localVersion
+  if (remotePublishedVersion && semver.valid(remotePublishedVersion)) {
+    if (semver.gt(remotePublishedVersion, localVersion)) {
+      appVersion = remotePublishedVersion
+      isRemoteSynced = true
+    } else {
+      appVersion = localVersion
+    }
+  }
+
+  // 9. Package manager
   const packageManager: 'pnpm' | 'npm' | 'yarn' = fs.existsSync(
     path.join(appDir, 'pnpm-lock.yaml')
   )
@@ -132,7 +191,7 @@ export async function discoverRepo(): Promise<RepoContext> {
     ? 'yarn'
     : 'npm'
 
-  // 8. Workflow file
+  // 10. Workflow file
   const workflowPath = path.join(root, '.github', 'workflows', 'release.yml')
   if (!fs.existsSync(workflowPath)) {
     throw new Error(`release.yml not found at ${workflowPath}`)
@@ -152,7 +211,7 @@ export async function discoverRepo(): Promise<RepoContext> {
   // matrix
   const workflowHasMatrix = workflowYaml.includes('matrix:')
 
-  // 9. Configured platforms from electron-builder config
+  // 11. Configured platforms from electron-builder config
   const configuredPlatforms: ('windows' | 'mac' | 'linux')[] = []
   if (appPj.build?.win) configuredPlatforms.push('windows')
   if (appPj.build?.mac) configuredPlatforms.push('mac')
@@ -160,14 +219,17 @@ export async function discoverRepo(): Promise<RepoContext> {
   // Always include windows if nothing found (fallback)
   if (configuredPlatforms.length === 0) configuredPlatforms.push('windows')
 
-  // 10. release-notes.md — workflow checks ../release-notes.md (relative to JioTV-Max-Windows)
+  // 12. release-notes.md — workflow checks ../release-notes.md (relative to JioTV-Max-Windows)
   // which maps to root/release-notes.md
   const releaseNotesPath = path.join(root, 'release-notes.md')
 
   return {
     gitRoot: root,
     appDir: appDir.replace(/\\/g, '/'),
+    localVersion,
+    remotePublishedVersion,
     appVersion,
+    isRemoteSynced,
     packageManager,
     branch,
     lastTag,
@@ -199,10 +261,12 @@ export function computeNextVersion(
   return clean
 }
 
-/** Check whether a tag already exists locally or on origin. */
+/** Check whether a tag already exists locally or on origin / GitHub. */
 export async function tagExists(
   tag: string,
-  cwd: string
+  cwd: string,
+  owner?: string,
+  repo?: string
 ): Promise<{ local: boolean; remote: boolean }> {
   let local = false
   let remote = false
@@ -216,6 +280,12 @@ export async function tagExists(
     })
     remote = stdout.trim().length > 0
   } catch {}
+  if (!remote && owner && repo) {
+    try {
+      const rel = await getReleaseByTag(owner, repo, tag)
+      if (rel) remote = true
+    } catch {}
+  }
   return { local, remote }
 }
 

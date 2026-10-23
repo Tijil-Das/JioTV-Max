@@ -11,6 +11,8 @@ import semver from 'semver'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
 
+import path from 'node:path'
+
 import {
   discoverRepo,
   computeNextVersion,
@@ -24,7 +26,7 @@ import {
 import { bumpPackageJson, createReleaseCommit, pushRelease, rollbackRelease } from '../lib/git.js'
 import { hasToken, GhAuthError, getReleaseByTag, downloadManifest, getLatestRelease } from '../lib/github.js'
 import { startDashboard } from '../lib/dashboard.js'
-import { c, G, IS_TTY, USE_COLOR, fmtDuration, link, termWidth } from '../lib/ui.js'
+import { c, G, IS_TTY, USE_COLOR, fmtDuration, link, termWidth, renderMarkdown } from '../lib/ui.js'
 
 export interface ReleaseOptions {
   bump?: string
@@ -59,9 +61,15 @@ function printBanner(noBanner: boolean, appName: string): void {
 // ─── Context card ─────────────────────────────────────────────────────────────
 
 function printContextCard(ctx: RepoContext, authenticated: boolean): void {
+  const versionDisplay = ctx.remotePublishedVersion
+    ? ctx.isRemoteSynced
+      ? `${c.cyan(ctx.appVersion)} ${c.yellow(`(GitHub source of truth; local was ${ctx.localVersion})`)}`
+      : `${c.cyan(ctx.appVersion)} ${c.green(`(verified with GitHub Releases)`)}`
+    : `${c.cyan(ctx.appVersion)} ${c.dim('(local package.json)')}`
+
   const lines = [
     `${c.bold('App')}      ${ctx.owner}/${ctx.repo}`,
-    `${c.bold('Version')}  ${c.cyan(ctx.appVersion)}`,
+    `${c.bold('Version')}  ${versionDisplay}`,
     `${c.bold('Branch')}   ${ctx.branch}`,
     `${c.bold('Last Tag')} ${ctx.lastTag ?? c.dim('none')}`,
     `${c.bold('Auth')}     ${authenticated ? c.green('GitHub token found') : c.yellow('No token — set GITHUB_TOKEN')}`,
@@ -115,6 +123,16 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
 
   printBanner(opts.noBanner ?? false, ctx.repo)
   printContextCard(ctx, authenticated)
+
+  if (ctx.isRemoteSynced) {
+    p.log.warn(
+      c.yellow(
+        `Central source of truth notice: GitHub live Windows version is v${ctx.remotePublishedVersion}, ` +
+        `while local package.json was ${ctx.localVersion}.\n` +
+        `The CLI automatically synchronized the base version to v${ctx.appVersion} to ensure proper bumping.`
+      )
+    )
+  }
 
   if (dryRun) {
     p.note(
@@ -218,10 +236,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   }
 
   // Validate: tag must not exist
-  const { local: tagLocal, remote: tagRemote } = await tagExists(newTag, ctx.gitRoot)
+  const { local: tagLocal, remote: tagRemote } = await tagExists(newTag, ctx.gitRoot, ctx.owner, ctx.repo)
   if (tagLocal || tagRemote) {
     p.log.error(
-      `Tag ${newTag} already exists${tagLocal ? ' locally' : ''}${tagRemote ? ' on origin' : ''}. ` +
+      `Tag ${newTag} already exists${tagLocal ? ' locally' : ''}${tagRemote ? ' on origin / GitHub' : ''}. ` +
       `Choose a different version.`
     )
     process.exit(1)
@@ -235,11 +253,20 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   let notesContent = readReleaseNotes(notesPath)
 
   if (!nonInteractive && IS_TTY) {
-    const notesPreview = notesContent
-      ? notesContent.split('\n').slice(0, 8).join('\n') + (notesContent.split('\n').length > 8 ? '\n…' : '')
-      : '(file not found or empty)'
-
-    p.note(notesPreview, `release-notes.md preview`)
+    if (notesContent?.trim()) {
+      console.log(
+        boxen(renderMarkdown(notesContent), {
+          padding: { top: 0, bottom: 0, left: 1, right: 2 },
+          borderStyle: 'round',
+          borderColor: 'cyan',
+          title: ` ${c.bold('Release Notes Preview')} (${path.basename(notesPath)}) `,
+          titleAlignment: 'center',
+        })
+      )
+      console.log('')
+    } else {
+      p.note(c.yellow('(release-notes.md is empty or missing)'), 'Release notes preview')
+    }
 
     const notesOk = await p.confirm({
       message: `Is release-notes.md ready for ${newTag}?`,
@@ -318,7 +345,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
     {
       label: `Tag ${newTag} does not exist`,
       check: async () => {
-        const { local, remote } = await tagExists(newTag, ctx.gitRoot)
+        const { local, remote } = await tagExists(newTag, ctx.gitRoot, ctx.owner, ctx.repo)
         return (local || remote) ? `Tag ${newTag} already exists — choose a different version` : null
       },
     },

@@ -137,3 +137,106 @@ let _spinnerTick = 0
 export function nextSpinnerFrame(): string {
   return G.spinner_frames[_spinnerTick++ % G.spinner_frames.length]
 }
+
+// ─── Markdown terminal renderer ───────────────────────────────────────────────
+
+function formatInlineMarkdown(text: string): string {
+  // Bold: **text**
+  let res = text.replace(/\*\*([^*]+)\*\*/g, (_, p1) => c.bold(p1))
+  // Italic: *text*
+  res = res.replace(/(^|[^*])\*([^*]+)\*/g, (_, p0, p1) => `${p0}${c.italic(p1)}`)
+  // Inline code: `code`
+  res = res.replace(/`([^`]+)`/g, (_, p1) => c.cyan(p1))
+  // Links: [label](url)
+  res = res.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => `${c.bold(label)} (${c.dim(url)})`)
+  return res
+}
+
+/**
+ * Render GitHub-flavored markdown into polished, colored terminal output.
+ */
+export function renderMarkdown(markdown: string): string {
+  if (!markdown?.trim()) return c.dim('  (release notes are empty)')
+
+  const lines = markdown.split(/\r?\n/)
+  const output: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i]
+    const trimmed = rawLine.trim()
+
+    // Title 1: # Title
+    if (/^#\s+(.+)$/.test(rawLine)) {
+      const title = rawLine.replace(/^#\s+/, '').trim()
+      output.push('')
+      output.push(c.bold(c.cyan(`=== ${title} ===`)))
+      output.push('')
+      continue
+    }
+
+    // Title 2: ## Section
+    if (/^##\s+(.+)$/.test(rawLine)) {
+      const title = rawLine.replace(/^##\s+/, '').trim()
+      output.push('')
+      output.push(c.bold(c.red(`● ${title}`)))
+      continue
+    }
+
+    // Title 3: ### Subsection
+    if (/^###\s+(.+)$/.test(rawLine)) {
+      const title = rawLine.replace(/^###\s+/, '').trim()
+      output.push('')
+      output.push(c.bold(c.yellow(`  ▸ ${title}`)))
+      continue
+    }
+
+    // Horizontal divider: --- or *** or ___
+    if (/^\s*[-*_]{3,}\s*$/.test(trimmed)) {
+      output.push(c.dim('  ' + '─'.repeat(48)))
+      continue
+    }
+
+    // Blockquote: > text
+    if (/^\s*>\s*(.+)$/.test(rawLine)) {
+      const m = rawLine.match(/^\s*>\s*(.+)$/)!
+      output.push(`  ${c.dim('│')} ${c.italic(formatInlineMarkdown(m[1]))}`)
+      continue
+    }
+
+    // Bullet with bold key: - **Key**: description
+    if (/^\s*[-*]\s+\*\*([^*]+)\*\*:(.*)$/.test(rawLine)) {
+      const m = rawLine.match(/^\s*[-*]\s+\*\*([^*]+)\*\*:(.*)$/)!
+      const itemTitle = m[1].trim()
+      const itemDesc = formatInlineMarkdown(m[2])
+      output.push(`    ${c.green(G.bullet)} ${c.bold(c.white(itemTitle))}:${itemDesc}`)
+      continue
+    }
+
+    // Numbered list: 1. Item
+    if (/^\s*(\d+)\.\s+(.+)$/.test(rawLine)) {
+      const m = rawLine.match(/^\s*(\d+)\.\s+(.+)$/)!
+      output.push(`    ${c.yellow(m[1] + '.')} ${formatInlineMarkdown(m[2])}`)
+      continue
+    }
+
+    // Standard list item: - Item
+    if (/^\s*[-*]\s+(.+)$/.test(rawLine)) {
+      const itemText = rawLine.replace(/^\s*[-*]\s+/, '')
+      output.push(`    ${c.cyan(G.bullet)} ${formatInlineMarkdown(itemText)}`)
+      continue
+    }
+
+    // Empty line
+    if (!trimmed) {
+      if (output.length > 0 && output[output.length - 1] !== '') {
+        output.push('')
+      }
+      continue
+    }
+
+    // General text (e.g. footer notes)
+    output.push(`  ${formatInlineMarkdown(rawLine)}`)
+  }
+
+  return output.join('\n')
+}

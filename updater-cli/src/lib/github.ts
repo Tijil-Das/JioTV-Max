@@ -36,6 +36,7 @@ export interface WorkflowRun {
   created_at: string
   updated_at: string
   head_sha: string
+  head_branch?: string
   workflow_id: number
 }
 
@@ -331,5 +332,26 @@ export async function uploadReleaseAsset(
     throw new Error(`Failed to upload asset ${assetName} (${res.status}): ${errText}`)
   }
   return (await res.json()) as GhAsset
+}
+
+/** Delete an asset from a GitHub release by asset ID. */
+export async function deleteReleaseAsset(
+  owner: string,
+  repo: string,
+  assetId: number
+): Promise<void> {
+  const token = getToken()
+  if (!token) throw new GhAuthError('GitHub token required to delete release assets.')
+  const url = `${apiBase(owner, repo)}/releases/assets/${assetId}`
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `token ${token}`,
+      'User-Agent': 'jiotv-max-updater-cli/1.0',
+    },
+  })
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete asset ${assetId} (${res.status})`)
+  }
 }
 

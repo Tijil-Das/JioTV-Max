@@ -21,24 +21,35 @@ export async function runStatus(): Promise<void> {
   }
 
   const lines: string[] = [
-    `${c.bold('Repo')}       ${ctx.owner}/${ctx.repo}`,
-    `${c.bold('App version')} ${c.cyan(ctx.appVersion)}`,
-    `${c.bold('Branch')}     ${ctx.branch}`,
-    `${c.bold('Last tag')}   ${ctx.lastTag ?? c.dim('none')}`,
-    `${c.bold('Auth')}       ${hasToken() ? c.green('GitHub token found') : c.yellow('No token')}`,
+    `${c.bold('Repo')}            ${ctx.owner}/${ctx.repo}`,
+    `${c.bold('Live App (GitHub)')} ${ctx.remotePublishedVersion ? c.cyan('v' + ctx.remotePublishedVersion) : c.dim('none published')}`,
+    `${c.bold('Local package.json')} ${c.dim(ctx.localVersion)}${ctx.isRemoteSynced ? c.yellow(' (behind GitHub — auto-synced)') : c.green(' (in sync)')}`,
+    `${c.bold('Effective Bump')}  ${c.cyan(ctx.appVersion)}`,
+    `${c.bold('Branch')}          ${ctx.branch}`,
+    `${c.bold('Last Tag')}        ${ctx.lastTag ?? c.dim('none')}`,
+    `${c.bold('Auth')}            ${hasToken() ? c.green('GitHub token found') : c.yellow('No token — configure in main menu')}`,
   ]
 
   // GitHub release status
   try {
     const release = await getLatestRelease(ctx.owner, ctx.repo)
     if (release) {
+      const assetNames = release.assets.map((a) => a.name)
+      const hasInstaller = assetNames.some((n) => n.endsWith('.exe'))
+      const hasManifest = assetNames.some((n) => n === 'latest.yml')
+      const hasBlockmap = assetNames.some((n) => n.endsWith('.blockmap'))
+
       lines.push('')
       lines.push(
         `${c.bold('Latest release')} ${c.cyan(release.tag_name)} · ` +
         `${release.draft ? c.yellow('DRAFT') : c.green('Published')} · ` +
         `${link('Open', release.html_url)}`
       )
-      lines.push(`  Assets: ${release.assets.map((a) => a.name).join(', ')}`)
+      lines.push(
+        `  Assets: ${hasInstaller ? c.green('✓ exe') : c.red('✗ exe')}  ` +
+        `${hasManifest ? c.green('✓ latest.yml') : c.red('✗ latest.yml')}  ` +
+        `${hasBlockmap ? c.green('✓ .blockmap') : c.yellow('⚠ missing .blockmap (run: updater-cli blockmap)')}`
+      )
     }
   } catch {}
 

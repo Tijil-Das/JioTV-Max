@@ -209,3 +209,80 @@ describe('rollback', () => {
     expect(undone[1]).toContain('soft')
   })
 })
+
+// ─── Central Source of Truth version resolution ───────────────────────────────
+
+describe('Central source of truth version resolution', () => {
+  function resolveEffectiveVersion(localVersion: string, remotePublishedVersion: string | null) {
+    let isRemoteSynced = false
+    let appVersion = localVersion
+    if (remotePublishedVersion && semver.valid(remotePublishedVersion)) {
+      if (semver.gt(remotePublishedVersion, localVersion)) {
+        appVersion = remotePublishedVersion
+        isRemoteSynced = true
+      } else {
+        appVersion = localVersion
+      }
+    }
+    return { appVersion, isRemoteSynced }
+  }
+
+  it('uses remote version when local machine has expired/older version', () => {
+    const res = resolveEffectiveVersion('1.0.0', '1.0.1')
+    expect(res.appVersion).toBe('1.0.1')
+    expect(res.isRemoteSynced).toBe(true)
+  })
+
+  it('keeps local version when local is in sync with GitHub', () => {
+    const res = resolveEffectiveVersion('1.0.1', '1.0.1')
+    expect(res.appVersion).toBe('1.0.1')
+    expect(res.isRemoteSynced).toBe(false)
+  })
+
+  it('preserves manual local bump when ahead of remote', () => {
+    const res = resolveEffectiveVersion('1.0.2', '1.0.1')
+    expect(res.appVersion).toBe('1.0.2')
+    expect(res.isRemoteSynced).toBe(false)
+  })
+
+  it('falls back gracefully to local when remote is null (offline/new repo)', () => {
+    const res = resolveEffectiveVersion('1.0.0', null)
+    expect(res.appVersion).toBe('1.0.0')
+    expect(res.isRemoteSynced).toBe(false)
+  })
+})
+
+// ─── Markdown terminal renderer ───────────────────────────────────────────────
+
+describe('renderMarkdown', () => {
+  it('renders headers, bullets, inline bold, code, and links properly', async () => {
+    const { renderMarkdown } = await import('../src/lib/ui.js')
+    const md = [
+      '# JioTV Max v1.0.2',
+      '',
+      '## What\'s New',
+      '- **Direct Channel**: Fast launch `channelId`',
+      '- Standard bullet item with [link](https://example.com)',
+      '',
+      '---',
+      '> Important notice',
+      '1. Step one',
+    ].join('\n')
+
+    const rendered = renderMarkdown(md)
+    expect(rendered).toContain('JioTV Max v1.0.2')
+    expect(rendered).toContain('What\'s New')
+    expect(rendered).toContain('Direct Channel')
+    expect(rendered).toContain('channelId')
+    expect(rendered).toContain('link')
+    expect(rendered).toContain('https://example.com')
+    expect(rendered).toContain('Important notice')
+    expect(rendered).toContain('1.')
+  })
+
+  it('handles empty or blank markdown', async () => {
+    const { renderMarkdown } = await import('../src/lib/ui.js')
+    expect(renderMarkdown('')).toContain('empty')
+  })
+})
+

@@ -12,7 +12,7 @@ import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { discoverRepo } from '../lib/repo.js'
-import { getLatestRelease, getReleaseByTag, uploadReleaseAsset, hasToken, GhRelease } from '../lib/github.js'
+import { getLatestRelease, getReleaseByTag, uploadReleaseAsset, deleteReleaseAsset, hasToken, GhRelease } from '../lib/github.js'
 import { c, G } from '../lib/ui.js'
 
 export async function ensureReleaseBlockmap(tag?: string): Promise<{ success: boolean; message: string }> {
@@ -43,7 +43,9 @@ export async function ensureReleaseBlockmap(tag?: string): Promise<{ success: bo
 
   const targetTag = release.tag_name
   const assetNames = release.assets.map((a) => a.name)
-  const exeAsset = release.assets.find((a) => a.name.endsWith('.exe') && !a.name.includes('uninstaller'))
+  const exeAsset = release.assets.find(
+    (a) => a.name.toLowerCase().endsWith('.exe') && !a.name.toLowerCase().includes('uninstaller')
+  )
 
   if (!exeAsset) {
     sp.stop(c.red(`Release ${targetTag} does not contain an .exe installer.`))
@@ -122,6 +124,13 @@ export async function ensureReleaseBlockmap(tag?: string): Promise<{ success: bo
     sp2.stop(c.green(`${G.tick} Generated ${expectedBlockmapName} (${(blockmapSize / 1024).toFixed(1)} KB)`))
 
     sp2.start(`Uploading ${expectedBlockmapName} to GitHub release ${targetTag}…`)
+    // Delete any existing corrupted/partial asset with this name first to prevent 422 conflicts
+    const existingAsset = release.assets.find((a) => a.name === expectedBlockmapName)
+    if (existingAsset) {
+      try {
+        await deleteReleaseAsset(ctx.owner, ctx.repo, existingAsset.id)
+      } catch {}
+    }
     const blockmapData = fs.readFileSync(tmpBlockmap)
     await uploadReleaseAsset(ctx.owner, ctx.repo, release.id, expectedBlockmapName, blockmapData, 'application/gzip')
     sp2.stop(c.green(`${G.tick} Successfully published ${expectedBlockmapName} to ${targetTag}`))

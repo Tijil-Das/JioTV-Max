@@ -281,12 +281,19 @@ export async function startDashboard(opts: DashboardOptions): Promise<DashboardR
   if (!simulate) {
     if (!runId) {
       console.log(c.dim('  Waiting for GitHub to start the workflow run…'))
+      const tagSha = await getTagSha(owner, repo, tag).catch(() => null)
       const deadline = Date.now() + 90_000
       while (Date.now() < deadline) {
-        let runs = await listWorkflowRuns(owner, repo, workflowFile, { branch: tag })
+        let runs: WorkflowRun[] = []
+        if (tagSha) {
+          runs = await listWorkflowRuns(owner, repo, workflowFile, tagSha).catch(() => [])
+        }
         if (runs.length === 0) {
-          const allRuns = await listWorkflowRuns(owner, repo, workflowFile)
-          runs = allRuns.filter((r) => r.head_branch === tag)
+          runs = await listWorkflowRuns(owner, repo, workflowFile, { branch: tag }).catch(() => [])
+        }
+        if (runs.length === 0) {
+          const allRuns = await listWorkflowRuns(owner, repo, workflowFile).catch(() => [])
+          runs = allRuns.filter((r) => r.head_branch === tag || (tagSha && r.head_sha === tagSha))
         }
         if (runs.length > 0) {
           run = runs[0]

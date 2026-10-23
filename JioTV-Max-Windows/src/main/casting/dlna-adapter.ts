@@ -37,7 +37,16 @@ export class DlnaAdapter extends DeviceAdapter {
       this.ssdp.on('response', (headers: any, statusCode: number, rinfo: any) => {
         const locationUrl = headers.LOCATION || headers.location || headers.Location
         if (statusCode !== 200 || !locationUrl) return
-        this.fetchDeviceDescription(locationUrl, rinfo.address)
+        const host = rinfo?.address || new URL(locationUrl).hostname || 'unknown'
+        this.fetchDeviceDescription(locationUrl, host)
+      })
+
+      // Also listen for unsolicited advertise-alive NOTIFY broadcasts from active TVs
+      this.ssdp.on('advertise-alive', (headers: any, rinfo: any) => {
+        const locationUrl = headers.LOCATION || headers.location || headers.Location
+        if (!locationUrl) return
+        const host = rinfo?.address || new URL(locationUrl).hostname || 'unknown'
+        this.fetchDeviceDescription(locationUrl, host)
       })
 
       // Send initial SSDP M-SEARCH for MediaRenderer:1, AVTransport, and ssdp:all
@@ -71,9 +80,15 @@ export class DlnaAdapter extends DeviceAdapter {
 
   private probeLocalRenderers(): void {
     const lanIp = getLanIpAddress()
-    const ports = [1180, 8080, 2869, 1080, 1480, 1580]
-    const ips = ['127.0.0.1']
+    // Port 1331 is Kodi's primary default UPnP/DLNA port; 1889/1080/1180/1280/1480 are other Kodi & DLNA ports
+    const ports = [
+      1331, 1431, 1531, 1631, 1731, 1889,
+      1080, 1180, 1280, 1380, 1480, 1580, 1680, 1780,
+      8080, 2869, 1900, 5000, 8200, 9090, 49152, 49153, 49154, 49155
+    ]
+    const ips: string[] = []
     if (lanIp && lanIp !== '127.0.0.1') ips.push(lanIp)
+    ips.push('127.0.0.1')
 
     for (const ip of ips) {
       for (const port of ports) {
@@ -86,7 +101,7 @@ export class DlnaAdapter extends DeviceAdapter {
 
   private fetchDeviceDescription(locationUrl: string, hostIp: string): void {
     http
-      .get(locationUrl, { timeout: 4000 }, (res) => {
+      .get(locationUrl, { timeout: 3000 }, (res) => {
         if (res.statusCode !== 200) return
         let xml = ''
         res.on('data', (c) => (xml += c))
@@ -123,6 +138,12 @@ export class DlnaAdapter extends DeviceAdapter {
 
       const cleanUdn = rawUdn.replace(/^uuid:/i, '').replace(/[^a-zA-Z0-9-]/g, '')
       const id = `dlna:${cleanUdn || `${hostIp}:${friendlyName}`}`
+
+      // If we already discovered this exact device under the real LAN IP, do not downgrade to 127.0.0.1
+      const existing = this.discoveredDevices.get(id)
+      if (existing && hostIp === '127.0.0.1' && existing.host !== '127.0.0.1') {
+        return
+      }
 
       const record: DlnaDeviceRecord = {
         id,

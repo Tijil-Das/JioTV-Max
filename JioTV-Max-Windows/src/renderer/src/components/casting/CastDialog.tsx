@@ -47,7 +47,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  // 2.5s initial search timer before showing empty state if no devices found
+  // 3.5s initial search timer before showing empty state if no devices found
   useEffect(() => {
     if (!dialogOpen) {
       setSearchTimerDone(false)
@@ -57,7 +57,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
     setSearchTimerDone(false)
     const timer = setTimeout(() => {
       setSearchTimerDone(true)
-    }, 2500)
+    }, 3500)
     return () => clearTimeout(timer)
   }, [dialogOpen])
 
@@ -66,7 +66,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
     void startDiscovery()
     setTimeout(() => {
       setSearchTimerDone(true)
-    }, 2500)
+    }, 3500)
   }, [startDiscovery])
 
   // Focus trap & keyboard navigation

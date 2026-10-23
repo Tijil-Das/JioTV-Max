@@ -45,3 +45,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SKIP_VMP_SIGN: ${{ secrets.EVS_ACCESS_TOKEN == '' && 'true' || 'false' }}
+
+      - name: Publish release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f ../release-notes.md ]; then
+            gh release edit "${GITHUB_REF_NAME}" --notes-file ../release-notes.md --draft=false
+          elif [ -f release-notes.md ]; then
+            gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md --draft=false
+          else
+            gh release edit "${GITHUB_REF_NAME}" --generate-notes --draft=false
+          fi

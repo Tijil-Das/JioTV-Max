@@ -35,12 +35,30 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
-// Prevent Chromium from throttling rendering, background timers, or network when the window
-// is minimized, occluded, covered by other windows, or placed off-screen.
+// Hardware video decode, autoplay, and uninterrupted full-power background streaming.
+// Prevent Chromium and Windows from throttling rendering, background timers, media pipelines,
+// or lowering process/thread priority (e.g. EcoQoS / Efficiency Mode) when the window is minimized or occluded.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
 app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+app.commandLine.appendSwitch('disable-background-media-suspend')
+app.commandLine.appendSwitch(
+  'disable-features',
+  [
+    'CalculateNativeWinOcclusion',
+    'IntensiveWakeUpThrottling',
+    'QuickIntensiveWakeUpThrottlingAfterLoading',
+    'ExpensiveBackgroundTimerThrottling',
+    'ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes',
+    'BackgroundVideoTrackOptimization',
+    'BackgroundVideoPauseOptimization',
+    'UseEcoQoSForBackgroundProcess',
+    'TimerThrottlingForBackgroundTabs'
+  ].join(',')
+)
+app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://127.0.0.1,http://localhost')
 
 // Dev-only: the renderer receives its content from the Vite dev server, so the
 // production CSP in the built index.html cannot apply. The warning is noise in
@@ -215,19 +233,6 @@ if (hasCastLabsComponents) {
 }
 
 
-// Hardware video decode, autoplay, and uninterrupted full-power background streaming.
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
-app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
-// Prevent Chromium from throttling DOM timers, suspending media pipelines, or lowering OS thread priority when minimized or occluded
-app.commandLine.appendSwitch('disable-background-timer-throttling')
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
-app.commandLine.appendSwitch('disable-renderer-backgrounding')
-app.commandLine.appendSwitch('disable-background-media-suspend')
-app.commandLine.appendSwitch(
-  'disable-features',
-  'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes,BackgroundVideoTrackOptimization,BackgroundVideoPauseOptimization'
-)
-app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://127.0.0.1,http://localhost')
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -274,8 +279,8 @@ async function createWindow(): Promise<void> {
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 1100,
-    minHeight: 680,
+    minWidth: 480,
+    minHeight: 320,
     show: false,
     title: 'JioTv Max',
     icon: getAppIconPath(),
@@ -367,6 +372,9 @@ async function createWindow(): Promise<void> {
   })
   mainWindow.on('unmaximize', () => {
     mainWindow?.webContents.send(IPC.windowMaximizedChanged, false)
+  })
+  mainWindow.on('restore', () => {
+    mainWindow?.webContents.invalidate()
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -6,11 +6,11 @@ const rows: Array<[string, string]> = [
   ['J / L', 'Rewind / forward 5s'],
   ['↑ / ↓', 'Volume level (±5%)'],
   ['← / →', 'Rewind / forward 5s'],
-  ['F', 'Fullscreen mode'],
+  ['F', 'Toggle fullscreen'],
   ['M', 'Mute / unmute'],
   ['Q', 'Quality menu'],
   ['?', 'This shortcut sheet'],
-  ['Esc', 'Close overlay / leave player']
+  ['Esc', 'Exit fullscreen / leave player']
 ]
 
 /** Player keyboard reference, toggled with the ? key or the help button. */

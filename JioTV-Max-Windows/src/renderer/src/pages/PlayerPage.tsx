@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   Keyboard,
   LockKeyhole,
+  Maximize,
+  Minimize,
   Play,
   Pause,
   Radio,
@@ -45,6 +47,7 @@ import { SkipButton, type SkipButtonHandle } from '@/components/player/SkipButto
 import { SeekOverlay } from '@/components/player/SeekOverlay'
 import { useDoubleTapSeek } from '@/hooks/useDoubleTapSeek'
 import { PinDialog } from '@/components/settings/PinDialog'
+import { WindowControls } from '@/components/layout/WindowControls'
 
 interface StreamFailure {
   message: string
@@ -262,19 +265,13 @@ export function PlayerPage(): JSX.Element {
   }, [bridge])
 
   useEffect(() => {
-    // Automatically always play in fullscreen
-    if (bridge) {
-      void bridge.setFullscreen(true).catch(() => undefined)
-    }
-    if (typeof document !== 'undefined' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => undefined)
-    }
-    setFullscreen(true)
-
+    // Sync initial fullscreen state with bridge / document without forcing fullscreen
     const onDocumentFullscreen = (): void => {
       const isFs = Boolean(document.fullscreenElement)
       setFullscreen(isFs)
     }
+    onDocumentFullscreen()
+
     document.addEventListener('fullscreenchange', onDocumentFullscreen)
     const off = bridge?.onFullscreenChange((value) => {
       setFullscreen(value)
@@ -347,6 +344,27 @@ export function PlayerPage(): JSX.Element {
     setPlaying(!isPlaying)
   }, [isPlaying, setPlaying, wake])
 
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (bridge) {
+        const next = await bridge.toggleFullscreen()
+        setFullscreen(next)
+        return
+      }
+      if (typeof document !== 'undefined') {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen().catch(() => undefined)
+          setFullscreen(true)
+        } else {
+          await document.exitFullscreen().catch(() => undefined)
+          setFullscreen(false)
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [bridge, setFullscreen])
+
   // Tracks whether the viewer deliberately seeked backward into DVR history
   const userRewoundRef = useRef(false)
 
@@ -394,10 +412,7 @@ export function PlayerPage(): JSX.Element {
       togglePlay()
     },
     onCenterDoubleClick: () => {
-      if (bridge) void bridge.setFullscreen(true).catch(() => undefined)
-      if (typeof document !== 'undefined' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => undefined)
-      }
+      void toggleFullscreen()
     },
     onSeekTo: (target) => {
       userRewoundRef.current = true
@@ -480,20 +495,6 @@ export function PlayerPage(): JSX.Element {
     }
   }, [engine, isPlaying, stream?.isLive, videoRef])
 
-  const ensureFullscreen = useCallback(async () => {
-    try {
-      if (bridge) {
-        await bridge.setFullscreen(true).catch(() => undefined)
-      }
-      if (typeof document !== 'undefined' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen().catch(() => undefined)
-      }
-      setFullscreen(true)
-    } catch {
-      // ignore
-    }
-  }, [bridge, setFullscreen])
-
   const handleBack = useCallback(async () => {
     if (document.fullscreenElement) {
       await document.exitFullscreen().catch(() => undefined)
@@ -563,7 +564,7 @@ export function PlayerPage(): JSX.Element {
       handleSkip('forward')
     },
     m: () => handleToggleMute(),
-    f: () => void ensureFullscreen(),
+    f: () => void toggleFullscreen(),
     q: () => {
       setQualityOpen((value) => !value)
       wake()
@@ -573,6 +574,8 @@ export function PlayerPage(): JSX.Element {
       if (qualityOpen || helpOpen) {
         setQualityOpen(false)
         setHelpOpen(false)
+      } else if (isFullscreen) {
+        void toggleFullscreen()
       } else {
         void handleBack()
       }
@@ -602,26 +605,48 @@ export function PlayerPage(): JSX.Element {
 
   if (!channel) {
     return (
-      <div className="flex h-full items-center justify-center bg-black">
-        <div className="glass max-w-md rounded-panel p-8 text-center">
-          <AlertTriangle className="mx-auto h-8 w-8 text-warning" />
-          <h1 className="mt-4 font-display text-[18px] font-semibold text-white">
-            {catalogueLoading ? 'Loading channel…' : 'Channel unavailable'}
-          </h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
-            {catalogueLoading
-              ? 'Fetching the catalogue so playback can start.'
-              : 'This channel is not part of the current catalogue. It may have moved between packages.'}
-          </p>
-          {!catalogueLoading ? (
-            <Button variant="primary" className="mt-6" onClick={() => void handleBack()}>
-              Return to channels
-            </Button>
-          ) : (
-            <div className="mx-auto mt-6 h-1 w-40 overflow-hidden rounded-pill bg-white/10">
-              <div className="h-full w-1/2 animate-pulse rounded-pill bg-accent-gradient" />
+      <div className="flex h-full w-full flex-col bg-black">
+        {!isFullscreen ? (
+          <header className="drag-region relative z-30 flex h-[38px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
+            <div className="no-drag flex items-center gap-2">
+              <IconButton
+                label="Back"
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleBack()}
+                className="h-7 w-7 text-[#A1A1A6] hover:text-[#F4F4F5]"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </IconButton>
+              <span className="text-[12px] font-semibold text-[#F4F4F5]">JioTv Max</span>
             </div>
-          )}
+            <div className="drag-region h-full flex-1" />
+            <div className="no-drag flex h-full shrink-0 items-center">
+              <WindowControls />
+            </div>
+          </header>
+        ) : null}
+        <div className="flex flex-1 items-center justify-center">
+          <div className="glass max-w-md rounded-panel p-8 text-center">
+            <AlertTriangle className="mx-auto h-8 w-8 text-warning" />
+            <h1 className="mt-4 font-display text-[18px] font-semibold text-white">
+              {catalogueLoading ? 'Loading channel…' : 'Channel unavailable'}
+            </h1>
+            <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
+              {catalogueLoading
+                ? 'Fetching the catalogue so playback can start.'
+                : 'This channel is not part of the current catalogue. It may have moved between packages.'}
+            </p>
+            {!catalogueLoading ? (
+              <Button variant="primary" className="mt-6" onClick={() => void handleBack()}>
+                Return to channels
+              </Button>
+            ) : (
+              <div className="mx-auto mt-6 h-1 w-40 overflow-hidden rounded-pill bg-white/10">
+                <div className="h-full w-1/2 animate-pulse rounded-pill bg-accent-gradient" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -629,30 +654,79 @@ export function PlayerPage(): JSX.Element {
 
   return (
     <div
-      className={cn('relative flex h-full w-full overflow-hidden bg-black', !controlsVisible && 'player-idle')}
+      className={cn(
+        'relative flex h-full w-full flex-col overflow-hidden bg-black select-none',
+        !controlsVisible && 'player-idle'
+      )}
       onPointerMove={wake}
       onPointerDown={wake}
     >
-      <div
-        className="absolute inset-0 cursor-pointer"
-        onClick={(e) => {
-          if (qualityOpen || helpOpen) {
-            e.stopPropagation()
-            setQualityOpen(false)
-            setHelpOpen(false)
-            return
-          }
-          handleContainerClick(e)
-        }}
-      >
-        <video
-          ref={videoRef}
-          playsInline
-          autoPlay={autoplay}
-          className="pointer-events-none absolute inset-0 h-full w-full bg-black object-contain"
-        />
-        <SeekOverlay {...seekOverlay} />
-      </div>
+      {/* Windowed Top Bar */}
+      {!isFullscreen ? (
+        <header className="drag-region relative z-30 flex h-[38px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
+          <div className="no-drag flex min-w-0 items-center gap-2.5">
+            <IconButton
+              label="Back to browse"
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleBack()}
+              className="h-7 w-7 rounded-lg text-[#A1A1A6] hover:bg-white/[0.08] hover:text-[#F4F4F5]"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </IconButton>
+            <ChannelLogo channel={channel} size="sm" />
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-[12px] font-semibold text-[#F4F4F5] max-w-[160px] sm:max-w-[240px]">
+                {channel.name}
+              </span>
+              <LiveBadge />
+              {current ? (
+                <span className="hidden truncate text-[11.5px] text-[#A1A1A6] md:inline">
+                  · {current.title}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="drag-region h-full min-w-4 flex-1" />
+
+          <div className="no-drag flex h-full shrink-0 items-center">
+            <button
+              type="button"
+              title="Fullscreen (F)"
+              aria-label="Fullscreen"
+              onClick={() => void toggleFullscreen()}
+              className="flex h-full w-[42px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]"
+            >
+              <Maximize className="h-3.5 w-3.5" />
+            </button>
+            <WindowControls />
+          </div>
+        </header>
+      ) : null}
+
+      {/* Video Stage Area */}
+      <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-black flex items-center justify-center">
+        <div
+          className="absolute inset-0 cursor-pointer flex items-center justify-center"
+          onClick={(e) => {
+            if (qualityOpen || helpOpen) {
+              e.stopPropagation()
+              setQualityOpen(false)
+              setHelpOpen(false)
+              return
+            }
+            handleContainerClick(e)
+          }}
+        >
+          <video
+            ref={videoRef}
+            playsInline
+            autoPlay={autoplay}
+            className="pointer-events-none h-full w-full bg-black object-contain"
+          />
+          <SeekOverlay {...seekOverlay} />
+        </div>
 
       {/* Channel artwork shows through until the first frame is decoded. */}
       <AnimatePresence>
@@ -693,15 +767,15 @@ export function PlayerPage(): JSX.Element {
         ) : null}
       </AnimatePresence>
 
-      {/* Top overlay */}
-      <div
-        className={cn(
-          'drag-region absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/65 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
-          controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-        )}
-      >
-        <div className="flex items-start justify-between gap-6">
-          <div className="no-drag flex min-w-0 flex-1 items-center gap-3">
+      {/* Fullscreen Top Overlay */}
+      {isFullscreen ? (
+        <div
+          className={cn(
+            'drag-region absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/60 to-transparent pb-14 pt-3 pl-4 pr-0 transition-opacity duration-300',
+            controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
+        >
+          <div className="no-drag flex min-w-0 items-center gap-3">
             <IconButton
               label="Back"
               variant="glass"
@@ -723,8 +797,21 @@ export function PlayerPage(): JSX.Element {
               </p>
             </div>
           </div>
+
+          <div className="no-drag flex h-full shrink-0 items-center pr-2">
+            <IconButton
+              variant="glass"
+              size="sm"
+              label="Exit Fullscreen (Esc or F)"
+              onClick={() => void toggleFullscreen()}
+              className="mr-2"
+            >
+              <Minimize className="h-4 w-4" />
+            </IconButton>
+            <WindowControls />
+          </div>
         </div>
-      </div>
+      ) : null}
 
 
       {/* Buffering: only the spinner itself (thicker stroke, no background circle or pill) */}
@@ -915,7 +1002,7 @@ export function PlayerPage(): JSX.Element {
                 value={muted ? 0 : volume}
                 onChange={(event) => changeVolume(Number(event.target.value))}
                 aria-label="Volume"
-                className="h-1 w-24 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#E11D2E]"
+                className="h-1 w-16 sm:w-24 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#E11D2E]"
               />
             </div>
           </div>
@@ -998,6 +1085,18 @@ export function PlayerPage(): JSX.Element {
                 ) : null}
               </AnimatePresence>
             </div>
+
+            <div className="pointer-events-auto">
+              <IconButton
+                label={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                size="sm"
+                variant="glass"
+                onClick={() => void toggleFullscreen()}
+                className="h-8 w-8 rounded-lg"
+              >
+                {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              </IconButton>
+            </div>
           </div>
         </div>
       </div>
@@ -1059,6 +1158,9 @@ export function PlayerPage(): JSX.Element {
           </div>
         ) : null}
       </AnimatePresence>
+
+      {/* Close Video Stage Area */}
+      </div>
 
       <ShortcutsOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>

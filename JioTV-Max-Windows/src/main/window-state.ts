@@ -31,8 +31,8 @@ export class WindowStateStore {
   async load(): Promise<WindowState> {
     try {
       const raw = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<WindowState>
-      const width = Math.max(1100, Number(raw.width) || DEFAULT_STATE.width)
-      const height = Math.max(680, Number(raw.height) || DEFAULT_STATE.height)
+      const width = Math.max(480, Number(raw.width) || DEFAULT_STATE.width)
+      const height = Math.max(320, Number(raw.height) || DEFAULT_STATE.height)
       const isVisible =
         typeof raw.x === 'number' &&
         typeof raw.y === 'number' &&

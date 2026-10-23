@@ -505,11 +505,11 @@ export function useMediaPlayer({
             useNativeHlsForFairPlay: false,
             lowLatencyMode: false,
             inaccurateManifestTolerance: 0,
-            bufferBehind: 5,
-            bufferingGoal: 15,
+            bufferBehind: 15,
+            bufferingGoal: 30,
             rebufferingGoal: 3,
             stallEnabled: true,
-            stallThreshold: 4,
+            stallThreshold: 6,
             stallSkip: 0,
             safeSeekEndOffset: 1.5
           }
@@ -721,19 +721,45 @@ export function useMediaPlayer({
       rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
     }
 
+    const onWatchdogVisibility = () => {
+      // Whenever visibility changes (minimized, backgrounded, or restored),
+      // reset watchdog timestamp and counter to prevent false freeze detection.
+      lastFramePresentedAt = performance.now()
+      freezeConsecutiveCount = 0
+      if (document.visibilityState === 'visible') {
+        if (!disposed && typeof videoWithCallback.requestVideoFrameCallback === 'function') {
+          rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onWatchdogVisibility)
+
     const videoFreezeWatchdogTimer = window.setInterval(() => {
       if (disposed) return
+
+      // Crucial: When the app is minimized, occluded, or backgrounded, Chromium intentionally
+      // pauses requestVideoFrameCallback and stops presenting video frames to save GPU/power.
+      // Audio and streaming continue smoothly. We MUST NOT treat this normal background behavior
+      // as a frozen video graphics pipeline, which would otherwise trigger continuous destructive
+      // seeks, retryStreaming(), and goLive() stalls in the background!
+      if (document.hidden || document.visibilityState === 'hidden') {
+        lastFramePresentedAt = performance.now()
+        freezeConsecutiveCount = 0
+        lastMediaTime = video.currentTime
+        return
+      }
+
       const currentMediaTime = video.currentTime
       const timeAdvanced = currentMediaTime - lastMediaTime
       lastMediaTime = currentMediaTime
 
-      // Only evaluate when the video is expected to be playing
+      // Only evaluate when the video is expected to be playing and visible
       if (!video.paused && !video.ended && video.readyState >= 2) {
         // Timeline is moving (audio playback clock is advancing)
         if (timeAdvanced > 0.2) {
           const timeSinceFrame = performance.now() - lastFramePresentedAt
-          // If no video frame has been presented for more than 2 seconds
-          if (timeSinceFrame > 2000) {
+          // If no video frame has been presented for more than 3 seconds while visible
+          if (timeSinceFrame > 3000) {
             freezeConsecutiveCount++
             // console.warn(
               // `[useMediaPlayer] Video graphics freeze detected: audio advanced ${timeAdvanced.toFixed(2)}s, but 0 video frames for ${(timeSinceFrame / 1000).toFixed(1)}s (tick ${freezeConsecutiveCount})`
@@ -1210,14 +1236,12 @@ export function useMediaPlayer({
             lowLatencyMode: false,
             // Precise DVR seeking: don't tolerate manifest timing drift.
             inaccurateManifestTolerance: 0,
-            // JioTV premium streams use very short segments, so a large
-            // buffering goal multiplies segment requests needed before playback
-            // starts. Keep DRM buffer lean; HLS fallback uses original values.
-            bufferBehind: activeStream.isDrm ? 5 : 10,
-            bufferingGoal: activeStream.isDrm ? 15 : 20,
+            // Keep a generous forward buffer so background/minimized execution does not exhaust segments
+            bufferBehind: activeStream.isDrm ? 15 : 20,
+            bufferingGoal: activeStream.isDrm ? 30 : 45,
             rebufferingGoal: 3,
             stallEnabled: true,
-            stallThreshold: 4,
+            stallThreshold: 6,
             stallSkip: 0,
             // Leave a 1.5-second guard at the absolute live edge.
             safeSeekEndOffset: 1.5,
@@ -1342,6 +1366,7 @@ export function useMediaPlayer({
       return () => {
         window.clearInterval(seekRangeTimer)
         window.clearInterval(videoFreezeWatchdogTimer)
+        document.removeEventListener('visibilitychange', onWatchdogVisibility)
         if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
           videoWithCallback.cancelVideoFrameCallback(rVfcId)
         }
@@ -1373,6 +1398,7 @@ export function useMediaPlayer({
       clearBuffering()
       window.clearInterval(seekRangeTimer)
       window.clearInterval(videoFreezeWatchdogTimer)
+      document.removeEventListener('visibilitychange', onWatchdogVisibility)
       if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
         videoWithCallback.cancelVideoFrameCallback(rVfcId)
       }

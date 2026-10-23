@@ -78,12 +78,72 @@ function friendlyMediaError(detail?: string): string {
 }
 
 /**
+ * Custom Shaka ABR Manager that strictly enforces top audio fidelity.
+ * Standard SimpleAbrManager evaluates total bandwidth and will aggressively switch to
+ * variants with lower audio bitrates (e.g., 64kbps audio at 1080p) during network adjustments.
+ *
+ * AudioLockedAbrManager filters the variant pool before SimpleAbrManager can consider them,
+ * permanently locking out inferior audio representations while allowing smooth video adaptation
+ * (1080p -> 720p -> 480p) that always retains the highest available audio stream.
+ */
+class AudioLockedAbrManager extends (shaka.abr?.SimpleAbrManager || class {}) {
+  private filterHighQualityAudioVariants(variants: any[]): any[] {
+    if (!variants || variants.length === 0) return variants
+
+    // Group variants by language & channel count
+    const maxBwByGroup = new Map<string, number>()
+    for (const v of variants) {
+      const lang = v.language || (v.audio && v.audio.language) || 'default'
+      const channels = (v.audio && v.audio.channelsCount) || v.channelsCount || 2
+      const key = `${lang}:${channels}`
+      const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+      maxBwByGroup.set(key, Math.max(maxBwByGroup.get(key) || 0, bw))
+    }
+
+    const globalMax = Math.max(
+      ...variants.map((v) => (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0),
+      0
+    )
+
+    const allowed = variants.filter((v) => {
+      const lang = v.language || (v.audio && v.audio.language) || 'default'
+      const channels = (v.audio && v.audio.channelsCount) || v.channelsCount || 2
+      const key = `${lang}:${channels}`
+      const maxBw = maxBwByGroup.get(key) || globalMax
+      if (maxBw > 0) {
+        const audioBw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+        return audioBw >= maxBw * 0.85
+      }
+      return true
+    })
+
+    if (allowed.length > 0) {
+      const allowedSet = new Set(allowed)
+      for (const v of variants) {
+        if (!allowedSet.has(v)) {
+          v.allowedByApplication = false
+        }
+      }
+      return allowed
+    }
+    return variants
+  }
+
+  // @ts-ignore
+  override setVariants(variants: any[]) {
+    const filtered = this.filterHighQualityAudioVariants(variants)
+    // @ts-ignore
+    super.setVariants(filtered)
+  }
+}
+
+/**
  * Picks the optimal variant track prioritizing:
- * 1. Maximum audio fidelity first (highest audioBandwidth) — never downgrade audio!
- * 2. Target height if specified, or highest available video resolution (1080p -> 720p)
+ * 1. Target height if specified, or highest available video resolution (1080p -> 720p)
+ * 2. Maximum audio fidelity first (highest audioBandwidth) — never downgrade audio!
  * 3. Highest video / total bandwidth
  */
-function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: number; bandwidth?: number }>(
+function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: number; bandwidth?: number; id?: number }>(
   tracks: T[],
   targetHeight?: number
 ): T | null {
@@ -99,10 +159,17 @@ function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: numb
 
   const pool = byHeightPool.length > 0 ? byHeightPool : tracks
 
-  // 3. Sort so highest audio and video quality win
+  // 3. Sort so highest video quality and highest audio fidelity win
   return (
     [...pool].sort((a, b) => {
-      // Prioritize tracks with uncompressed/top audio (within 85% of max audio bandwidth)
+      // If target height was not specified, prioritize highest video resolution first
+      if (!targetHeight) {
+        const aHeight = a.height || 0
+        const bHeight = b.height || 0
+        if (bHeight !== aHeight) return bHeight - aHeight
+      }
+
+      // Max audio fidelity takes precedence — never downgrade audio!
       const aAudio = a.audioBandwidth || 0
       const bAudio = b.audioBandwidth || 0
       if (maxAudioBw > 0) {
@@ -112,7 +179,7 @@ function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: numb
       }
       if (bAudio !== aAudio) return bAudio - aAudio
 
-      // Video height
+      // Video height if target height was specified
       const aHeight = a.height || 0
       const bHeight = b.height || 0
       if (bHeight !== aHeight) return bHeight - aHeight
@@ -861,16 +928,45 @@ export function useMediaPlayer({
           const audioTracks = hls.audioTracks
           if (!audioTracks || audioTracks.length === 0) return
           let bestAudioIdx = 0
-          let maxAudioBitrate = -1
+          let highestScore = -1
+
           audioTracks.forEach((t, idx) => {
-            const bitrate = t.bitrate || 0
-            // Prioritize primary/main program tracks (skip commentary/audio-description)
-            const isMain = !/description|commentary|\bad\b/i.test(t.name || '')
-            if (isMain && bitrate > maxAudioBitrate) {
-              maxAudioBitrate = bitrate
+            const name = (t.name || '').toLowerCase()
+            const isExcluded = /description|commentary|\bad\b/i.test(name)
+            if (isExcluded) return
+
+            let score = 0
+            // 1. Explicit bitrate (in bps)
+            if (t.bitrate && t.bitrate > 0) {
+              score += t.bitrate
+            }
+
+            // 2. Name / label bitrate hints (e.g. 192k, 128k vs 64k)
+            const matchKbps = name.match(/(\d+)\s*k(?:bps)?/)
+            if (matchKbps) {
+              score += parseInt(matchKbps[1], 10) * 1000
+            } else if (/high|hq|dolby|5\.1|surround/i.test(name)) {
+              score += 150_000
+            } else if (/low|lq/i.test(name)) {
+              score -= 50_000
+            }
+
+            // 3. Audio codec preference (AAC-LC > HE-AAC, Dolby > AAC)
+            const codec = (t.audioCodec || '').toLowerCase()
+            if (/ec-3|ac-3|eac3/.test(codec)) {
+              score += 200_000
+            } else if (/mp4a\.40\.2/.test(codec)) {
+              score += 128_000
+            } else if (/mp4a\.40\.5/.test(codec)) {
+              score += 64_000 // HE-AAC is lower bitrate
+            }
+
+            if (score > highestScore) {
+              highestScore = score
               bestAudioIdx = idx
             }
           })
+
           if (hls.audioTrack !== bestAudioIdx) {
             hls.audioTrack = bestAudioIdx
           }
@@ -883,6 +979,10 @@ export function useMediaPlayer({
           // console.log(`[useMediaPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
         })
         hls.on(HlsEvents.AUDIO_TRACKS_UPDATED, () => {
+          if (disposed) return
+          selectBestAudioTrack()
+        })
+        hls.on(HlsEvents.AUDIO_TRACK_SWITCHED, () => {
           if (disposed) return
           selectBestAudioTrack()
         })
@@ -967,6 +1067,7 @@ export function useMediaPlayer({
 
         hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
           if (disposed) return
+          selectBestAudioTrack()
           // If the user's intent is auto, activeLevel MUST STAY 'auto' so it never hides itself!
           if (desiredRef.current === 'auto' || hls.autoLevelEnabled) {
             setActiveLevel('auto')
@@ -1175,12 +1276,7 @@ export function useMediaPlayer({
           }
         })
 
-        player.addEventListener('adaptation', () => {
-          if (disposed) return
-          const tracks = player.getVariantTracks()
-          const activeTrack = tracks.find((t: { active?: boolean }) => t.active)
-          // console.log('[useMediaPlayer] Shaka adaptation switched track:', activeTrack?.height, activeTrack?.bandwidth)
-        })
+
 
         // Probe Widevine CDM — try robustness levels from strict → permissive.
         // Whichever succeeds is then fed into the Shaka DRM config so the key
@@ -1240,6 +1336,7 @@ export function useMediaPlayer({
         }
 
         player.configure({
+          abrFactory: () => new AudioLockedAbrManager(),
           drm: drmConfig,
           manifest: {
             dash: {
@@ -1286,11 +1383,29 @@ export function useMediaPlayer({
           }
         })
 
+        // Adaptation event handler with audio fidelity lock:
+        // If Shaka adapts to a variant with lower audio fidelity, instantly re-lock to top audio sibling track!
         player.addEventListener('adaptation', () => {
           if (disposed) return
-          const tracks = player.getVariantTracks()
-          const active = tracks.find((t: { active?: boolean }) => t.active)
-          if (active?.height) {
+          const allTracks = player.getVariantTracks()
+          const active = allTracks.find((t: { active?: boolean }) => t.active)
+          if (!active) return
+
+          // Audio fidelity check: ensure active track is not using an inferior audio track
+          const sameHeightTracks = allTracks.filter((t: { height?: number }) => t.height === active.height)
+          const maxAudioForRes = Math.max(
+            ...sameHeightTracks.map((t: { audioBandwidth?: number }) => t.audioBandwidth || 0),
+            0
+          )
+          const activeAudio = active.audioBandwidth || 0
+          if (maxAudioForRes > 0 && activeAudio < maxAudioForRes * 0.85) {
+            const bestSibling = pickBestVariantTrack(sameHeightTracks, active.height)
+            if (bestSibling && bestSibling.id !== active.id) {
+              player.selectVariantTrack(bestSibling, false)
+            }
+          }
+
+          if (active.height) {
             setActiveHeight(active.height)
             if (desiredRef.current === 'auto') {
               setActiveLevel('auto')
@@ -1307,6 +1422,27 @@ export function useMediaPlayer({
         setReady(true)
         clearBuffering()
         syncSeekRange()
+
+        // Root Audio Lock: Mark any variants with lower audio bandwidth as disallowed
+        try {
+          const rawManifest = (player as any).manifest_
+          if (rawManifest && Array.isArray(rawManifest.variants)) {
+            const maxAudio = Math.max(
+              ...rawManifest.variants.map((v: any) => (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0),
+              0
+            )
+            if (maxAudio > 0) {
+              for (const v of rawManifest.variants) {
+                const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+                if (bw > 0 && bw < maxAudio * 0.85) {
+                  v.allowedByApplication = false
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
 
         // Populate quality selector using player.getVariantTracks()
         const tracks = player.getVariantTracks()
@@ -1338,6 +1474,7 @@ export function useMediaPlayer({
         applyInitialHeight(mapped, (index) => {
           if (index === 'auto') {
             player.configure({
+              abrFactory: () => new AudioLockedAbrManager(),
               preferredAudioChannelCount: 2,
               abr: {
                 enabled: true,
@@ -1357,6 +1494,7 @@ export function useMediaPlayer({
             return
           }
           player.configure({
+            abrFactory: () => new AudioLockedAbrManager(),
             preferredAudioChannelCount: 2,
             abr: { enabled: false }
           })
@@ -1509,12 +1647,15 @@ export function useMediaPlayer({
 
     if (level === 'auto') {
       player.configure({
+        abrFactory: () => new AudioLockedAbrManager(),
         preferredAudioChannelCount: 2,
         abr: {
           enabled: true,
           defaultBandwidthEstimate: 30_000_000,
           useNetworkInformation: false,
-          switchInterval: 1
+          switchInterval: 1,
+          bandwidthDowngradeTarget: 0.85,
+          bandwidthUpgradeTarget: 0.85
         }
       })
       const best = pickBestVariantTrack(tracks)
@@ -1527,6 +1668,7 @@ export function useMediaPlayer({
     }
 
     player.configure({
+      abrFactory: () => new AudioLockedAbrManager(),
       preferredAudioChannelCount: 2,
       abr: { enabled: false }
     })

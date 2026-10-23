@@ -52,7 +52,6 @@ import { CastDialog } from '@/components/casting/CastDialog'
 import { CastingOverlay } from '@/components/casting/CastingOverlay'
 import { CastFallbackModal } from '@/components/casting/CastFallbackModal'
 import { useCastStore } from '@/components/casting/useCastStore'
-import { decryptedCastBridge } from '@/components/casting/DecryptedCastBridge'
 import type { CastMediaInput } from '@shared/cast-types'
 import appIcon from '@/assets/icons/app-icon-32.png'
 
@@ -245,31 +244,14 @@ export function PlayerPage(): JSX.Element {
       imageUrl: channel.logoUrl,
       isLive: Boolean(stream.isLive),
       contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
-      headers: stream.headers,
-      isDecryptedRelay: Boolean(stream.isDrm || mode === 'jio')
+      headers: stream.headers
     }
-  }, [stream, channel, mode])
+  }, [stream, channel])
 
-  // Decrypted live stream relay handling: captures decoded output and streams to TV
-  useEffect(() => {
-    if (isCasting && activeCastState.token && videoRef.current && castMedia?.isDecryptedRelay) {
-      void decryptedCastBridge.start(videoRef.current, activeCastState.token)
-    } else if (!isCasting && decryptedCastBridge.isActive()) {
-      decryptedCastBridge.stop()
-    }
-  }, [isCasting, activeCastState.token, castMedia?.isDecryptedRelay, videoRef])
-
-  useEffect(() => {
-    return () => {
-      decryptedCastBridge.stop()
-    }
-  }, [])
-
-  // Pause local playback when casting begins if NOT a decrypted relay (for decrypted relay,
-  // local video continues running so Widevine decodes frames for the stream recorder, while audio is muted locally)
+  // Real casting lifecycle: pause local video when casting starts; resume at live edge when stopped
   useEffect(() => {
     if (isCasting && !prevIsCastingRef.current) {
-      if (videoRef.current && !castMedia?.isDecryptedRelay) {
+      if (videoRef.current) {
         videoRef.current.pause()
       }
     } else if (!isCasting && prevIsCastingRef.current) {
@@ -283,7 +265,7 @@ export function PlayerPage(): JSX.Element {
       videoRef.current?.play().catch(() => {})
     }
     prevIsCastingRef.current = isCasting
-  }, [isCasting, videoRef, liveEdge, stream?.isLive, pushToast, activeCastState.device, castMedia?.isDecryptedRelay])
+  }, [isCasting, videoRef, liveEdge, stream?.isLive, pushToast, activeCastState.device])
 
   // If channel changes while actively casting, update the cast session on the same TV
   useEffect(() => {

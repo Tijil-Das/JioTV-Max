@@ -18,13 +18,13 @@ import {
   isInstallingUpdate
 } from './updater'
 import { SnapController } from './snap-overlay'
-import { CastManager } from './casting/cast-manager'
-import { ChromecastAdapter } from './casting/chromecast-adapter'
-import { DlnaAdapter } from './casting/dlna-adapter'
-import { MockAdapter } from './casting/mock-adapter'
-import { AirPlayAdapter } from './casting/airplay-adapter'
-import { KodiAdapter } from './casting/kodi-adapter'
-import { registerCastIpc } from './casting/ipc-handlers'
+// import { CastManager } from './casting/cast-manager'
+// import { ChromecastAdapter } from './casting/chromecast-adapter'
+// import { DlnaAdapter } from './casting/dlna-adapter'
+// import { MockAdapter } from './casting/mock-adapter'
+// import { AirPlayAdapter } from './casting/airplay-adapter'
+// import { KodiAdapter } from './casting/kodi-adapter'
+// import { registerCastIpc } from './casting/ipc-handlers'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -677,21 +677,21 @@ app.whenReady().then(async () => {
   await jio.init()
   registerIpc()
 
-  const castManager = CastManager.getInstance()
-  castManager.registerAdapter(new ChromecastAdapter())
-  castManager.registerAdapter(new KodiAdapter())
-  castManager.registerAdapter(new DlnaAdapter())
-  if (process.env.CAST_MOCK === '1') {
-    castManager.registerAdapter(new MockAdapter())
-  }
-  castManager.registerAdapter(new AirPlayAdapter())
-  registerCastIpc(castManager)
+  // const castManager = CastManager.getInstance()
+  // castManager.registerAdapter(new ChromecastAdapter())
+  // castManager.registerAdapter(new KodiAdapter())
+  // castManager.registerAdapter(new DlnaAdapter())
+  // if (process.env.CAST_MOCK === '1') {
+  //   castManager.registerAdapter(new MockAdapter())
+  // }
+  // castManager.registerAdapter(new AirPlayAdapter())
+  // registerCastIpc(castManager)
 
   initUpdater(() => mainWindow)
   await createWindow()
-  if (mainWindow) {
-    castManager.setWebContents(mainWindow.webContents)
-  }
+  // if (mainWindow) {
+  //   castManager.setWebContents(mainWindow.webContents)
+  // }
   closeInstallingPanel()
 
   app.on('activate', () => {
@@ -710,7 +710,7 @@ app.on('before-quit', () => {
     powerSaveBlocker.stop(displaySleepBlockerId)
     displaySleepBlockerId = null
   }
-  void CastManager.getInstance().stopSession()
+  // void CastManager.getInstance().stopSession()
   void relay.stop()
 })
 

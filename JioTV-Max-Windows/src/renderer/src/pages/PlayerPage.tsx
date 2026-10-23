@@ -50,12 +50,12 @@ import { SeekOverlay } from '@/components/player/SeekOverlay'
 import { useDoubleTapSeek } from '@/hooks/useDoubleTapSeek'
 import { PinDialog } from '@/components/settings/PinDialog'
 import { WindowControls } from '@/components/layout/WindowControls'
-import { CastButton } from '@/components/casting/CastButton'
-import { CastDialog } from '@/components/casting/CastDialog'
-import { CastingOverlay } from '@/components/casting/CastingOverlay'
-import { CastFallbackModal } from '@/components/casting/CastFallbackModal'
-import { useCastStore } from '@/components/casting/useCastStore'
-import type { CastMediaInput } from '@shared/cast-types'
+// import { CastButton } from '@/components/casting/CastButton'
+// import { CastDialog } from '@/components/casting/CastDialog'
+// import { CastingOverlay } from '@/components/casting/CastingOverlay'
+// import { CastFallbackModal } from '@/components/casting/CastFallbackModal'
+// import { useCastStore } from '@/components/casting/useCastStore'
+// import type { CastMediaInput } from '@shared/cast-types'
 import appIcon from '@/assets/icons/app-icon-32.png'
 
 interface StreamFailure {
@@ -233,54 +233,52 @@ export function PlayerPage(): JSX.Element {
     ready: engine.ready
   })
 
-  // ---- Casting integration ------------------------------------------------
-  const activeCastState = useCastStore((state) => state.activeState)
-  const stopCast = useCastStore((state) => state.stopCast)
-  const startCast = useCastStore((state) => state.startCast)
-  const setFallbackModalOpen = useCastStore((state) => state.setFallbackModalOpen)
-  const isCasting = activeCastState.state === 'casting' || activeCastState.state === 'loading'
-  const prevIsCastingRef = useRef(false)
-
-  const castMedia: CastMediaInput | null = useMemo(() => {
-    if (!stream || !channel) return null
-    return {
-      url: stream.url,
-      title: channel.name || 'Live Broadcast',
-      imageUrl: channel.logoUrl,
-      isLive: Boolean(stream.isLive),
-      contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
-      headers: stream.headers,
-      isDrm: Boolean(stream.isDrm),
-      licenseUrl: stream.drm?.licenseUrl,
-      channelId: String(channel.id)
-    }
-  }, [stream, channel])
-
-  // Real casting lifecycle: pause local video when casting starts; resume at live edge when stopped
-  useEffect(() => {
-    if (isCasting && !prevIsCastingRef.current) {
-      if (videoRef.current) {
-        videoRef.current.pause()
-      }
-    } else if (!isCasting && prevIsCastingRef.current) {
-      pushToast({
-        title: activeCastState.device ? `Disconnected from ${activeCastState.device.name}` : 'Stopped casting',
-        variant: 'info'
-      })
-      if (stream?.isLive) {
-        liveEdge.goLive()
-      }
-      videoRef.current?.play().catch(() => {})
-    }
-    prevIsCastingRef.current = isCasting
-  }, [isCasting, videoRef, liveEdge, stream?.isLive, pushToast, activeCastState.device])
-
-  // If channel changes while actively casting, update the cast session on the same TV
-  useEffect(() => {
-    if (isCasting && castMedia && activeCastState.device) {
-      void startCast(activeCastState.device.id, castMedia)
-    }
-  }, [channelId])
+  // ---- Casting integration (Disabled for now) -------------------------------
+  // const activeCastState = useCastStore((state) => state.activeState)
+  // const stopCast = useCastStore((state) => state.stopCast)
+  // const startCast = useCastStore((state) => state.startCast)
+  // const setFallbackModalOpen = useCastStore((state) => state.setFallbackModalOpen)
+  // const isCasting = activeCastState.state === 'casting' || activeCastState.state === 'loading'
+  // const prevIsCastingRef = useRef(false)
+  //
+  // const castMedia: CastMediaInput | null = useMemo(() => {
+  //   if (!stream || !channel) return null
+  //   return {
+  //     url: stream.url,
+  //     title: channel.name || 'Live Broadcast',
+  //     imageUrl: channel.logoUrl,
+  //     isLive: Boolean(stream.isLive),
+  //     contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
+  //     headers: stream.headers,
+  //     isDrm: Boolean(stream.isDrm),
+  //     licenseUrl: stream.drm?.licenseUrl,
+  //     channelId: String(channel.id)
+  //   }
+  // }, [stream, channel])
+  //
+  // useEffect(() => {
+  //   if (isCasting && !prevIsCastingRef.current) {
+  //     if (videoRef.current) {
+  //       videoRef.current.pause()
+  //     }
+  //   } else if (!isCasting && prevIsCastingRef.current) {
+  //     pushToast({
+  //       title: activeCastState.device ? `Disconnected from ${activeCastState.device.name}` : 'Stopped casting',
+  //       variant: 'info'
+  //     })
+  //     if (stream?.isLive) {
+  //       liveEdge.goLive()
+  //     }
+  //     videoRef.current?.play().catch(() => {})
+  //   }
+  //   prevIsCastingRef.current = isCasting
+  // }, [isCasting, videoRef, liveEdge, stream?.isLive, pushToast, activeCastState.device])
+  //
+  // useEffect(() => {
+  //   if (isCasting && castMedia && activeCastState.device) {
+  //     void startCast(activeCastState.device.id, castMedia)
+  //   }
+  // }, [channelId])
 
   // ---- Hero handoff -------------------------------------------------------
   // The hero destroys its players before navigating; make sure any hidden
@@ -1120,10 +1118,10 @@ export function PlayerPage(): JSX.Element {
           </div>
         ) : null}
 
-        {/* Casting remote overlay */}
-        {isCasting ? (
+        {/* Casting remote overlay (Disabled for now) */}
+        {/* {isCasting ? (
           <CastingOverlay media={castMedia} onStop={() => void stopCast()} />
-        ) : null}
+        ) : null} */}
 
       {/* Channel artwork shows through until the first frame is decoded. */}
       <AnimatePresence>
@@ -1558,7 +1556,7 @@ export function PlayerPage(): JSX.Element {
               >
                 <PictureInPicture2 style={{ width: Math.round(20 * ctrlScale), height: Math.round(20 * ctrlScale) }} />
               </button>
-              <CastButton scale={ctrlScale} isCastable={Boolean(stream?.url)} />
+              {/* <CastButton scale={ctrlScale} isCastable={Boolean(stream?.url)} /> */}
               <button
                 type="button"
                 onClick={() => void toggleFullscreen()}
@@ -1663,11 +1661,11 @@ export function PlayerPage(): JSX.Element {
 
       <ShortcutsOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
 
-      <CastDialog
+      {/* <CastDialog
         media={castMedia}
         onOpenFallback={() => setFallbackModalOpen(true)}
       />
-      <CastFallbackModal media={castMedia} />
+      <CastFallbackModal media={castMedia} /> */}
     </div>
   )
 }

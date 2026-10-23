@@ -53,34 +53,34 @@ const DEFAULT_STATE: CastStatePayload = {
 }
 
 export const useCastStore = create<CastStore>((set, get) => {
-  // Listeners setup if in desktop app
-  if (typeof window !== 'undefined' && window.castApi) {
-    window.castApi.onDevicesUpdated((devices) => {
-      set({ devices })
-    })
-
-    window.castApi.onStateChanged((state) => {
-      set({
-        activeState: state,
-        connectingDeviceId: state.state === 'connecting' || state.state === 'loading' ? state.device?.id ?? null : null
-      })
-    })
-
-    window.castApi.onError((err) => {
-      set({
-        lastError: err,
-        connectingDeviceId: null
-      })
-    })
-
-    // Fetch initial state
-    window.castApi.getState().then((state) => {
-      if (state) set({ activeState: state })
-    }).catch(() => {})
-  }
+  // Casting feature temporarily disabled - listeners commented out
+  // if (typeof window !== 'undefined' && window.castApi) {
+  //   window.castApi.onDevicesUpdated((devices) => {
+  //     set({ devices })
+  //   })
+  //
+  //   window.castApi.onStateChanged((state) => {
+  //     set({
+  //       activeState: state,
+  //       connectingDeviceId: state.state === 'connecting' || state.state === 'loading' ? state.device?.id ?? null : null
+  //     })
+  //   })
+  //
+  //   window.castApi.onError((err) => {
+  //     set({
+  //       lastError: err,
+  //       connectingDeviceId: null
+  //     })
+  //   })
+  //
+  //   // Fetch initial state
+  //   window.castApi.getState().then((state) => {
+  //     if (state) set({ activeState: state })
+  //   }).catch(() => {})
+  // }
 
   return {
-    isAvailable: typeof window !== 'undefined' && Boolean(window.castApi),
+    isAvailable: false,
     dialogOpen: false,
     fallbackModalOpen: false,
     helpOpen: false,

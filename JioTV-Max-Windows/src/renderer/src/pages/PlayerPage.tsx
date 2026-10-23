@@ -886,6 +886,13 @@ export function PlayerPage(): JSX.Element {
       )}
       onPointerMove={wake}
       onPointerDown={wake}
+      onMouseLeave={() => {
+        setMiniVolumeHovered(false)
+        setIsDraggingMiniVol(false)
+        if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+      }}
     >
       {/* Windowed Top Bar */}
       {!isFullscreen && !isMiniPlayer ? (
@@ -938,7 +945,7 @@ export function PlayerPage(): JSX.Element {
           <div className="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between">
             {/* Top header bar: draggable region, channel info + restore/close buttons */}
             <div
-              className="pointer-events-auto flex h-11 w-full items-center justify-between bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+              className="pointer-events-auto flex h-11 w-full items-center justify-between bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
               onPointerDown={handleMiniPlayerPointerDown}
               onPointerMove={handleMiniPlayerPointerMove}
               onPointerUp={handleMiniPlayerPointerUp}
@@ -1015,7 +1022,7 @@ export function PlayerPage(): JSX.Element {
 
             {/* Bottom bar: Mute button and Live Edge recovery */}
             <div
-              className="pointer-events-auto flex h-10 w-full items-center justify-between bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+              className="pointer-events-auto flex h-10 w-full items-center justify-between bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
               onPointerDown={handleMiniPlayerPointerDown}
               onPointerMove={handleMiniPlayerPointerMove}
               onPointerUp={handleMiniPlayerPointerUp}
@@ -1042,6 +1049,7 @@ export function PlayerPage(): JSX.Element {
                   onClick={(e) => {
                     e.stopPropagation()
                     handleToggleMute()
+                    e.currentTarget.blur()
                   }}
                   title={muted ? 'Unmute (M)' : 'Mute (M)'}
                   aria-label={muted ? 'Unmute' : 'Mute'}
@@ -1085,6 +1093,7 @@ export function PlayerPage(): JSX.Element {
                     onPointerUp={(e) => {
                       e.stopPropagation()
                       setIsDraggingMiniVol(false)
+                      e.currentTarget.blur()
                     }}
                     onClick={(e) => e.stopPropagation()}
                     aria-label="Miniplayer volume level"

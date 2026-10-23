@@ -389,18 +389,30 @@ export function PlayerPage(): JSX.Element {
     }
   }, [bridge, setFullscreen])
 
+  const lastPausedAtRef = useRef<number | null>(null)
+
   useEffect(() => {
     const media = videoRef.current
     if (!media) return
     if (isPlaying) {
+      const pausedAt = lastPausedAtRef.current
+      lastPausedAtRef.current = null
+      if (pausedAt && stream?.isLive && !userRewoundRef.current) {
+        const pausedFor = Date.now() - pausedAt
+        if (pausedFor >= 20_000) {
+          userRewoundRef.current = false
+          engine.goLive()
+        }
+      }
       void media.play().catch((err: unknown) => {
         // console.warn('[PlayerPage] media.play() was prevented/blocked:', err)
         setPlaying(false)
       })
     } else {
+      lastPausedAtRef.current = Date.now()
       media.pause()
     }
-  }, [isPlaying, stream, videoRef, setPlaying])
+  }, [isPlaying, stream, videoRef, setPlaying, engine])
 
   useEffect(() => {
     const media = videoRef.current
@@ -470,9 +482,10 @@ export function PlayerPage(): JSX.Element {
   // Tracks whether the viewer deliberately seeked backward into DVR history
   const userRewoundRef = useRef(false)
 
-  // Reset rewind state when changing channels
+  // Reset rewind and pause states when changing channels
   useEffect(() => {
     userRewoundRef.current = false
+    lastPausedAtRef.current = null
   }, [channelId])
 
   const handleSeek = useCallback(

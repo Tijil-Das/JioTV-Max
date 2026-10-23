@@ -42,7 +42,7 @@ export class DlnaAdapter extends DeviceAdapter {
       })
 
       // Also listen for unsolicited advertise-alive NOTIFY broadcasts from active TVs
-      this.ssdp.on('advertise-alive', (headers: any, rinfo: any) => {
+      ;(this.ssdp as any).on('advertise-alive', (headers: any, rinfo: any) => {
         const locationUrl = headers.LOCATION || headers.location || headers.Location
         if (!locationUrl) return
         const host = rinfo?.address || new URL(locationUrl).hostname || 'unknown'

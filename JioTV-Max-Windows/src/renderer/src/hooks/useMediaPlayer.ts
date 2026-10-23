@@ -316,6 +316,7 @@ export function useMediaPlayer({
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bufferingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pausedAtRef = useRef<number | null>(null)
+  const wasAtLiveWhenPausedRef = useRef(true)
   const refreshingOnResumeRef = useRef(false)
   const seekRangeRef = useRef<MediaSeekRange | null>(null)
   const autoRecoveryTimerRef = useRef<number | null>(null)
@@ -389,13 +390,39 @@ export function useMediaPlayer({
     }
   }, [getLiveSeekRange])
 
-  /** Snap to the live edge, staying 0.5 s behind the absolute edge. */
+  /** Snap to the live edge, staying safely at the live broadcast. */
   const goLive = useCallback(() => {
     const video = videoRef.current
     if (!video) return
 
-    let edge = 0
     const player = shakaRef.current
+    if (player && typeof player.goToLive === 'function') {
+      try {
+        player.goToLive()
+        void video.play().catch(() => undefined)
+        syncSeekRange()
+        return
+      } catch {
+        // Fall through to manual seekRange calculation
+      }
+    }
+
+    const hls = hlsRef.current
+    if (hls) {
+      const livePos = hls.liveSyncPosition
+      if (typeof livePos === 'number' && Number.isFinite(livePos) && livePos > 0) {
+        try {
+          video.currentTime = livePos
+          void video.play().catch(() => undefined)
+          syncSeekRange()
+          return
+        } catch {
+          // Fall through
+        }
+      }
+    }
+
+    let edge = 0
     if (player) {
       try {
         edge = player.seekRange().end
@@ -523,6 +550,7 @@ export function useMediaPlayer({
     setSeekRange(null)
     seekRangeRef.current = null
     pausedAtRef.current = null
+    wasAtLiveWhenPausedRef.current = true
     levelsRef.current = []
     desiredRef.current = initialQuality
     // Only run on the channel identity, not on quality changes or token regenerations.
@@ -557,15 +585,16 @@ export function useMediaPlayer({
      * is paused. Reload the freshly signed relay URL, then seek back to the
      * exact position the viewer paused at.
      */
-    const reloadAfterLongPause = async (fresh: StreamInfo, resumeAt: number): Promise<void> => {
+    const reloadAfterLongPause = async (fresh: StreamInfo, resumeAt: number | null): Promise<void> => {
       if (disposed) return
-      // console.log(`[useMediaPlayer] Reloading fresh stream at ${resumeAt.toFixed(2)}s after long pause`)
+      // console.log(`[useMediaPlayer] Reloading fresh stream after long pause (resumeAt=${resumeAt})`)
 
       const player = shakaRef.current
       if (player) {
         const licenseUrl =
           fresh.drm?.licenseUrl || (fresh.url ? new URL('/license', fresh.url).href : '')
         player.configure({
+          abrFactory: () => new AudioLockedAbrManager(),
           drm: { servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {} },
           manifest: { dash: { ignoreMinBufferTime: true, autoCorrectDrift: true } },
           streaming: {
@@ -581,8 +610,15 @@ export function useMediaPlayer({
             safeSeekEndOffset: 1.5
           }
         })
-        await player.load(fresh.url, resumeAt, 'application/dash+xml')
+        await player.load(fresh.url, resumeAt ?? undefined, 'application/dash+xml')
         if (disposed) return
+        if (resumeAt === null) {
+          try {
+            player.goToLive()
+          } catch {
+            // ignore
+          }
+        }
         syncSeekRange()
         setReady(true)
         clearBuffering()
@@ -596,10 +632,16 @@ export function useMediaPlayer({
       if (hls) {
         hls.once(HlsEvents.MANIFEST_PARSED, () => {
           if (disposed) return
-          try {
-            video.currentTime = resumeAt
-          } catch {
-            // The new playlist may no longer contain the old position.
+          if (resumeAt !== null) {
+            try {
+              video.currentTime = resumeAt
+            } catch {
+              // The new playlist may no longer contain the old position.
+            }
+          } else if (typeof hls.liveSyncPosition === 'number' && hls.liveSyncPosition > 0) {
+            try {
+              video.currentTime = hls.liveSyncPosition
+            } catch {}
           }
           void video.play().catch(() => undefined)
         })
@@ -611,10 +653,14 @@ export function useMediaPlayer({
       // Native HLS.
       const onMetadata = (): void => {
         if (disposed) return
-        try {
-          video.currentTime = resumeAt
-        } catch {
-          // Ignore invalid positions on a refreshed playlist.
+        if (resumeAt !== null) {
+          try {
+            video.currentTime = resumeAt
+          } catch {
+            // Ignore invalid positions on a refreshed playlist.
+          }
+        } else {
+          goLive()
         }
         void video.play().catch(() => undefined)
       }
@@ -654,33 +700,41 @@ export function useMediaPlayer({
       if (!pausedAt || refreshingOnResumeRef.current || disposed) return
 
       const pausedFor = Date.now() - pausedAt
+      const isLiveStream = activeStream?.isLive !== false
+      // If paused for >= 20 seconds on a live stream and the viewer was watching live when paused,
+      // snap forward to the live broadcast instead of starting from the stale paused frame.
+      const shouldCatchUpToLive = isLiveStream && wasAtLiveWhenPausedRef.current && pausedFor >= 20_000
+
       // Below a minute the relay/buffer handles resume transparently; beyond
       // that, proactively re-resolve the signed URL.
-      if (pausedFor < 60_000) return
+      if (pausedFor >= 60_000) {
+        const reconnect = onReconnectRef.current
+        if (reconnect) {
+          refreshingOnResumeRef.current = true
+          setReconnecting(true)
+          void reconnect()
+            .then((fresh) => {
+              if (disposed || !fresh) return
+              return reloadAfterLongPause(fresh, shouldCatchUpToLive ? null : video.currentTime)
+            })
+            .catch(() => {
+              if (shouldCatchUpToLive) {
+                goLive()
+              } else {
+                void video.play().catch(() => undefined)
+              }
+            })
+            .finally(() => {
+              refreshingOnResumeRef.current = false
+              if (!disposed) setReconnecting(false)
+            })
+          return
+        }
+      }
 
-      const reconnect = onReconnectRef.current
-      if (!reconnect) return
-
-      const resumeAt = video.currentTime
-      refreshingOnResumeRef.current = true
-      setReconnecting(true)
-      // console.log(
-        // `[useMediaPlayer] Resumed after ${Math.round(pausedFor / 1000)}s paused; refreshing signed stream`
-      // )
-      void reconnect()
-        .then((fresh) => {
-          if (disposed || !fresh) return
-          return reloadAfterLongPause(fresh, resumeAt)
-        })
-        .catch((error: unknown) => {
-          // console.warn('[useMediaPlayer] Post-pause stream refresh failed:', error)
-          // The old stream may still be playable thanks to the relay refresh.
-          void video.play().catch(() => undefined)
-        })
-        .finally(() => {
-          refreshingOnResumeRef.current = false
-          if (!disposed) setReconnecting(false)
-        })
+      if (shouldCatchUpToLive) {
+        goLive()
+      }
     }
     const onWaiting = () => {
       // console.log('[useMediaPlayer] Video event: waiting')
@@ -728,6 +782,9 @@ export function useMediaPlayer({
     const onPause = () => {
       // console.log('[useMediaPlayer] Video event: pause')
       pausedAtRef.current = Date.now()
+      const range = getLiveSeekRange()
+      // If within 8s of the live edge (or range is not yet determined), viewer was at live edge
+      wasAtLiveWhenPausedRef.current = range ? (range.end - video.currentTime <= 8) : true
       clearBuffering()
     }
     const onNativeError = () => {

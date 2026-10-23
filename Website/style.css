@@ -289,9 +289,21 @@ a {
   color: var(--text-2);
 }
 
-.grid-3 {
+.why-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.features-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -452,6 +464,8 @@ a {
   .nav-links {
     display: none;
   }
+  .why-grid,
+  .features-grid,
   .grid-3 {
     grid-template-columns: 1fr;
   }

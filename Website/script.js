@@ -122,6 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
         el.textContent = `${targetOS} (64-bit)`
       })
     }
+
+    // 7. Refresh platform context tip
+    updatePlatformContextTip(targetOS)
   }
 
   async function resolveLatestRelease() {
@@ -168,6 +171,44 @@ document.addEventListener('DOMContentLoaded', () => {
     return latestDownloadUrl
   }
 
+  // Adaptive Platform Context Tip for bottom CTA
+  function updatePlatformContextTip(os) {
+    const tipEl = document.getElementById('cta-platform-tip')
+    if (!tipEl) return
+
+    if (os === 'Android' || os === 'iOS') {
+      tipEl.className = 'cta-platform-tip is-mobile'
+      tipEl.innerHTML = `
+        <svg class="tip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+        </svg>
+        <span class="cta-tip-text"><strong>Mobile Device Detected:</strong> JioTv Max runs on Windows PCs. You can download the .exe or copy the link to install on your PC.</span>
+      `
+    } else if (os === 'macOS' || os === 'Linux') {
+      tipEl.className = 'cta-platform-tip is-other-os'
+      tipEl.innerHTML = `
+        <svg class="tip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span class="cta-tip-text"><strong>${os} Detected:</strong> JioTv Max is built for Windows 10 &amp; 11. Run via VM or inspect the open-source code on GitHub.</span>
+      `
+    } else {
+      tipEl.className = 'cta-platform-tip is-windows'
+      tipEl.innerHTML = `
+        <svg class="tip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span class="cta-tip-text"><strong>Windows Ready:</strong> Verified for Windows 10 &amp; 11 (64-bit). Standalone installer with GPU acceleration.</span>
+      `
+    }
+  }
+
+  // Initialize context tip immediately
+  updatePlatformContextTip(userOS)
+
   // Pre-fetch latest release on load so click is instantaneous
   resolveLatestRelease()
 
@@ -185,20 +226,54 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   })
 
-  // Clean in-page toast notification
+  // Handle "Copy Link" button in CTA
+  const copyBtn = document.getElementById('cta-copy-btn')
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async (e) => {
+      e.preventDefault()
+      const urlToCopy = latestDownloadUrl || 'https://github.com/Tijil-Das/JioTV-Max/releases/latest'
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(urlToCopy)
+        } else {
+          const tempInput = document.createElement('input')
+          tempInput.value = urlToCopy
+          document.body.appendChild(tempInput)
+          tempInput.select()
+          document.execCommand('copy')
+          document.body.removeChild(tempInput)
+        }
+
+        const copyText = document.getElementById('cta-copy-btn-text')
+        if (copyText) {
+          const originalText = copyText.textContent
+          copyText.textContent = 'Copied!'
+          setTimeout(() => {
+            copyText.textContent = originalText
+          }, 2000)
+        }
+        showToast('Direct download link copied to clipboard!')
+      } catch (err) {
+        showToast('Could not copy link to clipboard.')
+      }
+    })
+  }
+
+  // Clean in-page toast notification with debounce and mobile containment
+  let toastTimer = null
   function showToast(message) {
     let toast = document.getElementById('site-toast')
     if (!toast) {
       toast = document.createElement('div')
       toast.id = 'site-toast'
       toast.style.position = 'fixed'
-      toast.style.bottom = '28px'
+      toast.style.bottom = '24px'
       toast.style.left = '50%'
       toast.style.transform = 'translateX(-50%) translateY(16px)'
       toast.style.background = '#18181D'
       toast.style.color = '#F4F4F6'
       toast.style.border = '1px solid rgba(255, 255, 255, 0.16)'
-      toast.style.padding = '10px 20px'
+      toast.style.padding = '10px 18px'
       toast.style.borderRadius = '8px'
       toast.style.fontSize = '13.5px'
       toast.style.fontWeight = '500'
@@ -207,6 +282,10 @@ document.addEventListener('DOMContentLoaded', () => {
       toast.style.transition = 'all 0.2s ease'
       toast.style.zIndex = '9999'
       toast.style.pointerEvents = 'none'
+      toast.style.maxWidth = 'calc(100vw - 32px)'
+      toast.style.width = 'max-content'
+      toast.style.textAlign = 'center'
+      toast.style.boxSizing = 'border-box'
       document.body.appendChild(toast)
     }
 
@@ -216,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
       toast.style.transform = 'translateX(-50%) translateY(0)'
     })
 
-    setTimeout(() => {
+    if (toastTimer) clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => {
       toast.style.opacity = '0'
       toast.style.transform = 'translateX(-50%) translateY(16px)'
     }, 3500)

@@ -90,7 +90,7 @@ We are committed to providing a friendly, safe, and welcoming environment for ev
 ## Key Areas for Contributions
 
 - ⚡ **Playback Pipeline**: Enhancing HLS/DASH buffer heuristics, stream recovery on network drops, low-latency optimizations.
-- 🎨 **User Interface**: Accessibility improvements, keyboard navigation, smooth transitions, and responsive adjustments for ultrawide displays.
+- 🎨 **User Interface**: Accessibility improvements, smooth transitions, and responsive adjustments for ultrawide displays.
 - 📅 **EPG & Schedules**: Cache optimization, schedule parsing resilience, and rich program metadata.
 - 🧪 **Test Coverage**: Adding unit and end-to-end tests for player controls, authentication states, and IPC error boundaries.
 

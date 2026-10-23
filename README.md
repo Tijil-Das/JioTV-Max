@@ -10,7 +10,6 @@
 
 <p align="center">
   <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest"><img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform" /></a>
-  <a href="https://github.com/Tijil-Das/JioTV-Max/releases/latest"><img src="https://img.shields.io/badge/Release-v1.0.0-E11D2E?style=flat-square" alt="Version" /></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" /></a>
 </p>
@@ -29,7 +28,7 @@ JioTV is locked to mobile devices and Android TVs; its web portal blocks live st
 - 🖥️ **Native Full HD**: Hardware GPU-decoded 1080p and 720p streams with low CPU and RAM usage.
 - 📱 **Standard Mobile Plans**: Works out of the box with any regular Jio mobile recharge—no expensive Smart TV or JioFiber plans required.
 - 🔑 **Simple OTP Sign-In**: Login once with your Jio mobile number to access all live channels in your subscription.
-- ⚡ **Desktop-First**: Built for Windows with keyboard navigation, instant channel zapping, and Picture-in-Picture.
+- ⚡ **Desktop-First**: Built for Windows with instant channel zapping and Picture-in-Picture.
 
 ---
 
@@ -41,22 +40,10 @@ JioTV is locked to mobile devices and Android TVs; its web portal blocks live st
 - **Live DVR & Timeshift**: Pause live television and scrub through rolling broadcast buffers.
 - **24-Hour Virtualized EPG**: 60fps schedule guide with day navigation and genre filters.
 - **Clean Channel Logos**: Multi-tier Web Worker pipeline that cleans and optimizes logos for dark themes.
-- **Quick Search (`Ctrl+K`)**: Rapid search across channel names, numbers, and categories.
+- **Quick Search**: Rapid search across channel names, numbers, and categories.
 - **Encrypted Token Vault**: Credentials stored securely using Windows DPAPI (`safeStorage`).
 - **Auto-Updater**: Background update checks via GitHub Releases with one-click restart updates.
 - **Offline Demo Mode**: 38 channels and schedules to test immediately without signing in.
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action | Key | Action |
-| :---: | :--- | :---: | :--- |
-| <kbd>Space</kbd> | Play / Pause | <kbd>F</kbd> | Fullscreen toggle |
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Previous / Next channel | <kbd>M</kbd> | Mute / Unmute |
-| <kbd>←</kbd> / <kbd>→</kbd> | Volume down / up (5%) | <kbd>C</kbd> | Channel drawer |
-| <kbd>Q</kbd> | Stream quality menu | <kbd>P</kbd> | Picture-in-Picture |
-| <kbd>Ctrl</kbd> + <kbd>K</kbd> | Global channel search | <kbd>Esc</kbd> | Close overlay / Back |
 
 ---
 

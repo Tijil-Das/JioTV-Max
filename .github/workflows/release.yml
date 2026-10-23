@@ -34,6 +34,9 @@ jobs:
         run: |
           [ "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}" ] || { echo "Tag does not match package.json version"; exit 1; }
 
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
       - name: Run test suite
         run: pnpm test
 

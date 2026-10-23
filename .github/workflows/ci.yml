@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Verify Quality (Typecheck, Unit Tests, Production Bundle)
     runs-on: windows-latest
     defaults:
       run:
@@ -33,3 +34,6 @@ jobs:
 
       - name: Run test suite
         run: pnpm test
+
+      - name: Verify production build
+        run: pnpm build

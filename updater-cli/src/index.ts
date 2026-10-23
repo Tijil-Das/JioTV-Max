@@ -25,8 +25,6 @@ process.on('unhandledRejection', (err: any) => {
 async function runCentralHub(): Promise<void> {
   const { runRelease } = await import('./commands/release.js')
   const { runStatus } = await import('./commands/status.js')
-  const { runWatch } = await import('./commands/watch.js')
-  const { ensureReleaseBlockmap } = await import('./commands/blockmap.js')
   const { promptConfigureToken, maskToken } = await import('./lib/config.js')
   const { getToken, clearTokenCache } = await import('./lib/github.js')
 
@@ -49,14 +47,24 @@ async function runCentralHub(): Promise<void> {
 
     console.log(`  Auth: ${tokenDisplay}\n`)
 
-    const choice = await p.select<'release' | 'status' | 'watch' | 'blockmap' | 'token' | 'exit'>({
+    const choice = await p.select<'release' | 'status' | 'token' | 'exit'>({
       message: 'Select an action:',
       options: [
-        { value: 'release', label: '🚀  Create New Release', hint: 'Bump version, pre-flight, push, watch live build, verify' },
-        { value: 'status', label: '📊  View Status Dashboard', hint: 'Repo version, branch, published releases, assets' },
-        { value: 'watch', label: '⏱️   Watch Live GitHub Actions', hint: 'Attach terminal dashboard to active workflow run' },
-        { value: 'blockmap', label: '🧩  Verify / Fix Delta Blockmap', hint: 'Ensure .blockmap is live for delta updates' },
-        { value: 'token', label: '🔑  Configure GitHub Token', hint: 'Save, test, change, or remove local token' },
+        {
+          value: 'release',
+          label: '🚀  Start Full Release',
+          hint: 'Automated end-to-end: Bump → Push → Live Progress → Delta Blockmap → Verify',
+        },
+        {
+          value: 'status',
+          label: '📊  View Release Status',
+          hint: 'Current version, published release assets, and update health',
+        },
+        {
+          value: 'token',
+          label: '🔑  Configure GitHub Token',
+          hint: 'Save, test, change, or remove persistent local token',
+        },
         { value: 'exit', label: '🚪  Exit' },
       ],
     })
@@ -71,20 +79,12 @@ async function runCentralHub(): Promise<void> {
       break
     } else if (choice === 'status') {
       await runStatus()
-      const back = await p.confirm({ message: 'Return to main dashboard?', initialValue: true })
-      if (!back || p.isCancel(back)) process.exit(0)
-    } else if (choice === 'watch') {
-      await runWatch()
-      const back = await p.confirm({ message: 'Return to main dashboard?', initialValue: true })
-      if (!back || p.isCancel(back)) process.exit(0)
-    } else if (choice === 'blockmap') {
-      await ensureReleaseBlockmap()
-      const back = await p.confirm({ message: 'Return to main dashboard?', initialValue: true })
+      const back = await p.confirm({ message: 'Return to main menu?', initialValue: true })
       if (!back || p.isCancel(back)) process.exit(0)
     } else if (choice === 'token') {
       await promptConfigureToken()
       clearTokenCache()
-      const back = await p.confirm({ message: 'Return to main dashboard?', initialValue: true })
+      const back = await p.confirm({ message: 'Return to main menu?', initialValue: true })
       if (!back || p.isCancel(back)) process.exit(0)
     }
   }

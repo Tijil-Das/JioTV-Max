@@ -69,7 +69,7 @@
         </h1>
 
         <p class="hero-description">
-          Android emulators get restricted to a cheap, unwatchable quality stream. JioTv Max streams 1,000+ live TV channels natively in crisp full resolution on your PC — powered directly by your regular Jio mobile plan.
+          Android emulators get restricted to a cheap, unwatchable quality stream. <button class="btn-show-why" id="show-why-btn" type="button" aria-haspopup="dialog" aria-expanded="false"><span>Show Why?</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button> JioTv Max streams 1,000+ live TV channels natively in crisp full resolution on your PC — powered directly by your regular Jio mobile plan.
         </p>
 
         <div class="hero-cta-group">
@@ -170,7 +170,7 @@
 
           <div class="card">
             <h3 class="card-title">No Cheap Emulator Streams</h3>
-            <p class="card-text">Emulators on Windows get restricted to a cheap, unwatchable quality stream. JioTv Max streams natively with GPU hardware decoding in full crisp quality.</p>
+            <p class="card-text">Emulators on Windows get restricted to a cheap, unwatchable quality stream. <button class="btn-show-why-inline" type="button">Show why &rarr;</button> JioTv Max streams natively with GPU hardware decoding in full crisp quality.</p>
           </div>
         </div>
       </div>
@@ -222,6 +222,80 @@
       </div>
     </div>
   </footer>
+
+  <!-- Modal: Why Emulators Get Restricted -->
+  <div class="modal-overlay" id="why-modal" aria-hidden="true" role="dialog" aria-labelledby="why-modal-title">
+    <div class="modal-container">
+      <div class="modal-header">
+        <span class="modal-badge">Technical Deep Dive</span>
+        <button class="modal-close" id="why-modal-close" type="button" aria-label="Close modal">&times;</button>
+      </div>
+
+      <h2 class="modal-title" id="why-modal-title">Why Emulators Are Capped to Low Quality</h2>
+      <p class="modal-subtitle">
+        Android emulators (BlueStacks, LDPlayer, Nox, WSA) cannot replicate genuine physical mobile hardware, triggering strict DRM and streaming safeguards:
+      </p>
+
+      <div class="modal-grid">
+        <div class="modal-card">
+          <div class="card-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h3>Widevine L1 vs L3 DRM Restriction</h3>
+            <p>
+              Genuine smartphones contain a physical <strong>ARM TrustZone / TEE (Hardware Root-of-Trust)</strong> that decrypts video entirely inside isolated hardware memory (<strong>Widevine L1</strong>). Emulators running on x86 Windows lack physical ARM security chips and fall back to software-only <strong>Widevine L3</strong>. Broadcasters strictly restrict L3 devices to low-bitrate SD (360p / 480p) to prevent high-definition screen piracy.
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-card">
+          <div class="card-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h3>Hardware Attestation Failure (Play Integrity)</h3>
+            <p>
+              OTT services cryptographically query Google’s <strong>Play Integrity API</strong> (formerly SafetyNet). Even if an emulator alters software build properties to impersonate a flagship phone, cryptographic hardware key attestation fails because the hypervisor environment is virtualized and rooted, blocking high-definition stream manifests.
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-card">
+          <div class="card-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h3>MediaCodec Hypervisor Overhead & ABR Throttling</h3>
+            <p>
+              Translating Android’s internal <code>MediaCodec</code> calls across the emulator hypervisor into Windows DirectX/OpenGL incurs severe CPU overhead and latency. Video players detect rendering stalls and trigger aggressive <strong>Adaptive Bitrate (ABR)</strong> downshifting, permanently locking playback to unwatchable low resolutions.
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-card highlight-card">
+          <div class="card-icon-wrap accent">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h3>The JioTv Max Native Solution</h3>
+            <p>
+              JioTv Max runs as a native 64-bit Windows desktop app with direct <strong>GPU hardware decoding (DXVA/D3D11)</strong> and desktop Widevine CDM integration. It requests clean Full HD 1080p live streams directly from source CDNs without any emulator virtualization penalty.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 </body>

@@ -6,30 +6,27 @@ This document is the definitive guide on how to create, test, build, and publish
 
 ## 🚀 Interactive Release with updater-cli (Recommended)
 
-The repository includes a release CLI at `updater-cli/` with convenient root launchers (`release.cmd` / `release.sh`). It coordinates the entire release end-to-end:
+The repository includes a centralized release CLI at `updater-cli/` with convenient root launchers (`release.cmd` / `release.sh`). When you trigger a release, the CLI runs the **entire pipeline end-to-end automatically**—progress monitoring and delta blockmaps are not separate opt-in tasks, they are executed as part of the release itself:
 
 ```powershell
-# Run the interactive release wizard from repository root:
+# Run the automated release wizard from repository root:
 .\release.cmd
 
-# Check current release & GitHub Actions status:
+# Or check release fleet status & download health:
 .\release.cmd status
 
-# Re-attach live monitoring to an ongoing workflow run:
-.\release.cmd watch
-
-# Preview the release without touching git or making API calls:
+# Or preview the release flow without making git changes:
 .\release.cmd --dry-run --bump patch
 ```
 
-### What `updater-cli` Does Automatically:
-1. **Context Inspection**: Derives owner/repo, branch, current version, tags, and GitHub token from git credentials.
-2. **Interactive Bumps**: Select SemVer bump (`patch`, `minor`, `major`, `prerelease`, or custom).
-3. **Release Notes Preview**: Reads `release-notes.md` and lets you preview, edit in your editor, or paste updates.
-4. **Pre-flight Checks**: Confirms git installation, clean working tree, on `main` branch, up to date with origin, tag availability, and GitHub Actions workflow file.
-5. **Atomic Execution**: Updates `package.json`, creates annotated tag, and pushes to origin. If push fails, automatically rolls back local changes cleanly.
-6. **Live Terminal Dashboard**: Renders in-place progress bars, job status, duration, ETA, and step indicators without leaving the terminal.
-7. **Release & Asset Verification**: Validates the published GitHub Release, checking the setup installer (`.exe`), differential update map (`.blockmap`), and `latest.yml`.
+### What Happens Automatically During a Release:
+1. **Local Persistent Auth**: Uses your GitHub token stored locally in `~/.jiotv-max-updater.json` (or git credentials). Prompts only once per machine.
+2. **Context Inspection & Pre-flight Checks**: Validates clean working tree, branch, tag availability, and GitHub Actions workflow file.
+3. **Interactive SemVer Bump**: Choose version bump (`patch`, `minor`, `major`, or custom) with release notes preview.
+4. **Atomic Git Commit & Tag**: Bumps `JioTV-Max-Windows/package.json`, creates annotated tag, and pushes to `origin`.
+5. **Live Progress Dashboard (Automatic)**: The CLI **automatically streams the live GitHub Actions build progress in your terminal**—showing live progress bars, job states, elapsed time, and ETA without requiring any manual command or opt-in.
+6. **Delta Update Blockmap Guarantee (Automatic)**: Once the build finishes, the CLI verifies all published assets (`.exe`, `latest.yml`, `.blockmap`). If the delta blockmap is missing, it auto-generates and uploads it immediately.
+7. **Release Verification**: Confirms the update is live on GitHub CDN and ready for installed app clients to receive delta updates.
 
 ---
 

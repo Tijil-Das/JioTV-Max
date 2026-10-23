@@ -492,3 +492,251 @@ a {
     flex-direction: column;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Show Why Triggers
+   -------------------------------------------------------------------------- */
+.btn-show-why {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  margin: 0 4px;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: #FF5A6B;
+  background: rgba(225, 29, 46, 0.12);
+  border: 1px solid rgba(225, 29, 46, 0.35);
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1.5;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+}
+
+.btn-show-why:hover {
+  background: rgba(225, 29, 46, 0.24);
+  border-color: var(--red);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(225, 29, 46, 0.3);
+}
+
+.btn-show-why svg {
+  transition: transform 0.2s ease;
+}
+
+.btn-show-why:hover svg {
+  transform: translateX(2px);
+}
+
+.btn-show-why-inline {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 4px;
+  color: var(--red);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.btn-show-why-inline:hover {
+  color: var(--red-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Modal: Why Emulators Get Restricted
+   -------------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.84);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-container {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  max-width: 660px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  padding: 32px;
+  position: relative;
+  transform: scale(0.96) translateY(12px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.modal-overlay.active .modal-container {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.modal-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--red);
+  background: rgba(225, 29, 46, 0.1);
+  border: 1px solid rgba(225, 29, 46, 0.25);
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+
+.modal-close {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.modal-close:hover {
+  background: var(--surface-3);
+  color: var(--text-1);
+  border-color: var(--hairline-strong);
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-1);
+  margin-bottom: 8px;
+}
+
+.modal-subtitle {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+
+.modal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.modal-card:hover {
+  border-color: var(--hairline-strong);
+}
+
+.card-icon-wrap {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.card-icon-wrap.accent {
+  background: rgba(225, 29, 46, 0.12);
+  border-color: rgba(225, 29, 46, 0.35);
+  color: var(--red);
+}
+
+.modal-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+
+.modal-card p {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.modal-card code {
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #F4F4F6;
+}
+
+.modal-card strong {
+  color: var(--text-1);
+}
+
+.modal-card.highlight-card {
+  background: linear-gradient(135deg, rgba(225, 29, 46, 0.12) 0%, rgba(17, 17, 20, 0.95) 100%);
+  border: 1px solid rgba(225, 29, 46, 0.35);
+}
+
+.modal-card.highlight-card h3 {
+  color: #FFFFFF;
+}
+
+.modal-card.highlight-card p {
+  color: #E1E1E6;
+}
+
+body.modal-open {
+  overflow: hidden;
+}

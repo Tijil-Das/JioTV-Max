@@ -221,4 +221,52 @@ document.addEventListener('DOMContentLoaded', () => {
       toast.style.transform = 'translateX(-50%) translateY(16px)'
     }, 3500)
   }
+
+  // ─── "Show Why?" Technical Deep Dive Modal ──────────────────────────────
+  const whyModal = document.getElementById('why-modal')
+  const whyCloseBtn = document.getElementById('why-modal-close')
+  const whyTriggers = document.querySelectorAll('#show-why-btn, .btn-show-why-inline')
+
+  function openWhyModal() {
+    if (!whyModal) return
+    whyModal.classList.add('active')
+    whyModal.setAttribute('aria-hidden', 'false')
+    document.body.classList.add('modal-open')
+    if (whyCloseBtn) whyCloseBtn.focus()
+  }
+
+  function closeWhyModal() {
+    if (!whyModal) return
+    whyModal.classList.remove('active')
+    whyModal.setAttribute('aria-hidden', 'true')
+    document.body.classList.remove('modal-open')
+  }
+
+  whyTriggers.forEach((trigger) => {
+    trigger.addEventListener('click', (e) => {
+      e.preventDefault()
+      openWhyModal()
+    })
+  })
+
+  if (whyCloseBtn) {
+    whyCloseBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      closeWhyModal()
+    })
+  }
+
+  if (whyModal) {
+    whyModal.addEventListener('click', (e) => {
+      if (e.target === whyModal) {
+        closeWhyModal()
+      }
+    })
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && whyModal && whyModal.classList.contains('active')) {
+      closeWhyModal()
+    }
+  })
 })

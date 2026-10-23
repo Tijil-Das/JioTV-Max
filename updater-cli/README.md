@@ -32,11 +32,12 @@ That's it. The wizard guides you through everything:
 
 | Command | What it does |
 |---------|--------------|
-| `.\release.cmd` | Full interactive release wizard (default) |
-| `.\release.cmd status` | Print version, last tag, GitHub release assets, and last run status |
-| `.\release.cmd watch` | Attach live dashboard to the latest (or specific) run |
-| `.\release.cmd blockmap [tag]` | Verify, auto-generate, and upload missing delta `.blockmap` |
+| `.\release.cmd` | **Full end-to-end release workflow** (bump → push → live build progress → delta blockmap → verification) |
+| `.\release.cmd status` | Check version, published release assets, and update health |
+| `.\release.cmd token` | Configure or update stored GitHub token in `~/.jiotv-max-updater.json` |
 | `.\release.cmd --help` | Full flags reference |
+
+> **Note**: Progress monitoring and delta blockmaps are **not separate opt-in tasks**. When you initiate a release, the CLI automatically streams the live GitHub Actions progress bars in your terminal and automatically verifies and uploads the delta `.blockmap`.
 
 ### Flags (non-interactive)
 
@@ -48,13 +49,6 @@ That's it. The wizard guides you through everything:
 | `--simulate` | Replay a fake GitHub Actions run (UI demo, no push needed) |
 | `--no-banner` | Skip the ASCII art banner |
 | `--verbose` | Show full stack traces on errors |
-
-### Watch flags
-
-```powershell
-npm run watch -- --run 12345    # attach to specific run ID
-npm run watch -- --simulate     # demo dashboard without a real run
-```
 
 ---
 

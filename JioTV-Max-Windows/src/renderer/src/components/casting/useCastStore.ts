@@ -96,6 +96,13 @@ export const useCastStore = create<CastStore>((set, get) => {
       set({ dialogOpen: open })
       if (open) {
         set({ lastError: null, helpOpen: false })
+        if (window.castApi) {
+          window.castApi.getDevices().then((cached) => {
+            if (cached && cached.length > 0) {
+              set({ devices: cached })
+            }
+          }).catch(() => {})
+        }
         void get().startDiscovery()
       } else {
         // Stop discovery after dialog closes, unless actively casting
@@ -117,9 +124,13 @@ export const useCastStore = create<CastStore>((set, get) => {
       if (!window.castApi) return
       set({ isSearching: true, searchStartTime: Date.now() })
       try {
+        const cached = await window.castApi.getDevices()
+        if (cached && cached.length > 0) {
+          set({ devices: cached })
+        }
         await window.castApi.startDiscovery()
-        const initialDevices = await window.castApi.getDevices()
-        set({ devices: initialDevices })
+        const refreshed = await window.castApi.getDevices()
+        set({ devices: refreshed })
       } catch (err) {
         console.error('startDiscovery error:', err)
       }

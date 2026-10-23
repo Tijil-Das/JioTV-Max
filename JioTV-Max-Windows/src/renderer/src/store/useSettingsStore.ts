@@ -19,6 +19,8 @@ interface SettingsState {
   parentalEnabled: boolean
   parentalPinHash: string
   recentSearches: string[]
+  openCount: number
+  hasClearedHowToUse: boolean
   setMode: (mode: AuthMode) => void
   setDefaultQuality: (quality: QualityPreference) => void
   setLanguage: (language: string) => void
@@ -30,6 +32,8 @@ interface SettingsState {
   setParental: (enabled: boolean, hash?: string) => void
   addRecentSearch: (term: string) => void
   clearRecentSearches: () => void
+  incrementOpenCount: () => void
+  setHasClearedHowToUse: (value: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -46,6 +50,8 @@ export const useSettingsStore = create<SettingsState>()(
       parentalEnabled: false,
       parentalPinHash: '',
       recentSearches: [],
+      openCount: 0,
+      hasClearedHowToUse: false,
       setMode: (mode) => set({ mode }),
       setDefaultQuality: (defaultQuality) => set({ defaultQuality }),
       setLanguage: (language) => set({ language }),
@@ -63,7 +69,9 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           recentSearches: [term, ...state.recentSearches.filter((item) => item !== term)].slice(0, 6)
         })),
-      clearRecentSearches: () => set({ recentSearches: [] })
+      clearRecentSearches: () => set({ recentSearches: [] }),
+      incrementOpenCount: () => set((state) => ({ openCount: (state.openCount || 0) + 1 })),
+      setHasClearedHowToUse: (hasClearedHowToUse) => set({ hasClearedHowToUse })
     }),
     {
       name: 'streamdeck-settings',

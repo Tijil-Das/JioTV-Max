@@ -233,8 +233,47 @@ async function checkNow(): Promise<void> {
 }
 
 function initUpdater(getWin: () => BrowserWindow | null): void {
-  if (!app.isPackaged) return
   getMainWindow = getWin
+
+  try {
+    ipcMain.removeHandler('update:get-state')
+    ipcMain.removeHandler('update:check')
+  } catch {
+    // non-fatal
+  }
+
+  ipcMain.handle('update:get-state', () => ({ readyVersion }))
+  ipcMain.handle('update:check', async () => {
+    if (!app.isPackaged) {
+      return { status: 'dev-mode', error: 'Updates are enabled in packaged desktop builds' }
+    }
+    if (downloaded && readyVersion) {
+      return { status: 'ready', readyVersion }
+    }
+    if (busy) {
+      return { status: 'checking' }
+    }
+    try {
+      busy = true
+      const result = await autoUpdater.checkForUpdates()
+      busy = false
+      if (result && result.updateInfo && semver.gt(result.updateInfo.version, app.getVersion())) {
+        return { status: 'update-available', version: result.updateInfo.version }
+      }
+      return { status: 'up-to-date', currentVersion: app.getVersion() }
+    } catch (err: any) {
+      busy = false
+      log.error('Manual update check failed:', err)
+      return { status: 'error', error: err?.message || 'Check failed' }
+    }
+  })
+  ipcMain.on('update:restart', () => {
+    if (!app.isPackaged) return
+    void installNow()
+  })
+
+  if (!app.isPackaged) return
+
   configureUpdater()
 
   autoUpdater.on('update-available', () => {
@@ -260,32 +299,6 @@ function initUpdater(getWin: () => BrowserWindow | null): void {
     if (win && !win.isDestroyed()) {
       win.webContents.send('update:ready', info.version)
     }
-  })
-
-  ipcMain.handle('update:get-state', () => ({ readyVersion }))
-  ipcMain.handle('update:check', async () => {
-    if (downloaded && readyVersion) {
-      return { status: 'ready', readyVersion }
-    }
-    if (busy) {
-      return { status: 'checking' }
-    }
-    try {
-      busy = true
-      const result = await autoUpdater.checkForUpdates()
-      busy = false
-      if (result && result.updateInfo && semver.gt(result.updateInfo.version, app.getVersion())) {
-        return { status: 'update-available', version: result.updateInfo.version }
-      }
-      return { status: 'up-to-date', currentVersion: app.getVersion() }
-    } catch (err: any) {
-      busy = false
-      log.error('Manual update check failed:', err)
-      return { status: 'error', error: err?.message || 'Check failed' }
-    }
-  })
-  ipcMain.on('update:restart', () => {
-    void installNow()
   })
 
   setTimeout(checkNow, FIRST_CHECK_DELAY_MS)

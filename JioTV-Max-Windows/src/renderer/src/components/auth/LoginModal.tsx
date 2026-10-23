@@ -20,7 +20,7 @@ import { useChannelStore } from '@/store/useChannelStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Modal } from '@/components/ui/Modal'
-import { Button, IconButton } from '@/components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { BrandMark } from '@/components/ui/BrandMark'
 
 type Step = 'phone' | 'otp' | 'success'
@@ -246,20 +246,18 @@ export function LoginModal(): JSX.Element | null {
   const title = step === 'otp' ? 'Enter your code' : 'Sign in to JioTv Max'
 
   return (
-    <Modal open={open} onClose={closeLogin} bare className="w-[420px] max-w-[94vw]" labelledBy="login-title">
+    <Modal
+      open={open}
+      bare
+      dismissible={false}
+      className="w-[420px] max-w-[94vw]"
+      labelledBy="login-title"
+    >
       <div className="overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#0A0A0B]">
         {/* Brand mark at top of single-column form */}
 
         {/* Form panel */}
         <div className="relative p-7">
-          <IconButton
-            label="Close sign-in"
-            size="sm"
-            className="absolute right-3 top-3"
-            onClick={closeLogin}
-          >
-            <span className="text-lg leading-none">×</span>
-          </IconButton>
 
           <AnimatePresence mode="wait">
             {step === 'success' ? (

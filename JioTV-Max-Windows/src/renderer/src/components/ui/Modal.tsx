@@ -9,12 +9,14 @@ import { WindowControls } from '@/components/layout/WindowControls'
 
 interface ModalProps {
   open: boolean
-  onClose: () => void
+  onClose?: () => void
   children: React.ReactNode
   labelledBy?: string
   className?: string
   /** Hide the default glass card chrome when the consumer renders its own. */
   bare?: boolean
+  /** Allow dismissing via Escape key or backdrop click. Defaults to true. */
+  dismissible?: boolean
 }
 
 /**
@@ -27,15 +29,16 @@ export function Modal({
   children,
   labelledBy,
   className,
-  bare = false
+  bare = false,
+  dismissible = true
 }: ModalProps): JSX.Element | null {
   useEffect(() => {
     if (!open) return
     const previouslyFocused = document.activeElement as HTMLElement | null
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (dismissible && event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        onClose?.()
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -50,7 +53,7 @@ export function Modal({
       clearTimeout(focusTimer)
       previouslyFocused?.focus?.()
     }
-  }, [open, onClose])
+  }, [open, onClose, dismissible])
 
   return createPortal(
     <AnimatePresence>
@@ -61,13 +64,13 @@ export function Modal({
             <WindowControls />
           </div>
           <motion.div
-          className="absolute inset-0 bg-black/80 backdrop-blur-[4px]"
+            className="absolute inset-0 bg-black/80 backdrop-blur-[4px]"
             variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
             initial="hidden"
             animate="visible"
             exit="hidden"
             transition={tween(0.2)}
-            onClick={onClose}
+            onClick={dismissible ? onClose : undefined}
           />
           <motion.div
             role="dialog"
@@ -85,7 +88,7 @@ export function Modal({
               className
             )}
           >
-            {!bare ? (
+            {!bare && dismissible && onClose ? (
               <IconButton
                 label="Close"
                 size="sm"

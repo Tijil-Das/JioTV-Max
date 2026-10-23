@@ -113,14 +113,20 @@ describe('updater module unit tests', () => {
   // 1. Gating
   // ──────────────────────────────────────────────────────────────────────────
   describe('Gating', () => {
-    it('app.isPackaged = false: initUpdater registers no listeners, no timers, no IPC handlers', async () => {
+    it('app.isPackaged = false: initUpdater registers safe dev handlers but no auto-updater listeners or timers', async () => {
       isAppPackaged = false
       const getWin = () => null
 
       updaterModule.initUpdater(getWin)
 
-      expect(ipcHandlers.size).toBe(0)
-      expect(ipcListeners.size).toBe(0)
+      expect(ipcHandlers.has('update:get-state')).toBe(true)
+      expect(ipcHandlers.has('update:check')).toBe(true)
+      const checkResult = await ipcHandlers.get('update:check')!()
+      expect(checkResult).toEqual({
+        status: 'dev-mode',
+        error: 'Updates are enabled in packaged desktop builds'
+      })
+
       expect(fakeAutoUpdater.listenerCount('update-available')).toBe(0)
       expect(fakeAutoUpdater.listenerCount('update-downloaded')).toBe(0)
 

@@ -17,6 +17,7 @@ import { usePlayerStore } from '@/store/usePlayerStore'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LoginModal } from '@/components/auth/LoginModal'
+import { HowToUseModal } from '@/components/ui/HowToUseModal'
 import { ToastViewport } from '@/components/ui/Toasts'
 import { UpdateBanner } from '@/components/ui/UpdateBanner'
 import { SplashScreen } from '@/components/ui/SplashScreen'
@@ -59,6 +60,7 @@ export default function App(): JSX.Element {
   const status = useAuthStore((state) => state.status)
   const pushToast = useUIStore((state) => state.pushToast)
   const openLogin = useUIStore((state) => state.openLogin)
+  const openHowToUse = useUIStore((state) => state.openHowToUse)
   const setRelayBase = useRelayStore((state) => state.setRelayBase)
 
   /** True while the app is still bootstrapping (relay init + session + catalogue). */
@@ -70,6 +72,9 @@ export default function App(): JSX.Element {
   // ── Bootstrap sequence ──────────────────────────────────────────────
   useEffect(() => {
     async function bootstrap(): Promise<void> {
+      // Increment app open counter on each launch
+      useSettingsStore.getState().incrementOpenCount()
+
       const bridge = getBridge()
 
       // Step 1: fetch relay base URL from appInfo
@@ -151,8 +156,15 @@ export default function App(): JSX.Element {
       await new Promise<void>((r) => setTimeout(r, 600))
       setSplashVisible(false)
 
-      // Step 4: if not authenticated with a JioTV account, pop the login panel automatically
-      if (!hasValidSession) {
+      const { hasClearedHowToUse } = useSettingsStore.getState()
+
+      // If user hasn't cleared the "How to Use" info panel, show it first
+      if (!hasClearedHowToUse) {
+        setTimeout(() => {
+          openHowToUse()
+        }, 120)
+      } else if (!hasValidSession) {
+        // Step 4: if not authenticated with a JioTV account, pop the login panel automatically
         setTimeout(() => {
           openLogin('Sign in with your JioTV number to start watching.')
         }, 120)
@@ -281,6 +293,7 @@ export default function App(): JSX.Element {
             </Routes>
           </AnimatePresence>
         </AppShell>
+        <HowToUseModal />
         <LoginModal />
         <ToastViewport />
         <UpdateBanner />

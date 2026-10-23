@@ -572,9 +572,9 @@ app.whenReady().then(async () => {
   })
   await jio.init()
   registerIpc()
+  initUpdater(() => mainWindow)
   await createWindow()
   closeInstallingPanel()
-  initUpdater(() => mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()

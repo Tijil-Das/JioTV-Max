@@ -13,12 +13,15 @@ export interface Toast {
 interface UIState {
   loginOpen: boolean
   loginReason: string | null
+  howToUseOpen: boolean
   searchOpen: boolean
   toasts: Toast[]
   lastBrowsePath: string
   setLastBrowsePath: (path: string) => void
   openLogin: (reason?: string) => void
   closeLogin: () => void
+  openHowToUse: () => void
+  closeHowToUse: () => void
   setSearchOpen: (open: boolean) => void
   pushToast: (toast: Omit<Toast, 'id' | 'variant' | 'duration'> & { variant?: ToastVariant; duration?: number }) => string
   dismissToast: (id: string) => void
@@ -29,6 +32,7 @@ let toastCounter = 0
 export const useUIStore = create<UIState>((set, get) => ({
   loginOpen: false,
   loginReason: null,
+  howToUseOpen: false,
   searchOpen: false,
   toasts: [],
   lastBrowsePath: '/',
@@ -39,6 +43,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       loginReason: reason ?? state.loginReason
     })),
   closeLogin: () => set({ loginOpen: false, loginReason: null }),
+  openHowToUse: () => set({ howToUseOpen: true }),
+  closeHowToUse: () => set({ howToUseOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   pushToast: (input) => {
     const id = `toast-${Date.now()}-${toastCounter++}`

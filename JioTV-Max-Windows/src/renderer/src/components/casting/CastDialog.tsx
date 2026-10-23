@@ -286,11 +286,11 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
                 </div>
               ) : null}
 
-              {/* Searching live status indicator */}
-              {isSearching ? (
-                <div className="flex items-center gap-2.5 text-xs text-zinc-400 px-1 py-1">
+              {/* Searching live status indicator (subtle header indicator when devices already exist) */}
+              {isSearching && devices.length > 0 ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-400 px-1 py-1">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#E11D2E]" />
-                  <span>{CAST_STRINGS.searchingText}</span>
+                  <span>Scanning for more TVs…</span>
                 </div>
               ) : null}
 
@@ -364,7 +364,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
                     )
                   })}
                 </div>
-              ) : searchTimerDone && !isSearching ? (
+              ) : searchTimerDone ? (
                 /* Empty state */
                 <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 text-center">
                   <Tv className="w-8 h-8 text-zinc-500 mx-auto mb-2 opacity-60" />
@@ -375,7 +375,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
                   <div className="mt-4 flex items-center justify-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void startDiscovery()}
+                      onClick={handleSearchAgain}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 active:scale-95 transition-all"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />

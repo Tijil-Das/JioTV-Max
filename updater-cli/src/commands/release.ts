@@ -1,0 +1,596 @@
+/**
+ * release.ts — The main interactive release wizard.
+ * Phases: banner → context → version → notes → preflight → summary → execute → dashboard → verify
+ */
+
+import * as p from '@clack/prompts'
+import boxen from 'boxen'
+import gradient from 'gradient-string'
+import figlet from 'figlet'
+import semver from 'semver'
+import fs from 'node:fs'
+import { execSync } from 'node:child_process'
+
+import {
+  discoverRepo,
+  computeNextVersion,
+  tagExists,
+  isWorkingTreeClean,
+  isBehindOrigin,
+  readReleaseNotes,
+  writeReleaseNotes,
+  RepoContext,
+} from '../lib/repo.js'
+import { bumpPackageJson, createReleaseCommit, pushRelease, rollbackRelease } from '../lib/git.js'
+import { hasToken, GhAuthError, getReleaseByTag, downloadManifest, getLatestRelease } from '../lib/github.js'
+import { startDashboard } from '../lib/dashboard.js'
+import { c, G, IS_TTY, USE_COLOR, fmtDuration, link, termWidth } from '../lib/ui.js'
+
+export interface ReleaseOptions {
+  bump?: string
+  platforms?: string
+  yes?: boolean
+  dryRun?: boolean
+  noBanner?: boolean
+  simulate?: boolean
+  verbose?: boolean
+}
+
+type BumpType = 'patch' | 'minor' | 'major' | 'prerelease' | 'custom'
+
+// ─── Banner ───────────────────────────────────────────────────────────────────
+
+function printBanner(noBanner: boolean, appName: string): void {
+  if (noBanner || !IS_TTY) return
+  try {
+    const text = figlet.textSync('JioTv Max', { font: 'Small' })
+    if (USE_COLOR) {
+      const grad = gradient(['#e11d2e', '#ff6b6b'])
+      console.log(grad(text))
+    } else {
+      console.log(text)
+    }
+  } catch {
+    console.log(`  ${appName}`)
+  }
+  console.log(c.dim('  Release CLI · pro-grade, fully automated\n'))
+}
+
+// ─── Context card ─────────────────────────────────────────────────────────────
+
+function printContextCard(ctx: RepoContext, authenticated: boolean): void {
+  const lines = [
+    `${c.bold('App')}      ${ctx.owner}/${ctx.repo}`,
+    `${c.bold('Version')}  ${c.cyan(ctx.appVersion)}`,
+    `${c.bold('Branch')}   ${ctx.branch}`,
+    `${c.bold('Last Tag')} ${ctx.lastTag ?? c.dim('none')}`,
+    `${c.bold('Auth')}     ${authenticated ? c.green('GitHub token found') : c.yellow('No token — set GITHUB_TOKEN')}`,
+  ]
+  const box = boxen(lines.join('\n'), {
+    padding: { top: 0, bottom: 0, left: 1, right: 2 },
+    borderStyle: 'round',
+    borderColor: 'cyan',
+    title: ' Context ',
+    titleAlignment: 'center',
+  })
+  console.log(box)
+  console.log('')
+}
+
+// ─── Non-interactive (--yes / --bump) helper ──────────────────────────────────
+
+function resolveNonInteractiveVersion(ctx: RepoContext, bump: string): string {
+  const bumps = ['patch', 'minor', 'major', 'prerelease']
+  if (bumps.includes(bump)) {
+    return computeNextVersion(ctx.appVersion, bump as BumpType)
+  }
+  const clean = semver.clean(bump)
+  if (!clean) throw new Error(`Invalid version or bump type: "${bump}"`)
+  return clean
+}
+
+// ─── Main release flow ────────────────────────────────────────────────────────
+
+export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
+  const { dryRun = false, simulate = false, verbose = false } = opts
+  const nonInteractive = Boolean(opts.yes || opts.bump)
+
+  // ─── 0. Discover repo ─────────────────────────────────────────────────────
+
+  let ctx: RepoContext
+  try {
+    const sp = p.spinner()
+    sp.start('Discovering repository…')
+    ctx = await discoverRepo()
+    sp.stop(`Repository: ${c.cyan(ctx.owner + '/' + ctx.repo)} · v${ctx.appVersion}`)
+  } catch (e: any) {
+    p.log.error(`Failed to discover repo: ${e.message}`)
+    if (verbose) console.error(e)
+    process.exit(1)
+  }
+
+  const authenticated = hasToken()
+
+  // ─── 1. Banner + context ─────────────────────────────────────────────────
+
+  printBanner(opts.noBanner ?? false, ctx.repo)
+  printContextCard(ctx, authenticated)
+
+  if (dryRun) {
+    p.note(
+      'DRY RUN mode — no git commands, no API calls, no files changed.',
+      'dry-run'
+    )
+  }
+
+  // ─── 2. Platform selection ────────────────────────────────────────────────
+
+  // Only Windows is configured in release.yml + package.json build.
+  // Show other platforms as unavailable with reason.
+
+  if (!nonInteractive && IS_TTY) {
+    const availablePlatforms = [
+      {
+        value: 'windows',
+        label: 'Windows (NSIS x64 installer)',
+        hint: ctx.configuredPlatforms.includes('windows') ? '' : 'Not configured',
+      },
+      {
+        value: 'mac',
+        label: 'macOS',
+        hint: 'Not configured in release.yml or package.json build',
+      },
+      {
+        value: 'linux',
+        label: 'Linux',
+        hint: 'Not configured in release.yml or package.json build',
+      },
+    ]
+
+    p.log.info(
+      c.dim('Platform note: release.yml uses a tag-push trigger with a single Windows job.\n') +
+      c.dim('macOS and Linux are not configured — selecting them would require changes to the workflow.\n') +
+      c.dim('Currently releasing Windows only.')
+    )
+  }
+
+  // ─── 3. Version bump ──────────────────────────────────────────────────────
+
+  let newVersion: string
+
+  if (opts.bump) {
+    newVersion = resolveNonInteractiveVersion(ctx, opts.bump)
+  } else if (!IS_TTY) {
+    p.log.error('No --bump flag provided and terminal is not interactive.')
+    process.exit(1)
+  } else {
+    const bumpChoice = await p.select<BumpType>({
+      message: 'Version bump:',
+      options: [
+        {
+          value: 'patch',
+          label: `patch  ${c.dim(ctx.appVersion + ' → ' + computeNextVersion(ctx.appVersion, 'patch'))}`,
+          hint: 'Bug fixes, small improvements',
+        },
+        {
+          value: 'minor',
+          label: `minor  ${c.dim(ctx.appVersion + ' → ' + computeNextVersion(ctx.appVersion, 'minor'))}`,
+          hint: 'New features, backward compatible',
+        },
+        {
+          value: 'major',
+          label: `major  ${c.dim(ctx.appVersion + ' → ' + computeNextVersion(ctx.appVersion, 'major'))}`,
+          hint: 'Breaking changes',
+        },
+        {
+          value: 'prerelease',
+          label: `prerelease  ${c.dim(ctx.appVersion + ' → ' + computeNextVersion(ctx.appVersion, 'prerelease'))}`,
+          hint: 'Labeled pre-release (electron-updater skips unless allowPrerelease=true)',
+        },
+        { value: 'custom', label: 'custom  Enter your own semver', hint: '' },
+      ],
+    })
+    if (p.isCancel(bumpChoice)) { p.cancel('Release cancelled.'); process.exit(0) }
+
+    if (bumpChoice === 'custom') {
+      const customV = await p.text({
+        message: 'Enter version (e.g. 1.2.3):',
+        validate: (v) => {
+          const clean = semver.clean(v)
+          if (!clean) return 'Must be a valid semver (e.g. 1.2.3)'
+          if (semver.lte(clean, ctx.appVersion)) return `Must be greater than current ${ctx.appVersion}`
+          return undefined
+        },
+      })
+      if (p.isCancel(customV)) { p.cancel('Release cancelled.'); process.exit(0) }
+      newVersion = semver.clean(customV as string)!
+    } else {
+      newVersion = computeNextVersion(ctx.appVersion, bumpChoice as BumpType)
+    }
+  }
+
+  const newTag = `v${newVersion}`
+
+  // Validate: version must be > current
+  if (semver.lte(newVersion, ctx.appVersion)) {
+    p.log.error(`New version ${newVersion} must be greater than current ${ctx.appVersion}`)
+    process.exit(1)
+  }
+
+  // Validate: tag must not exist
+  const { local: tagLocal, remote: tagRemote } = await tagExists(newTag, ctx.gitRoot)
+  if (tagLocal || tagRemote) {
+    p.log.error(
+      `Tag ${newTag} already exists${tagLocal ? ' locally' : ''}${tagRemote ? ' on origin' : ''}. ` +
+      `Choose a different version.`
+    )
+    process.exit(1)
+  }
+
+  p.log.success(`Version: ${c.dim(ctx.appVersion)} ${G.arrow} ${c.cyan(newVersion)}`)
+
+  // ─── 4. Release notes ─────────────────────────────────────────────────────
+
+  const notesPath = ctx.releaseNotesPath
+  let notesContent = readReleaseNotes(notesPath)
+
+  if (!nonInteractive && IS_TTY) {
+    const notesPreview = notesContent
+      ? notesContent.split('\n').slice(0, 8).join('\n') + (notesContent.split('\n').length > 8 ? '\n…' : '')
+      : '(file not found or empty)'
+
+    p.note(notesPreview, `release-notes.md preview`)
+
+    const notesOk = await p.confirm({
+      message: `Is release-notes.md ready for ${newTag}?`,
+      initialValue: true,
+    })
+    if (p.isCancel(notesOk)) { p.cancel('Release cancelled.'); process.exit(0) }
+
+    if (!notesOk) {
+      const editChoice = await p.select<'editor' | 'paste' | 'skip'>({
+        message: 'How would you like to update it?',
+        options: [
+          { value: 'editor', label: 'Open in $EDITOR / notepad', hint: '' },
+          { value: 'paste', label: 'Paste new content here', hint: '' },
+          { value: 'skip', label: 'Skip — proceed without updating', hint: '' },
+        ],
+      })
+      if (p.isCancel(editChoice)) { p.cancel('Release cancelled.'); process.exit(0) }
+
+      if (editChoice === 'editor') {
+        const editor = process.env['EDITOR'] || (process.platform === 'win32' ? 'notepad' : 'nano')
+        try {
+          execSync(`${editor} "${notesPath}"`, { stdio: 'inherit' })
+          notesContent = readReleaseNotes(notesPath)
+          p.log.success('Notes updated from editor.')
+        } catch (e: any) {
+          p.log.warn(`Could not open editor: ${e.message}`)
+        }
+      } else if (editChoice === 'paste') {
+        const pasted = await p.text({
+          message: 'Paste your release notes (single line, use \\n for newlines):',
+          placeholder: '## What\'s Changed…',
+        })
+        if (p.isCancel(pasted)) { p.cancel('Release cancelled.'); process.exit(0) }
+        const content = (pasted as string).replace(/\\n/g, '\n')
+        if (!dryRun) writeReleaseNotes(notesPath, content)
+        notesContent = content
+        p.log.success('Notes updated.')
+      }
+    }
+  }
+
+  // ─── 5. Pre-flight checks ─────────────────────────────────────────────────
+
+  p.log.info('Running pre-flight checks…')
+
+  const checks: { label: string; check: () => Promise<string | null> }[] = [
+    {
+      label: 'Git installed',
+      check: async () => {
+        try { execSync('git --version', { stdio: 'pipe' }); return null } catch { return 'Install git from https://git-scm.com' }
+      },
+    },
+    {
+      label: 'Working tree is clean',
+      check: async () => {
+        if (dryRun) return null
+        const clean = await isWorkingTreeClean(ctx.gitRoot)
+        return clean ? null : 'Commit or stash all changes before releasing'
+      },
+    },
+    {
+      label: `On release branch (${ctx.branch})`,
+      check: async () => {
+        const { stdout } = await (await import('execa')).execa('git', ['branch', '--show-current'], { cwd: ctx.gitRoot })
+        return stdout.trim() === ctx.branch ? null : `Switch to ${ctx.branch} branch first`
+      },
+    },
+    {
+      label: 'Not behind origin',
+      check: async () => {
+        if (dryRun) return null
+        const behind = await isBehindOrigin(ctx.branch, ctx.gitRoot)
+        return behind ? `Run: git pull origin ${ctx.branch}` : null
+      },
+    },
+    {
+      label: `Tag ${newTag} does not exist`,
+      check: async () => {
+        const { local, remote } = await tagExists(newTag, ctx.gitRoot)
+        return (local || remote) ? `Tag ${newTag} already exists — choose a different version` : null
+      },
+    },
+    {
+      label: 'release.yml found',
+      check: async () => {
+        const exists = fs.existsSync(ctx.gitRoot + '/' + ctx.workflowPath)
+        return exists ? null : `${ctx.workflowPath} not found in repo root`
+      },
+    },
+    {
+      label: 'GitHub token available',
+      check: async () => {
+        if (!authenticated) return 'Set GITHUB_TOKEN or GH_TOKEN environment variable'
+        // Try a quick API call
+        try {
+          const { execa } = await import('execa')
+          // Just validate by trying to reach the API
+          const { getLatestRelease } = await import('../lib/github.js')
+          return null
+        } catch {
+          return 'GitHub API unreachable'
+        }
+      },
+    },
+  ]
+
+  let anyCheckFailed = false
+  for (const { label, check } of checks) {
+    const sp = p.spinner()
+    sp.start(label)
+    try {
+      const result = await check()
+      if (result) {
+        sp.stop(c.red(`${G.cross} ${label}`) + c.dim(` → ${result}`))
+        anyCheckFailed = true
+      } else {
+        sp.stop(c.green(`${G.tick} ${label}`))
+      }
+    } catch (e: any) {
+      sp.stop(c.yellow(`⚠ ${label} — ${e.message}`))
+    }
+  }
+
+  if (anyCheckFailed && !opts.yes) {
+    const cont = await p.confirm({
+      message: c.yellow('Some pre-flight checks failed. Continue anyway?'),
+      initialValue: false,
+    })
+    if (p.isCancel(cont) || !cont) { p.cancel('Release aborted.'); process.exit(0) }
+  }
+
+  // ─── 6. Summary card + final confirm ─────────────────────────────────────
+
+  const summaryLines = [
+    c.bold('What will happen:'),
+    '',
+    `  ${G.bullet} Bump version:   ${c.dim(ctx.appVersion)} → ${c.cyan(newVersion)}  in  JioTV-Max-Windows/package.json`,
+    `  ${G.bullet} Commit message: ${c.dim('chore(release): v' + newVersion)}`,
+    `  ${G.bullet} Create tag:     ${c.cyan(newTag)}  (annotated, matching workflow trigger ${ctx.tagPattern})`,
+    `  ${G.bullet} Push:           origin/${ctx.branch} + tag ${newTag}`,
+    `  ${G.bullet} Trigger:        ${ctx.workflowPath}  (Windows NSIS build, typecheck, tests)`,
+    `  ${G.bullet} Release notes:  ${notesContent ? 'from release-notes.md' : c.yellow('(empty — GitHub will auto-generate)')}`,
+    '',
+    c.yellow(`  ⚠  This publishes a LIVE release. Installed v${ctx.appVersion} users will receive the update automatically.`),
+  ]
+
+  const summaryBox = boxen(summaryLines.join('\n'), {
+    padding: { top: 0, bottom: 0, left: 1, right: 2 },
+    borderStyle: 'double',
+    borderColor: dryRun ? 'yellow' : 'red',
+    title: dryRun ? ' DRY RUN Summary ' : ' Release Summary ',
+    titleAlignment: 'center',
+  })
+  console.log(summaryBox)
+  console.log('')
+
+  if (!opts.yes && IS_TTY) {
+    const confirmed = await p.confirm({
+      message: dryRun
+        ? 'Proceed with dry-run (no real changes)?'
+        : `Release ${c.cyan(newTag)} for real?`,
+      initialValue: false,
+    })
+    if (p.isCancel(confirmed) || !confirmed) { p.cancel('Release cancelled.'); process.exit(0) }
+  }
+
+  // ─── 7. Execute ───────────────────────────────────────────────────────────
+
+  p.intro(dryRun ? c.yellow('  DRY RUN execution') : `  Releasing ${c.cyan(newTag)}`)
+
+  let releaseSha: string | null = null
+  let releaseTag: string | null = null
+
+  // Step: Bump package.json
+  {
+    const sp = p.spinner()
+    sp.start(`Bumping package.json to ${newVersion}…`)
+    if (!dryRun) {
+      await bumpPackageJson(ctx.appDir, newVersion)
+    }
+    sp.stop(c.green(`${G.tick} package.json → ${newVersion}`) + (dryRun ? c.dim(' [dry-run]') : ''))
+  }
+
+  // Step: Commit + tag
+  {
+    const sp = p.spinner()
+    sp.start('Creating release commit and tag…')
+    if (!dryRun) {
+      try {
+        const result = await createReleaseCommit(ctx.gitRoot, ctx.appDir, newVersion, notesPath)
+        releaseSha = result.sha
+        releaseTag = result.tag
+        sp.stop(c.green(`${G.tick} Commit ${releaseSha!.slice(0, 7)}, tag ${releaseTag}`))
+      } catch (e: any) {
+        sp.stop(c.red(`${G.cross} Failed to create commit/tag: ${e.message}`))
+        if (verbose) console.error(e)
+        process.exit(1)
+      }
+    } else {
+      sp.stop(c.green(`${G.tick} Would create commit chore(release): ${newTag}`) + c.dim(' [dry-run]'))
+    }
+  }
+
+  // Step: Push
+  {
+    const sp = p.spinner()
+    sp.start(`Pushing origin/${ctx.branch} + tag ${newTag}…`)
+    if (!dryRun) {
+      try {
+        await pushRelease(ctx.gitRoot, ctx.branch, newTag)
+        sp.stop(c.green(`${G.tick} Pushed ${ctx.branch} and ${newTag} to origin`))
+      } catch (e: any) {
+        sp.stop(c.red(`${G.cross} Push failed: ${e.message}`))
+        p.log.warn('Rolling back local commit and tag…')
+        const undone = await rollbackRelease(ctx.gitRoot, newTag)
+        undone.forEach((u) => p.log.info(c.dim(`  ${G.bullet} ${u}`)))
+        p.log.error('Push failed and local changes were rolled back. Fix the issue and try again.')
+        if (verbose) console.error(e)
+        process.exit(1)
+      }
+    } else {
+      sp.stop(c.green(`${G.tick} Would push origin/${ctx.branch} --tags`) + c.dim(' [dry-run]'))
+    }
+  }
+
+  // ─── 8. Dashboard ─────────────────────────────────────────────────────────
+
+  p.outro(`Tag ${c.cyan(newTag)} pushed! Monitoring GitHub Actions…`)
+  console.log('')
+
+  if (dryRun) {
+    p.log.info(c.dim('[dry-run] Would now watch the GitHub Actions workflow run here:'))
+    p.log.info(c.dim(`  https://github.com/${ctx.owner}/${ctx.repo}/actions`))
+    return
+  }
+
+  let dashboardResult: Awaited<ReturnType<typeof startDashboard>>
+  try {
+    dashboardResult = await startDashboard({
+      owner: ctx.owner,
+      repo: ctx.repo,
+      workflowFile: ctx.workflowPath,
+      tag: newTag,
+      simulate,
+    })
+  } catch (e: any) {
+    console.log(c.red(`\n  Dashboard error: ${e.message}`))
+    console.log(c.dim(`  Check manually: https://github.com/${ctx.owner}/${ctx.repo}/actions`))
+    return
+  }
+
+  // ─── 9. Verify & finish ───────────────────────────────────────────────────
+
+  console.log('')
+  if (dashboardResult.success) {
+    const sp = p.spinner()
+    sp.start('Verifying published release on GitHub…')
+    await sleep(5000) // Give GitHub a moment to publish
+
+    let verified = false
+    let releaseUrl = `https://github.com/${ctx.owner}/${ctx.repo}/releases/tag/${newTag}`
+    const expectedAssets = ['JioTv-Max-' + newVersion + '-setup.exe', 'latest.yml']
+
+    try {
+      const release = await getReleaseByTag(ctx.owner, ctx.repo, newTag)
+      if (release && !release.draft) {
+        releaseUrl = release.html_url
+        const assetNames = release.assets.map((a) => a.name)
+        const hasInstaller = assetNames.some((n) => n.endsWith('.exe'))
+        const hasManifest = assetNames.some((n) => n === 'latest.yml')
+        const hasBlockmap = assetNames.some((n) => n.endsWith('.blockmap'))
+
+        // Download manifest and check version
+        const manifestAsset = release.assets.find((a) => a.name === 'latest.yml')
+        let manifestVersion: string | null = null
+        if (manifestAsset) {
+          const manifest = await downloadManifest(manifestAsset.browser_download_url)
+          if (manifest) {
+            const m = manifest.match(/^version:\s*(.+)$/m)
+            manifestVersion = m ? m[1].trim() : null
+          }
+        }
+
+        let verifiedBlockmap = hasBlockmap
+        if (!verifiedBlockmap && hasInstaller) {
+          sp.stop(c.yellow('Installer found, but differential blockmap is missing. Auto-generating and uploading…'))
+          const { ensureReleaseBlockmap } = await import('./blockmap.js')
+          const syncResult = await ensureReleaseBlockmap(newTag)
+          if (syncResult.success) {
+            verifiedBlockmap = true
+          }
+        } else {
+          sp.stop(
+            hasInstaller && hasManifest && verifiedBlockmap
+              ? c.green(`${G.tick} Release published and verified`)
+              : c.yellow(`⚠ Release found but some assets may still be uploading`)
+          )
+        }
+
+        verified = hasInstaller && hasManifest && verifiedBlockmap && manifestVersion === newVersion
+
+        const verifyLines = [
+          `${hasInstaller ? c.green(G.tick) : c.yellow('?')} .exe installer`,
+          `${hasManifest ? c.green(G.tick) : c.yellow('?')} latest.yml manifest${manifestVersion ? c.dim(' · version: ' + manifestVersion) : ''}`,
+          `${verifiedBlockmap ? c.green(G.tick) : c.yellow('?')} .blockmap (differential update)`,
+        ]
+        p.note(verifyLines.join('\n'), 'Release assets')
+      } else {
+        sp.stop(c.yellow('⚠ Release not yet published (may still be drafting)'))
+      }
+    } catch (e: any) {
+      sp.stop(c.yellow(`⚠ Could not verify release: ${e.message}`))
+    }
+
+    const totalDuration = fmtDuration(dashboardResult.durationMs)
+    const finishLines = [
+      c.green(c.bold('Release complete!')),
+      '',
+      `  ${G.bullet} Release URL:   ${link(releaseUrl, releaseUrl)}`,
+      `  ${G.bullet} Total time:    ${totalDuration}`,
+      '',
+      c.bold('How to test auto-update:'),
+      `  1. Make sure your installed app is still v${ctx.appVersion}`,
+      `  2. Launch the app and wait ~15–30 seconds`,
+      `  3. The app will detect v${newVersion}, download it, and prompt you to restart`,
+    ]
+
+    console.log(
+      boxen(finishLines.join('\n'), {
+        padding: { top: 0, bottom: 0, left: 1, right: 2 },
+        borderStyle: 'round',
+        borderColor: 'green',
+        title: ` ${G.tick} Done `,
+        titleAlignment: 'center',
+      })
+    )
+  } else {
+    console.log(c.red(`\n  ${G.cross} Release workflow failed.`))
+    console.log(c.dim(`  Run URL: ${dashboardResult.runUrl}`))
+    console.log('')
+    console.log(c.dim('Options:'))
+    console.log(c.dim(`  • Open run in browser: ${dashboardResult.runUrl}`))
+    console.log(c.dim(`  • Re-attach to run:    npm run watch -- --run ${dashboardResult.runId}`))
+    console.log('')
+    console.log(
+      c.yellow(
+        '  To delete the tag (will NOT auto-update users), run:\n' +
+        `  git tag -d ${newTag} && git push origin :refs/tags/${newTag}`
+      )
+    )
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

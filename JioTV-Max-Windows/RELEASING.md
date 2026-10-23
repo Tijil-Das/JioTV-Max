@@ -4,35 +4,40 @@ This document is the definitive guide on how to create, test, build, and publish
 
 ---
 
-## 🚀 Quick Release in 3 Commands
+## 🚀 Interactive Release with updater-cli (Recommended)
 
-When you are ready to make a release from the `main` branch:
+The repository includes a dedicated release CLI in `updater-cli/` with convenient root launchers (`release.cmd` / `release.sh`). It coordinates the entire release end-to-end:
 
-```bash
-# 1. Ensure you have the latest code
-git checkout main
-git pull origin main
+```powershell
+# Run the interactive release wizard from repository root:
+.\release.cmd
 
-# 2. Bump the version (this updates package.json, commits, and creates a git tag)
-cd JioTV-Max-Windows
-npm version patch   # Bug fix (e.g., 1.0.0 -> 1.0.1)
-# or: npm version minor  (e.g., 1.0.0 -> 1.1.0)
-# or: npm version major  (e.g., 1.0.0 -> 2.0.0)
-cd ..
+# Check current release & GitHub Actions status:
+.\release.cmd status
 
-# 3. Push the commit and the tag to GitHub
-git push origin main --tags
+# Re-attach live monitoring to an ongoing workflow run:
+.\release.cmd watch
+
+# Preview the release without touching git or making API calls:
+.\release.cmd --dry-run --bump patch
 ```
 
-*(To push only the specific release tag instead: `git push origin v1.0.1`)*
+### What `updater-cli` Does Automatically:
+1. **Context Inspection**: Derives owner/repo, branch, current version, tags, and GitHub token from git credentials.
+2. **Interactive Bumps**: Select SemVer bump (`patch`, `minor`, `major`, `prerelease`, or custom).
+3. **Release Notes Preview**: Reads `release-notes.md` and lets you preview, edit in your editor, or paste updates.
+4. **Pre-flight Checks**: Confirms git installation, clean working tree, on `main` branch, up to date with origin, tag availability, and GitHub Actions workflow file.
+5. **Atomic Execution**: Updates `package.json`, creates annotated tag, and pushes to origin. If push fails, automatically rolls back local changes cleanly.
+6. **Live Terminal Dashboard**: Renders in-place progress bars, job status, duration, ETA, and step indicators without leaving the terminal.
+7. **Release & Asset Verification**: Validates the published GitHub Release, checking the setup installer (`.exe`), differential update map (`.blockmap`), and `latest.yml`.
 
 ---
 
-## ⚙️ What Happens Automatically
+## ⚙️ What Happens Automatically on GitHub Actions
 
 Pushing a `v*` tag triggers the GitHub Actions workflow at [.github/workflows/release.yml](../.github/workflows/release.yml):
 
-1. **Environment Setup**: Spawns a clean `windows-latest` runner, configures Node 20 & pnpm 9, and restores the pnpm store cache.
+1. **Environment Setup**: Spawns a clean `windows-latest` runner, configures Node 20 & pnpm 9, and restores pnpm store caches.
 2. **Version Check**: Validates that the git tag strictly matches `"version"` in `JioTV-Max-Windows/package.json`.
 3. **Quality Gates**: Runs full TypeScript typechecks and unit tests.
 4. **castLabs Widevine Setup**: Downloads and verifies castLabs Electron runtime for secure Widevine DASH playback.
@@ -42,28 +47,10 @@ Pushing a `v*` tag triggers the GitHub Actions workflow at [.github/workflows/re
    - Generates the NSIS installer: `JioTv-Max-<version>-setup.exe`.
 6. **Update Metadata Generation**:
    - Calculates sha512 checksums and generates `latest.yml`.
-   - Generates the differential `.blockmap` file used by `electron-updater` for silent, low-bandwidth updates.
+   - Generates the differential `.blockmap` file used by `electron-updater` for silent, low-bandwidth delta updates.
 7. **Publishing**:
-   - Uploads `.exe`, `.blockmap`, and `latest.yml` to GitHub Releases.
-
----
-
-## 📢 Publishing the Release on GitHub
-
-By default, `electron-builder` drafts releases so the maintainer can review release notes before pushing live:
-
-### Option A: Via GitHub Web Interface
-1. Go to your repository's [Releases page](https://github.com/Tijil-Das/JioTV-Max/releases).
-2. Open the newly created draft release.
-3. Review or edit the release notes.
-4. Click **Publish release**.
-
-### Option B: Via Terminal (Instant Publish)
-You can publish the latest draft release directly from terminal using Node:
-
-```bash
-node -e "fetch('https://api.github.com/repos/Tijil-Das/JioTV-Max/releases').then(r=>r.json()).then(releases=>{const draft=releases.find(r=>r.draft); if(draft){fetch(draft.url,{method:'PATCH',headers:{Authorization:'token ' + process.env.GH_TOKEN,'User-Agent':'node','Content-Type':'application/json'},body:JSON.stringify({draft:false})}).then(()=>console.log('Published!'));}})"
-```
+   - Publishes `.exe`, `.blockmap`, and `latest.yml` to GitHub Releases.
+   - Automatically synchronizes release notes from `release-notes.md`.
 
 ---
 

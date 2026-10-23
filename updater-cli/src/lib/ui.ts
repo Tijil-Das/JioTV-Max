@@ -1,0 +1,139 @@
+/**
+ * ui.ts — Terminal rendering utilities.
+ * Handles: Unicode/ASCII fallback, NO_COLOR, progress bars, clickable links (OSC-8),
+ * non-TTY plain output, narrow-terminal truncation.
+ */
+
+import isUnicodeSupported from 'is-unicode-supported'
+import stringWidth from 'string-width'
+import stripAnsi from 'strip-ansi'
+import pc from 'picocolors'
+
+// ─── Environment ─────────────────────────────────────────────────────────────
+
+export const IS_TTY = Boolean(process.stdout.isTTY)
+export const UNICODE = IS_TTY && isUnicodeSupported()
+export const NO_COLOR = Boolean(process.env['NO_COLOR']) || process.argv.includes('--no-color')
+export const FORCE_COLOR =
+  Boolean(process.env['FORCE_COLOR']) || process.argv.includes('--force-color')
+export const USE_COLOR = FORCE_COLOR || (!NO_COLOR && IS_TTY)
+
+// ─── Glyphs ──────────────────────────────────────────────────────────────────
+
+export const G = {
+  tick: UNICODE ? '✔' : 'OK',
+  cross: UNICODE ? '✖' : 'ERR',
+  arrow: UNICODE ? '→' : '->',
+  dot: UNICODE ? '·' : '.',
+  bar_full: UNICODE ? '█' : '#',
+  bar_empty: UNICODE ? '░' : '-',
+  spinner_frames: UNICODE
+    ? ['◐', '◓', '◑', '◒']
+    : ['-', '\\', '|', '/'],
+  queued: UNICODE ? '○' : 'O',
+  skipped: UNICODE ? '⊘' : 'S',
+  bullet: UNICODE ? '•' : '*',
+  dash: '─',
+}
+
+// ─── Color helpers ───────────────────────────────────────────────────────────
+
+export const c = {
+  green: (s: string) => (USE_COLOR ? pc.green(s) : s),
+  red: (s: string) => (USE_COLOR ? pc.red(s) : s),
+  yellow: (s: string) => (USE_COLOR ? pc.yellow(s) : s),
+  blue: (s: string) => (USE_COLOR ? pc.blue(s) : s),
+  cyan: (s: string) => (USE_COLOR ? pc.cyan(s) : s),
+  magenta: (s: string) => (USE_COLOR ? pc.magenta(s) : s),
+  gray: (s: string) => (USE_COLOR ? pc.gray(s) : s),
+  bold: (s: string) => (USE_COLOR ? pc.bold(s) : s),
+  dim: (s: string) => (USE_COLOR ? pc.dim(s) : s),
+  white: (s: string) => (USE_COLOR ? pc.white(s) : s),
+  bgRed: (s: string) => (USE_COLOR ? pc.bgRed(s) : s),
+  bgGreen: (s: string) => (USE_COLOR ? pc.bgGreen(s) : s),
+  italic: (s: string) => (USE_COLOR ? pc.italic(s) : s),
+}
+
+// ─── Progress bar ─────────────────────────────────────────────────────────────
+
+/**
+ * Render a progress bar.
+ * @param pct   0–100
+ * @param width Total width of bar in chars (default 20)
+ */
+export function progressBar(pct: number, width = 20): string {
+  const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * width)
+  const empty = width - filled
+  return c.cyan(G.bar_full.repeat(filled)) + c.gray(G.bar_empty.repeat(empty))
+}
+
+// ─── OSC-8 Clickable Links ───────────────────────────────────────────────────
+
+/**
+ * Return a clickable terminal link (OSC-8). Falls back to "text (url)" if terminal doesn't support it.
+ */
+export function link(text: string, url: string): string {
+  if (!IS_TTY || !UNICODE) return `${text} (${url})`
+  // OSC-8 hyperlink escape sequence
+  return `\u001B]8;;${url}\u0007${text}\u001B]8;;\u0007`
+}
+
+// ─── Truncation ───────────────────────────────────────────────────────────────
+
+export function truncate(str: string, maxWidth: number, ellipsis = '…'): string {
+  const raw = stripAnsi(str)
+  if (stringWidth(raw) <= maxWidth) return str
+  // Truncate the raw string
+  let result = ''
+  let w = 0
+  for (const char of raw) {
+    const cw = stringWidth(char)
+    if (w + cw + stringWidth(ellipsis) > maxWidth) break
+    result += char
+    w += cw
+  }
+  return result + ellipsis
+}
+
+// ─── Duration formatting ──────────────────────────────────────────────────────
+
+export function fmtDuration(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  const m = Math.floor(s / 60)
+  return `${String(m).padStart(1, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+export function fmtDurationSec(sec: number): string {
+  return fmtDuration(sec * 1000)
+}
+
+// ─── Non-TTY plain logger ─────────────────────────────────────────────────────
+
+/** Plain print for non-TTY environments. */
+export function plainLog(msg: string): void {
+  if (IS_TTY) return
+  console.log(stripAnsi(msg))
+}
+
+// ─── Cursor management ───────────────────────────────────────────────────────
+
+export function hideCursor(): void {
+  if (IS_TTY) process.stdout.write('\u001B[?25l')
+}
+
+export function showCursor(): void {
+  if (IS_TTY) process.stdout.write('\u001B[?25h')
+}
+
+// ─── Terminal width ───────────────────────────────────────────────────────────
+
+export function termWidth(): number {
+  return Math.max(40, process.stdout.columns || 80)
+}
+
+// ─── Spinner frame ───────────────────────────────────────────────────────────
+
+let _spinnerTick = 0
+export function nextSpinnerFrame(): string {
+  return G.spinner_frames[_spinnerTick++ % G.spinner_frames.length]
+}

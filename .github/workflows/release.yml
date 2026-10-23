@@ -46,6 +46,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SKIP_VMP_SIGN: ${{ secrets.EVS_ACCESS_TOKEN == '' && 'true' || 'false' }}
 
+      - name: Publish delta update blockmap
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          blockmaps=(release/*.blockmap)
+          if [ ${#blockmaps[@]} -gt 0 ]; then
+            for f in "${blockmaps[@]}"; do
+              echo "Uploading $f to GitHub release ${GITHUB_REF_NAME}..."
+              gh release upload "${GITHUB_REF_NAME}" "$f" --clobber
+            done
+          else
+            echo "No .blockmap found in release/, generating from installer..."
+            node -e "
+              (async () => {
+                const fs = require('fs');
+                const { buildBlockMap } = require('./node_modules/app-builder-lib/out/targets/blockmap/blockmap.js');
+                const exes = fs.readdirSync('release').filter(f => f.endsWith('.exe') && !f.includes('uninstaller'));
+                if (exes.length > 0) {
+                  const exe = 'release/' + exes[0];
+                  const bm = exe + '.blockmap';
+                  await buildBlockMap(exe, 'gzip', bm);
+                  console.log('Generated ' + bm);
+                  const { execSync } = require('child_process');
+                  execSync('gh release upload \"' + process.env.GITHUB_REF_NAME + '\" \"' + bm + '\" --clobber', { stdio: 'inherit' });
+                }
+              })().catch(err => { console.error(err); process.exit(1); });
+            "
+          fi
+
       - name: Publish release notes
         shell: bash
         env:

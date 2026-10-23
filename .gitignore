@@ -11,3 +11,10 @@ src/renderer/src/**/*.js.map
 *.tsbuildinfo
 .castlabs/
 *.zip
+updater-cli/node_modules/
+updater-cli/scratch/
+.env
+.env.*
+*.token
+*.pem
+*.key

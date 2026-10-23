@@ -86,7 +86,22 @@ pnpm build       # Compile production bundles into out/
 pnpm dist        # Package Windows NSIS installer into release/
 ```
 
-Automated release builds and updater blockmaps are handled by GitHub Actions on git tag pushes (`v*`). See [RELEASING.md](RELEASING.md).
+### Releasing Updates
+
+Releases are fully automated through the interactive `updater-cli`:
+
+```powershell
+# Launch interactive release wizard from repo root:
+.\release.cmd
+
+# Check current version, GitHub release assets, and workflow status:
+.\release.cmd status
+
+# Re-attach live terminal monitoring to an ongoing workflow run:
+.\release.cmd watch
+```
+
+The CLI handles pre-flight validations, SemVer bumps, release notes previews, atomic git commit/tag/push, in-terminal live GitHub Actions dashboards, and verification of all release artifacts (NSIS setup installer, delta update `.blockmap`, and `latest.yml`). See [RELEASING.md](RELEASING.md).
 
 ---
 

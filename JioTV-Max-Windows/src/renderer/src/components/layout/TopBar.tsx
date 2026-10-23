@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
-import { CastButton } from '@/components/casting/CastButton'
 import { SearchBox } from './SearchBox'
 import { WindowControls } from './WindowControls'
 
@@ -49,11 +48,10 @@ export function TopBar(): JSX.Element {
         <div className="min-w-0 flex-1" />
 
         {/* Spacer to prevent SearchBox from overlapping the fixed buttons */}
-        <div className="w-[180px] shrink-0 pointer-events-none" />
+        <div className="w-[140px] shrink-0 pointer-events-none" />
 
-        {/* Right: window controls & casting fixed to the absolute top-right corner */}
+        {/* Right: window controls fixed to the absolute top-right corner */}
         <div className="no-drag fixed top-0 right-0 z-40 flex h-[36px] items-center">
-          <CastButton scale={0.9} isCastable={true} className="mr-2" />
           <WindowControls />
         </div>
       </div>

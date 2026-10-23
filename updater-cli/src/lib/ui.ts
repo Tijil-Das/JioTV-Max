@@ -271,3 +271,50 @@ export function renderMarkdown(markdown: string): string {
 
   return output.join('\n')
 }
+
+/**
+ * Informs the user of completion or error and waits for user confirmation (Enter key)
+ * before terminating the process, preventing command prompt windows from closing abruptly.
+ */
+export async function waitBeforeExit(code = 0, message?: string): Promise<void> {
+  showCursor()
+  if (message) {
+    if (code === 0) {
+      console.log(`\n  ${c.green(G.tick)} ${message}`)
+    } else {
+      console.log(`\n  ${c.red(G.cross)} ${message}`)
+    }
+  }
+
+  // If in interactive terminal and not running inside CI / automated test runner
+  const isInteractive = Boolean(process.stdin.isTTY && !process.env.CI && !process.env.VITEST)
+  if (isInteractive) {
+    console.log(c.dim('\n  Operation complete. Press Enter to close this window...'))
+    await new Promise<void>((resolve) => {
+      try {
+        if (process.stdin.isPaused()) {
+          process.stdin.resume()
+        }
+        if (typeof process.stdin.setRawMode === 'function') {
+          process.stdin.setRawMode(false)
+        }
+        process.stdin.setEncoding('utf8')
+        const onData = () => {
+          process.stdin.removeListener('data', onData)
+          resolve()
+        }
+        process.stdin.once('data', onData)
+      } catch {
+        resolve()
+      }
+    })
+  }
+}
+
+/**
+ * Convenience wrapper to announce status, wait for user input, and exit.
+ */
+export async function exitGracefully(code = 0, message?: string): Promise<void> {
+  await waitBeforeExit(code, message)
+  process.exit(code)
+}

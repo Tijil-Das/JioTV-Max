@@ -26,7 +26,7 @@ import {
 import { bumpPackageJson, createReleaseCommit, pushRelease, rollbackRelease } from '../lib/git.js'
 import { hasToken, GhAuthError, getReleaseByTag, downloadManifest, getLatestRelease } from '../lib/github.js'
 import { startDashboard } from '../lib/dashboard.js'
-import { c, G, IS_TTY, USE_COLOR, fmtDuration, link, termWidth, renderMarkdown } from '../lib/ui.js'
+import { c, G, IS_TTY, USE_COLOR, fmtDuration, link, termWidth, renderMarkdown, waitBeforeExit } from '../lib/ui.js'
 
 export interface ReleaseOptions {
   bump?: string
@@ -99,7 +99,7 @@ function resolveNonInteractiveVersion(ctx: RepoContext, bump: string): string {
 
 // ─── Main release flow ────────────────────────────────────────────────────────
 
-export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
+export async function runRelease(opts: ReleaseOptions = {}): Promise<boolean> {
   const { dryRun = false, simulate = false, verbose = false } = opts
   const nonInteractive = Boolean(opts.yes || opts.bump)
 
@@ -114,7 +114,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   } catch (e: any) {
     p.log.error(`Failed to discover repo: ${e.message}`)
     if (verbose) console.error(e)
-    process.exit(1)
+    return false
   }
 
   const authenticated = hasToken()
@@ -180,7 +180,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
     newVersion = resolveNonInteractiveVersion(ctx, opts.bump)
   } else if (!IS_TTY) {
     p.log.error('No --bump flag provided and terminal is not interactive.')
-    process.exit(1)
+    return false
   } else {
     const bumpChoice = await p.select<BumpType>({
       message: 'Version bump:',
@@ -208,19 +208,25 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
         { value: 'custom', label: 'custom  Enter your own semver', hint: '' },
       ],
     })
-    if (p.isCancel(bumpChoice)) { p.cancel('Release cancelled.'); process.exit(0) }
+    if (p.isCancel(bumpChoice)) {
+      p.cancel('Release cancelled.')
+      return false
+    }
 
     if (bumpChoice === 'custom') {
       const customV = await p.text({
         message: 'Enter version (e.g. 1.2.3):',
-        validate: (v) => {
+        validate: (v = '') => {
           const clean = semver.clean(v)
           if (!clean) return 'Must be a valid semver (e.g. 1.2.3)'
           if (semver.lte(clean, ctx.appVersion)) return `Must be greater than current ${ctx.appVersion}`
           return undefined
         },
       })
-      if (p.isCancel(customV)) { p.cancel('Release cancelled.'); process.exit(0) }
+      if (p.isCancel(customV)) {
+        p.cancel('Release cancelled.')
+        return false
+      }
       newVersion = semver.clean(customV as string)!
     } else {
       newVersion = computeNextVersion(ctx.appVersion, bumpChoice as BumpType)
@@ -232,17 +238,56 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   // Validate: version must be > current
   if (semver.lte(newVersion, ctx.appVersion)) {
     p.log.error(`New version ${newVersion} must be greater than current ${ctx.appVersion}`)
-    process.exit(1)
+    return false
   }
 
-  // Validate: tag must not exist
+  // Validate: tag must not exist (or allow recovering if unreleased previous run)
   const { local: tagLocal, remote: tagRemote } = await tagExists(newTag, ctx.gitRoot, ctx.owner, ctx.repo)
   if (tagLocal || tagRemote) {
-    p.log.error(
-      `Tag ${newTag} already exists${tagLocal ? ' locally' : ''}${tagRemote ? ' on origin / GitHub' : ''}. ` +
-      `Choose a different version.`
+    let publishedRelease = null
+    try {
+      publishedRelease = await getReleaseByTag(ctx.owner, ctx.repo, newTag)
+    } catch {}
+
+    if (publishedRelease && !publishedRelease.draft) {
+      p.log.error(
+        `Tag ${newTag} is already published as a live GitHub release (${publishedRelease.html_url}). ` +
+        `Choose a higher version to release an update.`
+      )
+      return false
+    }
+
+    p.log.warn(
+      `Tag ${newTag} already exists${tagLocal ? ' locally' : ''}${tagRemote ? ' on origin / GitHub' : ''}, but has no published GitHub release.`
     )
-    process.exit(1)
+    if (IS_TTY && !opts.yes) {
+      const overwrite = await p.confirm({
+        message: `Would you like to delete the unreleased tag ${c.cyan(newTag)} and re-attempt this release?`,
+        initialValue: false,
+      })
+      if (!overwrite || p.isCancel(overwrite)) {
+        p.cancel('Release aborted. Choose a different version or delete the tag manually.')
+        return false
+      }
+      const spClean = p.spinner()
+      spClean.start(`Cleaning up existing tag ${newTag}…`)
+      try {
+        const { execa } = await import('execa')
+        if (tagLocal) {
+          await execa('git', ['tag', '-d', newTag], { cwd: ctx.gitRoot })
+        }
+        if (tagRemote) {
+          await execa('git', ['push', 'origin', `:refs/tags/${newTag}`], { cwd: ctx.gitRoot })
+        }
+        spClean.stop(c.green(`${G.tick} Cleaned up stale tag ${newTag}`))
+      } catch (err: any) {
+        spClean.stop(c.red(`${G.cross} Failed to delete stale tag: ${err.message}`))
+        return false
+      }
+    } else {
+      p.log.error(`Tag ${newTag} already exists. Choose a different version or delete the tag manually.`)
+      return false
+    }
   }
 
   p.log.success(`Version: ${c.dim(ctx.appVersion)} ${G.arrow} ${c.cyan(newVersion)}`)
@@ -272,7 +317,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
       message: `Is release-notes.md ready for ${newTag}?`,
       initialValue: true,
     })
-    if (p.isCancel(notesOk)) { p.cancel('Release cancelled.'); process.exit(0) }
+    if (p.isCancel(notesOk)) {
+      p.cancel('Release cancelled.')
+      return false
+    }
 
     if (!notesOk) {
       const editChoice = await p.select<'editor' | 'paste' | 'skip'>({
@@ -283,7 +331,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
           { value: 'skip', label: 'Skip — proceed without updating', hint: '' },
         ],
       })
-      if (p.isCancel(editChoice)) { p.cancel('Release cancelled.'); process.exit(0) }
+      if (p.isCancel(editChoice)) {
+        p.cancel('Release cancelled.')
+        return false
+      }
 
       if (editChoice === 'editor') {
         const editor = process.env['EDITOR'] || (process.platform === 'win32' ? 'notepad' : 'nano')
@@ -299,7 +350,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
           message: 'Paste your release notes (single line, use \\n for newlines):',
           placeholder: '## What\'s Changed…',
         })
-        if (p.isCancel(pasted)) { p.cancel('Release cancelled.'); process.exit(0) }
+        if (p.isCancel(pasted)) {
+          p.cancel('Release cancelled.')
+          return false
+        }
         const content = (pasted as string).replace(/\\n/g, '\n')
         if (!dryRun) writeReleaseNotes(notesPath, content)
         notesContent = content
@@ -395,7 +449,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
       message: c.yellow('Some pre-flight checks failed. Continue anyway?'),
       initialValue: false,
     })
-    if (p.isCancel(cont) || !cont) { p.cancel('Release aborted.'); process.exit(0) }
+    if (p.isCancel(cont) || !cont) {
+      p.cancel('Release aborted.')
+      return false
+    }
   }
 
   // ─── 6. Summary card + final confirm ─────────────────────────────────────
@@ -430,7 +487,10 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
         : `Release ${c.cyan(newTag)} for real?`,
       initialValue: false,
     })
-    if (p.isCancel(confirmed) || !confirmed) { p.cancel('Release cancelled.'); process.exit(0) }
+    if (p.isCancel(confirmed) || !confirmed) {
+      p.cancel('Release cancelled.')
+      return false
+    }
   }
 
   // ─── 7. Execute ───────────────────────────────────────────────────────────
@@ -463,7 +523,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
       } catch (e: any) {
         sp.stop(c.red(`${G.cross} Failed to create commit/tag: ${e.message}`))
         if (verbose) console.error(e)
-        process.exit(1)
+        return false
       }
     } else {
       sp.stop(c.green(`${G.tick} Would create commit chore(release): ${newTag}`) + c.dim(' [dry-run]'))
@@ -485,7 +545,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
         undone.forEach((u) => p.log.info(c.dim(`  ${G.bullet} ${u}`)))
         p.log.error('Push failed and local changes were rolled back. Fix the issue and try again.')
         if (verbose) console.error(e)
-        process.exit(1)
+        return false
       }
     } else {
       sp.stop(c.green(`${G.tick} Would push origin/${ctx.branch} --tags`) + c.dim(' [dry-run]'))
@@ -500,7 +560,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   if (dryRun) {
     p.log.info(c.dim('[dry-run] Would now watch the GitHub Actions workflow run here:'))
     p.log.info(c.dim(`  https://github.com/${ctx.owner}/${ctx.repo}/actions`))
-    return
+    return true
   }
 
   let dashboardResult: Awaited<ReturnType<typeof startDashboard>>
@@ -515,7 +575,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
   } catch (e: any) {
     console.log(c.red(`\n  Dashboard error: ${e.message}`))
     console.log(c.dim(`  Check manually: https://github.com/${ctx.owner}/${ctx.repo}/actions`))
-    return
+    return false
   }
 
   // ─── 9. Verify & finish ───────────────────────────────────────────────────
@@ -603,6 +663,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
         titleAlignment: 'center',
       })
     )
+    return true
   } else {
     console.log(c.red(`\n  ${G.cross} Release workflow failed.`))
     console.log(c.dim(`  Run URL: ${dashboardResult.runUrl}`))
@@ -617,6 +678,7 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<void> {
         `  git tag -d ${newTag} && git push origin :refs/tags/${newTag}`
       )
     )
+    return false
   }
 }
 

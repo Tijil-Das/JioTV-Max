@@ -230,7 +230,7 @@ export class StreamServer extends EventEmitter {
   public async generateFallbackReceiver(media: CastMediaInput): Promise<FallbackReceiverInfo> {
     const token = await this.startSession(media)
     const lanIp = getLanIpAddress()
-    const receiverUrl = `http://${lanIp}:${this.port}/receiver/${token}`
+    const receiverUrl = `http://${lanIp}:${this.port}/watch/${token}`
     const qrDataUrl = await QRCode.toDataURL(receiverUrl, {
       margin: 1.5,
       width: 256,
@@ -834,13 +834,13 @@ export class StreamServer extends EventEmitter {
       <span class="badge">Live</span>
       <span class="title">${escapeHtml(title)}</span>
     </div>
-    <video id="videoPlayer" controls autoplay playsinline></video>
+    <video id="player" controls autoplay playsinline></video>
     <div class="status-msg" id="statusMsg">Initializing player...</div>
   </div>
 
   <script>
     (function() {
-      const video = document.getElementById('videoPlayer');
+      const video = document.getElementById('player');
       const statusMsg = document.getElementById('statusMsg');
       const hud = document.getElementById('hud');
 

@@ -73,19 +73,19 @@ https://cdn.example.com/live/segment_101.ts
     const rewritten = server.rewriteM3u8(sampleM3u8, playlistUrl, host, token)
 
     // Relative segment rewritten
-    expect(rewritten).toContain('http://192.168.1.150:9876/stream/abc123token/seg?u=https%3A%2F%2Fcdn.example.com%2Flive%2Fsegment_100.ts')
+    expect(rewritten).toContain('http://192.168.1.150:9876/stream/abc123token/seg.ts?u=https%3A%2F%2Fcdn.example.com%2Flive%2Fsegment_100.ts')
 
     // Absolute segment rewritten
-    expect(rewritten).toContain('http://192.168.1.150:9876/stream/abc123token/seg?u=https%3A%2F%2Fcdn.example.com%2Flive%2Fsegment_101.ts')
+    expect(rewritten).toContain('http://192.168.1.150:9876/stream/abc123token/seg.ts?u=https%3A%2F%2Fcdn.example.com%2Flive%2Fsegment_101.ts')
 
     // EXT-X-KEY URI rewritten
-    expect(rewritten).toContain('#EXT-X-KEY:METHOD=AES-128,URI="http://192.168.1.150:9876/stream/abc123token/seg?u=https%3A%2F%2Fcdn.example.com%2Fkeys%2Fkey1.bin"')
+    expect(rewritten).toContain('#EXT-X-KEY:METHOD=AES-128,URI="http://192.168.1.150:9876/stream/abc123token/seg.ts?u=https%3A%2F%2Fcdn.example.com%2Fkeys%2Fkey1.bin"')
 
     // EXT-X-MAP URI rewritten
-    expect(rewritten).toContain('#EXT-X-MAP:URI="http://192.168.1.150:9876/stream/abc123token/seg?u=https%3A%2F%2Fcdn.example.com%2Flive%2Finit.mp4"')
+    expect(rewritten).toContain('#EXT-X-MAP:URI="http://192.168.1.150:9876/stream/abc123token/seg.ts?u=https%3A%2F%2Fcdn.example.com%2Flive%2Finit.mp4"')
 
     // EXT-X-MEDIA URI rewritten
-    expect(rewritten).toContain('URI="http://192.168.1.150:9876/stream/abc123token/seg?u=https%3A%2F%2Fcdn.example.com%2Flive%2Faudio%2Fen.m3u8"')
+    expect(rewritten).toContain('URI="http://192.168.1.150:9876/stream/abc123token/seg.m3u8?u=https%3A%2F%2Fcdn.example.com%2Flive%2Faudio%2Fen.m3u8"')
   })
 
   it('generates a valid fallback receiver QR code and short LAN URL', async () => {

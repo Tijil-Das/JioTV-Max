@@ -20,6 +20,7 @@ export interface GhRelease {
 }
 
 export interface GhAsset {
+  id: number
   name: string
   browser_download_url: string
   size: number
@@ -325,7 +326,7 @@ export async function uploadReleaseAsset(
       'Content-Length': String(data.length),
       'User-Agent': 'jiotv-max-updater-cli/1.0',
     },
-    body: data,
+    body: data as unknown as BodyInit,
   })
   if (!res.ok) {
     const errText = await res.text()

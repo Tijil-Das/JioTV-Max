@@ -18,7 +18,7 @@ export async function runWatch(opts: { runId?: number; simulate?: boolean } = {}
     sp.stop(`Watching ${c.cyan(ctx.owner + '/' + ctx.repo)}`)
   } catch (e: any) {
     sp.stop(c.red(`Failed: ${e.message}`))
-    process.exit(1)
+    return
   }
 
   let runId = opts.runId
@@ -28,7 +28,7 @@ export async function runWatch(opts: { runId?: number; simulate?: boolean } = {}
     const runs = await listWorkflowRuns(ctx.owner, ctx.repo, ctx.workflowPath).catch(() => [])
     if (runs.length === 0) {
       sp2.stop(c.yellow('No workflow runs found.'))
-      process.exit(0)
+      return
     }
     const latest = runs[0]
     runId = latest.id

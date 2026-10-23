@@ -17,7 +17,7 @@ export async function runStatus(): Promise<void> {
     ctx = await discoverRepo()
   } catch (e: any) {
     sp.stop(c.red(`Failed: ${e.message}`))
-    process.exit(1)
+    return
   }
 
   const lines: string[] = [

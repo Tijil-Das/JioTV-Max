@@ -8,17 +8,19 @@ import { cac } from 'cac'
 import * as p from '@clack/prompts'
 import figlet from 'figlet'
 import gradient from 'gradient-string'
-import { c, G, IS_TTY, showCursor } from './lib/ui.js'
+import { c, G, IS_TTY, showCursor, waitBeforeExit } from './lib/ui.js'
 
 // Always restore cursor on unhandled errors
-process.on('uncaughtException', (err) => {
-  showCursor()
-  console.error('\n  Unexpected error:', err.message)
-  process.exit(1)
-})
-process.on('unhandledRejection', (err: any) => {
+process.on('uncaughtException', async (err: any) => {
   showCursor()
   console.error('\n  Unexpected error:', err?.message ?? err)
+  await waitBeforeExit(1, 'CLI encountered an unexpected error.')
+  process.exit(1)
+})
+process.on('unhandledRejection', async (err: any) => {
+  showCursor()
+  console.error('\n  Unexpected error:', err?.message ?? err)
+  await waitBeforeExit(1, 'CLI encountered an unexpected rejection.')
   process.exit(1)
 })
 
@@ -71,21 +73,41 @@ async function runCentralHub(): Promise<void> {
 
     if (p.isCancel(choice) || choice === 'exit') {
       p.outro(c.dim('Goodbye!'))
+      await waitBeforeExit(0, 'Updater CLI closed.')
       process.exit(0)
     }
 
     if (choice === 'release') {
-      await runRelease({ noBanner: true })
-      break
+      const success = await runRelease({ noBanner: true })
+      console.log('')
+      if (success) {
+        p.log.success('Release workflow completed.')
+      } else {
+        p.log.warn('Release process finished with warnings or cancellation.')
+      }
+      const back = await p.confirm({ message: 'Return to main menu?', initialValue: true })
+      if (!back || p.isCancel(back)) {
+        p.outro(c.dim('Goodbye!'))
+        await waitBeforeExit(0, 'Release process finished.')
+        process.exit(0)
+      }
     } else if (choice === 'status') {
       await runStatus()
       const back = await p.confirm({ message: 'Return to main menu?', initialValue: true })
-      if (!back || p.isCancel(back)) process.exit(0)
+      if (!back || p.isCancel(back)) {
+        p.outro(c.dim('Goodbye!'))
+        await waitBeforeExit(0, 'Status check finished.')
+        process.exit(0)
+      }
     } else if (choice === 'token') {
       await promptConfigureToken()
       clearTokenCache()
       const back = await p.confirm({ message: 'Return to main menu?', initialValue: true })
-      if (!back || p.isCancel(back)) process.exit(0)
+      if (!back || p.isCancel(back)) {
+        p.outro(c.dim('Goodbye!'))
+        await waitBeforeExit(0, 'Configuration finished.')
+        process.exit(0)
+      }
     }
   }
 }
@@ -115,7 +137,7 @@ cli
 
     if (isDirectRun) {
       const { runRelease } = await import('./commands/release.js')
-      await runRelease({
+      const success = await runRelease({
         bump: opts.bump,
         platforms: opts.platforms,
         yes: opts.yes,
@@ -124,6 +146,10 @@ cli
         simulate: opts.simulate,
         verbose: opts.verbose,
       })
+      await waitBeforeExit(
+        success ? 0 : 1,
+        success ? 'Release process completed.' : 'Release process ended with errors.'
+      )
       return
     }
 
@@ -140,6 +166,7 @@ cli
   .action(async (opts) => {
     const { runWatch } = await import('./commands/watch.js')
     await runWatch({ runId: opts.run ? parseInt(opts.run, 10) : undefined, simulate: opts.simulate })
+    await waitBeforeExit(0, 'Watch monitoring finished.')
   })
 
 cli
@@ -147,6 +174,7 @@ cli
   .action(async () => {
     const { runStatus } = await import('./commands/status.js')
     await runStatus()
+    await waitBeforeExit(0, 'Status check finished.')
   })
 
 cli
@@ -154,7 +182,11 @@ cli
   .action(async (tag?: string) => {
     const { ensureReleaseBlockmap } = await import('./commands/blockmap.js')
     const result = await ensureReleaseBlockmap(tag)
-    if (!result.success) process.exit(1)
+    if (!result.success) {
+      await waitBeforeExit(1, `Blockmap generation failed: ${result.message}`)
+      process.exit(1)
+    }
+    await waitBeforeExit(0, 'Blockmap check finished.')
   })
 
 cli
@@ -162,6 +194,7 @@ cli
   .action(async () => {
     const { promptConfigureToken } = await import('./lib/config.js')
     await promptConfigureToken()
+    await waitBeforeExit(0, 'Configuration finished.')
   })
 
 cli.help()
@@ -174,5 +207,6 @@ try {
   showCursor()
   p.log.error(err.message)
   if (process.argv.includes('--verbose')) console.error(err)
+  await waitBeforeExit(1, 'Command execution failed.')
   process.exit(1)
 }

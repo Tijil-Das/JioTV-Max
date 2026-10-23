@@ -521,7 +521,6 @@ a {
   border-color: var(--red);
   color: #FFFFFF;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(225, 29, 46, 0.3);
 }
 
 .btn-show-why svg {

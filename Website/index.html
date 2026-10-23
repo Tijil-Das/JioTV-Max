@@ -245,9 +245,9 @@
             </svg>
           </div>
           <div class="card-content">
-            <h3>Widevine L1 vs L3 DRM Restriction</h3>
+            <h3>1. Widevine DRM: L1 vs. L3 Divide</h3>
             <p>
-              Genuine smartphones contain a physical <strong>ARM TrustZone / TEE (Hardware Root-of-Trust)</strong> that decrypts video entirely inside isolated hardware memory (<strong>Widevine L1</strong>). Emulators running on x86 Windows lack physical ARM security chips and fall back to software-only <strong>Widevine L3</strong>. Broadcasters strictly restrict L3 devices to low-bitrate SD (360p / 480p) to prevent high-definition screen piracy.
+              Phones decrypt video inside a hardware TEE (<strong>Widevine L1</strong>) required for 1080p. Emulators lack hardware security, falling back to software <strong>Widevine L3</strong>, which streaming services intentionally cap at 480p to prevent piracy.
             </p>
           </div>
         </div>
@@ -259,9 +259,9 @@
             </svg>
           </div>
           <div class="card-content">
-            <h3>Hardware Attestation Failure (Play Integrity)</h3>
+            <h3>2. Missing ARM Hardware TEE & Attestation</h3>
             <p>
-              OTT services cryptographically query Google’s <strong>Play Integrity API</strong> (formerly SafetyNet). Even if an emulator alters software build properties to impersonate a flagship phone, cryptographic hardware key attestation fails because the hypervisor environment is virtualized and rooted, blocking high-definition stream manifests.
+              Emulators run on virtualized x86 and cannot forge real ARM TrustZone cryptographic hardware attestations. Broadcaster servers see an untrusted environment and deny HD license keys.
             </p>
           </div>
         </div>
@@ -273,9 +273,9 @@
             </svg>
           </div>
           <div class="card-content">
-            <h3>MediaCodec Hypervisor Overhead & ABR Throttling</h3>
+            <h3>3. Play Integrity & ABR Downshifting</h3>
             <p>
-              Translating Android’s internal <code>MediaCodec</code> calls across the emulator hypervisor into Windows DirectX/OpenGL incurs severe CPU overhead and latency. Video players detect rendering stalls and trigger aggressive <strong>Adaptive Bitrate (ABR)</strong> downshifting, permanently locking playback to unwatchable low resolutions.
+              Google Play Integrity flags emulators as <code>MEETS_VIRTUAL_INTEGRITY</code>, locking the stream to SD. Concurrently, virtualized MediaCodec frame drops force the player’s Adaptive Bitrate (ABR) engine to downshift to the lowest quality.
             </p>
           </div>
         </div>
@@ -287,9 +287,9 @@
             </svg>
           </div>
           <div class="card-content">
-            <h3>The JioTv Max Native Solution</h3>
+            <h3>The JioTv Max Advantage</h3>
             <p>
-              JioTv Max runs as a native 64-bit Windows desktop app with direct <strong>GPU hardware decoding (DXVA/D3D11)</strong> and desktop Widevine CDM integration. It requests clean Full HD 1080p live streams directly from source CDNs without any emulator virtualization penalty.
+              Runs natively on Windows with direct GPU hardware acceleration and desktop Widevine CDM, delivering 1080p Full HD with zero emulator penalty.
             </p>
           </div>
         </div>

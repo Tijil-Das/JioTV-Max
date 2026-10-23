@@ -2,6 +2,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useUIStore } from '@/store/useUIStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useAuthStore } from '@/store/useAuthStore'
 
 /**
  * First-launch informational panel explaining how JioTv Max works with
@@ -12,13 +13,24 @@ export function HowToUseModal(): JSX.Element | null {
   const closeHowToUse = useUIStore((state) => state.closeHowToUse)
   const openLogin = useUIStore((state) => state.openLogin)
   const setHasClearedHowToUse = useSettingsStore((state) => state.setHasClearedHowToUse)
+  const user = useAuthStore((state) => state.user)
+
+  // If already authenticated, dismiss immediately and never show login
+  if (open && user) {
+    setHasClearedHowToUse(true)
+    closeHowToUse()
+    return null
+  }
 
   const handleGotIt = (): void => {
     setHasClearedHowToUse(true)
     closeHowToUse()
-    setTimeout(() => {
-      openLogin('Sign in with your JioTV number to start watching.')
-    }, 150)
+    const currentUser = useAuthStore.getState().user
+    if (!currentUser) {
+      setTimeout(() => {
+        openLogin('Sign in with your JioTV number to start watching.')
+      }, 150)
+    }
   }
 
   return (

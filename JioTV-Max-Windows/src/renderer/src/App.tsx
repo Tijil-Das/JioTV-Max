@@ -156,14 +156,19 @@ export default function App(): JSX.Element {
       await new Promise<void>((r) => setTimeout(r, 600))
       setSplashVisible(false)
 
-      const { hasClearedHowToUse } = useSettingsStore.getState()
+      const { hasClearedHowToUse, openCount } = useSettingsStore.getState()
 
-      // If user hasn't cleared the "How to Use" info panel, show it first
-      if (!hasClearedHowToUse) {
+      // If user has a valid active session or has launched before, mark onboarding as cleared
+      if (hasValidSession || openCount > 1) {
+        if (!hasClearedHowToUse) {
+          useSettingsStore.getState().setHasClearedHowToUse(true)
+        }
+      } else if (!hasClearedHowToUse) {
+        // Brand-new users with no session see the "How to Use" info panel first
         setTimeout(() => {
           openHowToUse()
         }, 120)
-      } else if (!hasValidSession) {
+      } else {
         // Step 4: if not authenticated with a JioTV account, pop the login panel automatically
         setTimeout(() => {
           openLogin('Sign in with your JioTV number to start watching.')

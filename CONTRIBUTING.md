@@ -17,7 +17,7 @@ We are committed to providing a friendly, safe, and welcoming environment for ev
 - If not, create a new issue detailing:
   - Clear summary of the bug.
   - Windows version (e.g., Windows 11 Build 22631).
-  - App mode (Demo mode or Live JioTV mode).
+  - Channel name or stream type (HLS / DASH).
   - Steps to reproduce.
   - Expected vs actual behavior.
   - Screenshots or console logs (press `Ctrl+Shift+I` to inspect renderer devtools if in development).
@@ -51,7 +51,7 @@ We are committed to providing a friendly, safe, and welcoming environment for ev
 
 4. **Launch Dev Environment**:
    ```powershell
-   # Standard development (Demo mode + HLS channels)
+   # Standard development (HLS channels)
    pnpm dev
 
    # Launch with Widevine DRM support (castLabs Electron)

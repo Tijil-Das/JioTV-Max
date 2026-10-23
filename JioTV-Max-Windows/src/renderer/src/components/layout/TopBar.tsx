@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { SearchBox } from './SearchBox'
-import { ProfileMenu } from './ProfileMenu'
 import { WindowControls } from './WindowControls'
 
 /**
@@ -48,10 +47,9 @@ export function TopBar(): JSX.Element {
         {/* Middle: draggable empty spacer */}
         <div className="min-w-0 flex-1" />
 
-        {/* Right: profile circle + window controls */}
-        <div className="no-drag flex h-full shrink-0 items-center gap-3">
-          <ProfileMenu />
-          <WindowControls className="ml-1" />
+        {/* Right: window controls */}
+        <div className="no-drag flex h-full shrink-0 items-center">
+          <WindowControls className="self-start" />
         </div>
       </div>
     </div>

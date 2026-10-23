@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getBridge } from '@/services/api'
 import { cn } from '@/lib/cn'
+import { useSnapOverlay } from './useSnapOverlay'
 
 interface WindowControlsProps {
   className?: string
@@ -45,7 +46,9 @@ function WindowsCloseIcon(): JSX.Element {
  */
 export function WindowControls({ className }: WindowControlsProps): JSX.Element {
   const [maximized, setMaximized] = useState(false)
+  const maxBtnRef = useRef<HTMLButtonElement>(null)
   const bridge = getBridge()
+  const { isOverlayMode, dataHover, dataPressed } = useSnapOverlay(maxBtnRef, maximized)
 
   useEffect(() => {
     if (!bridge) return
@@ -73,8 +76,15 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
     if (bridge) void bridge.close()
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleMaximize()
+    }
+  }
+
   return (
-    <div className={cn('no-drag flex h-full items-center', className)}>
+    <div className={cn('no-drag flex h-[36px] items-center', className)}>
       <button
         type="button"
         title="Minimize"
@@ -85,11 +95,21 @@ export function WindowControls({ className }: WindowControlsProps): JSX.Element 
         <WindowsMinimizeIcon />
       </button>
       <button
+        ref={maxBtnRef}
         type="button"
         title={maximized ? 'Restore Down' : 'Maximize'}
         aria-label={maximized ? 'Restore Down' : 'Maximize'}
+        data-hover={dataHover}
+        data-pressed={dataPressed}
         onClick={handleMaximize}
-        className="flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]"
+        onKeyDown={handleKeyDown}
+        className={cn(
+          'flex h-full w-[46px] items-center justify-center text-[#A1A1A6] transition-colors duration-75',
+          'focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/40',
+          isOverlayMode
+            ? 'data-[hover=true]:bg-white/[0.08] data-[hover=true]:text-[#F4F4F5] data-[pressed=true]:bg-white/[0.12]'
+            : 'hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]'
+        )}
       >
         {maximized ? <WindowsRestoreIcon /> : <WindowsMaximizeIcon />}
       </button>

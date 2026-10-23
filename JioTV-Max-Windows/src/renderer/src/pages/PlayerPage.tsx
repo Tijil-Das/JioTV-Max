@@ -47,6 +47,13 @@ import { SeekOverlay } from '@/components/player/SeekOverlay'
 import { useDoubleTapSeek } from '@/hooks/useDoubleTapSeek'
 import { PinDialog } from '@/components/settings/PinDialog'
 import { WindowControls } from '@/components/layout/WindowControls'
+import { CastButton } from '@/components/casting/CastButton'
+import { CastDialog } from '@/components/casting/CastDialog'
+import { CastingOverlay } from '@/components/casting/CastingOverlay'
+import { CastFallbackModal } from '@/components/casting/CastFallbackModal'
+import { useCastStore } from '@/components/casting/useCastStore'
+import { decryptedCastBridge } from '@/components/casting/DecryptedCastBridge'
+import type { CastMediaInput } from '@shared/cast-types'
 import appIcon from '@/assets/icons/app-icon-32.png'
 
 interface StreamFailure {
@@ -221,6 +228,86 @@ export function PlayerPage(): JSX.Element {
     enabled: Boolean(stream?.isLive),
     ready: engine.ready
   })
+
+  // ---- Casting integration ------------------------------------------------
+  const activeCastState = useCastStore((state) => state.activeState)
+  const stopCast = useCastStore((state) => state.stopCast)
+  const startCast = useCastStore((state) => state.startCast)
+  const setFallbackModalOpen = useCastStore((state) => state.setFallbackModalOpen)
+  const isCasting = activeCastState.state === 'casting' || activeCastState.state === 'loading'
+  const prevIsCastingRef = useRef(false)
+
+  const isDrmStream = Boolean(stream?.isDrm || stream?.type === 'dash')
+
+  const castMedia: CastMediaInput | null = useMemo(() => {
+    if (!stream || !channel) return null
+    return {
+      url: stream.url,
+      title: channel.name || 'Live Broadcast',
+      imageUrl: channel.logoUrl,
+      isLive: Boolean(stream.isLive),
+      contentType: isDrmStream
+        ? 'video/mp4'
+        : stream.type === 'hls'
+          ? 'application/vnd.apple.mpegurl'
+          : 'application/dash+xml',
+      headers: stream.headers,
+      isDecryptedRelay: isDrmStream
+    }
+  }, [stream, channel, isDrmStream])
+
+  // Casting playback coordination:
+  // - If stream is DRM-protected, the app continues playing so Widevine decrypts frames,
+  //   and decryptedCastBridge feeds the unencrypted video/audio chunks directly to the TV.
+  // - If stream is clear HLS, the TV fetches it directly from the CDN via StreamServer proxy,
+  //   so we pause local playback to conserve network bandwidth.
+  useEffect(() => {
+    if (isCasting && !prevIsCastingRef.current) {
+      if (castMedia?.isDecryptedRelay && videoRef.current) {
+        void decryptedCastBridge.start(videoRef.current, activeCastState.token)
+      } else if (videoRef.current) {
+        videoRef.current.pause()
+      }
+    } else if (!isCasting && prevIsCastingRef.current) {
+      void decryptedCastBridge.stop(activeCastState.token)
+      pushToast({
+        title: activeCastState.device ? `Disconnected from ${activeCastState.device.name}` : 'Stopped casting',
+        variant: 'info'
+      })
+      if (stream?.isLive) {
+        liveEdge.goLive()
+      }
+      videoRef.current?.play().catch(() => {})
+    }
+    prevIsCastingRef.current = isCasting
+  }, [
+    isCasting,
+    videoRef,
+    liveEdge,
+    stream?.isLive,
+    pushToast,
+    activeCastState.device,
+    castMedia?.isDecryptedRelay,
+    activeCastState.token
+  ])
+
+  // Stop bridge cleanly on component unmount
+  useEffect(() => {
+    return () => {
+      void decryptedCastBridge.stop()
+    }
+  }, [])
+
+  // If channel changes while actively casting, update the cast session on the same TV
+  useEffect(() => {
+    if (isCasting && castMedia && activeCastState.device) {
+      void startCast(activeCastState.device.id, castMedia)
+      if (castMedia.isDecryptedRelay && videoRef.current) {
+        void decryptedCastBridge.stop()
+        void decryptedCastBridge.start(videoRef.current, activeCastState.token)
+      }
+    }
+  }, [channelId])
 
   // ---- Hero handoff -------------------------------------------------------
   // The hero destroys its players before navigating; make sure any hidden
@@ -750,6 +837,11 @@ export function PlayerPage(): JSX.Element {
           <SeekOverlay {...seekOverlay} />
         </div>
 
+        {/* Casting remote overlay */}
+        {isCasting ? (
+          <CastingOverlay media={castMedia} onStop={() => void stopCast()} />
+        ) : null}
+
       {/* Channel artwork shows through until the first frame is decoded. */}
       <AnimatePresence>
         {(!engine.ready || streamLoading) && !fatalError ? (
@@ -1168,6 +1260,7 @@ export function PlayerPage(): JSX.Element {
             </div>
 
             <div className="pointer-events-auto flex items-center" style={{ gap: `${Math.round(4 * ctrlScale)}px` }}>
+              <CastButton scale={ctrlScale} isCastable={Boolean(stream?.url)} />
               <button
                 type="button"
                 onClick={() => void toggleFullscreen()}
@@ -1270,6 +1363,12 @@ export function PlayerPage(): JSX.Element {
       </div>
 
       <ShortcutsOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      <CastDialog
+        media={castMedia}
+        onOpenFallback={() => setFallbackModalOpen(true)}
+      />
+      <CastFallbackModal media={castMedia} />
     </div>
   )
 }

@@ -42,8 +42,8 @@ JioTV is locked to mobile devices and Android TVs; its web portal blocks live st
 - **Clean Channel Logos**: Multi-tier Web Worker pipeline that cleans and optimizes logos for dark themes.
 - **Quick Search**: Rapid search across channel names, numbers, and categories.
 - **Encrypted Token Vault**: Credentials stored securely using Windows DPAPI (`safeStorage`).
+- **Cast to TV**: Stream any channel directly to your Smart TV, Chromecast, or Android TV over Wi-Fi with full desktop remote control and fallback QR receiver. See [CASTING.md](JioTV-Max-Windows/CASTING.md).
 - **Auto-Updater**: Background update checks via GitHub Releases with one-click restart updates.
-- **Offline Demo Mode**: 38 channels and schedules to test immediately without signing in.
 
 ---
 
@@ -52,7 +52,7 @@ JioTV is locked to mobile devices and Android TVs; its web portal blocks live st
 ### Prerequisites
 - **OS**: Windows 10 or 11 (64-bit)
 - **Node.js**: v20+ & **pnpm**: v9+
-- Active Jio number (for Live mode; Demo mode runs offline)
+- Active Jio number
 
 ### Setup & Run
 
@@ -72,8 +72,7 @@ pnpm dev:wv
 ```
 
 ### Sign In
-- **Demo Mode**: Select *Demo access*, enter any 10-digit number, and use OTP `123456`.
-- **Live Mode**: Select *JioTV account*, enter your Jio number, and enter the OTP sent to your phone.
+Select *JioTV account*, enter your Jio number, and enter the OTP sent to your phone.
 
 ---
 

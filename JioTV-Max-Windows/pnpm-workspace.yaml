@@ -6,4 +6,5 @@ allowBuilds:
   electron-winstaller: true
   electron: true
   electron@https://github.com/castlabs/electron-releases/archive/refs/tags/v33.3.2+wvcus.tar.gz: true
+  protobufjs: true
 optimisticRepeatInstall: false

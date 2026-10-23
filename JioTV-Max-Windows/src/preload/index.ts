@@ -9,8 +9,21 @@ import type {
   OtpChallenge,
   Result,
   StreamInfo,
-  StreamProbeStage1
+  StreamProbeStage1,
+  SnapSupportStatus,
+  SnapBounds,
+  SnapButtonState
 } from '../shared/types'
+import type {
+  CastDevice,
+  CastStatePayload,
+  CastErrorPayload,
+  CastDiagnostics,
+  StartCastParams,
+  FallbackReceiverInfo,
+  CastMediaInput,
+  CastApiBridge
+} from '../shared/cast-types'
 
 /**
  * The only surface the renderer can touch. No Node.js primitives or raw IPC
@@ -70,6 +83,15 @@ const api = {
     saveToken: (token: string): Promise<boolean> => ipcRenderer.invoke(IPC.secureSave, token),
     loadToken: (): Promise<string | null> => ipcRenderer.invoke(IPC.secureLoad),
     clearToken: (): Promise<void> => ipcRenderer.invoke(IPC.secureClear)
+  },
+  snapLayout: {
+    getSupportStatus: (): Promise<SnapSupportStatus> => ipcRenderer.invoke(IPC.snapGetSupport),
+    updateBounds: (bounds: SnapBounds | null): void => ipcRenderer.send(IPC.snapUpdateBounds, bounds),
+    onStateChange: (callback: (state: SnapButtonState) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: SnapButtonState) => callback(state)
+      ipcRenderer.on(IPC.snapStateChanged, listener)
+      return () => ipcRenderer.removeListener(IPC.snapStateChanged, listener)
+    }
   }
 }
 
@@ -88,9 +110,51 @@ const updater = {
   }
 }
 
+const castApi: CastApiBridge = {
+  startDiscovery: (): Promise<boolean> => ipcRenderer.invoke(IPC.castStartDiscovery),
+  stopDiscovery: (): Promise<boolean> => ipcRenderer.invoke(IPC.castStopDiscovery),
+  getDevices: (): Promise<CastDevice[]> => ipcRenderer.invoke(IPC.castGetDevices),
+  start: (params: StartCastParams): Promise<boolean> => ipcRenderer.invoke(IPC.castStart, params),
+  stop: (): Promise<boolean> => ipcRenderer.invoke(IPC.castStop),
+  pause: (): Promise<boolean> => ipcRenderer.invoke(IPC.castPause),
+  resume: (): Promise<boolean> => ipcRenderer.invoke(IPC.castResume),
+  seek: (seconds: number): Promise<boolean> => ipcRenderer.invoke(IPC.castSeek, seconds),
+  setVolume: (level: number): Promise<boolean> => ipcRenderer.invoke(IPC.castSetVolume, level),
+  setMuted: (muted: boolean): Promise<boolean> => ipcRenderer.invoke(IPC.castSetMuted, muted),
+  getState: (): Promise<CastStatePayload> => ipcRenderer.invoke(IPC.castGetState),
+  getDiagnostics: (): Promise<CastDiagnostics> => ipcRenderer.invoke(IPC.castGetDiagnostics),
+  getFallbackInfo: (media: CastMediaInput): Promise<FallbackReceiverInfo | null> =>
+    ipcRenderer.invoke(IPC.castGetFallbackInfo, media),
+  feedLiveChunk: (token: string, chunk: ArrayBuffer): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.castFeedLiveChunk, token, chunk),
+  startLiveRelay: (token: string, mimeType: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.castStartLiveRelay, token, mimeType),
+  stopLiveRelay: (token: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.castStopLiveRelay, token),
+  getAppWindowSource: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC.castGetAppWindowSource),
+  onDevicesUpdated: (callback: (devices: CastDevice[]) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, devices: CastDevice[]) => callback(devices)
+    ipcRenderer.on(IPC.castDevicesUpdated, listener)
+    return () => ipcRenderer.removeListener(IPC.castDevicesUpdated, listener)
+  },
+  onStateChanged: (callback: (state: CastStatePayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: CastStatePayload) => callback(state)
+    ipcRenderer.on(IPC.castStateChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.castStateChanged, listener)
+  },
+  onError: (callback: (error: CastErrorPayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, error: CastErrorPayload) => callback(error)
+    ipcRenderer.on(IPC.castError, listener)
+    return () => ipcRenderer.removeListener(IPC.castError, listener)
+  }
+}
+
 contextBridge.exposeInMainWorld('api', api)
 contextBridge.exposeInMainWorld('updater', updater)
+contextBridge.exposeInMainWorld('castApi', castApi)
 
 export type StreamDeckBridge = typeof api
 export type UpdaterBridgeType = typeof updater
+export type CastBridgeType = typeof castApi
 

@@ -185,6 +185,27 @@ export interface StreamDeckApi {
     loadToken(): Promise<string | null>
     clearToken(): Promise<void>
   }
+  snapLayout: SnapBridge
+}
+
+export interface SnapSupportStatus {
+  supported: boolean
+  reason?: string
+}
+
+export interface SnapBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type SnapButtonState = 'idle' | 'hover' | 'pressed'
+
+export interface SnapBridge {
+  getSupportStatus(): Promise<SnapSupportStatus>
+  updateBounds(bounds: SnapBounds | null): void
+  onStateChange(callback: (state: SnapButtonState) => void): () => void
 }
 
 export interface UpdaterBridge {

@@ -14,7 +14,8 @@
     "dev": "electron-vite dev",
     "dev:wv": "node scripts/dev-wv.mjs",
     "dev:web": "vite --config vite.web.config.ts --port 5173",
-    "build": "electron-vite build",
+    "build:native": "node scripts/build-native.mjs",
+    "build": "node scripts/build-native.mjs && electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
@@ -28,12 +29,15 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@tanstack/react-virtual": "^3.13.12",
+    "chromecast-api": "^0.4.2",
     "clsx": "^2.1.1",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "framer-motion": "^12.23.12",
     "hls.js": "^1.6.13",
     "lucide-react": "^0.468.0",
+    "node-ssdp": "^4.0.1",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.7.0",
@@ -42,10 +46,13 @@
     "shaka-player": "4.14.10",
     "sharp": "^0.35.5",
     "tailwind-merge": "^3.3.1",
+    "upnp-mediarenderer-client": "^1.4.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
+    "@types/node-ssdp": "^4.0.5",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
     "@types/semver": "^7.8.0",
@@ -54,6 +61,7 @@
     "electron": "https://github.com/castlabs/electron-releases/archive/refs/tags/v33.3.2+wvcus.tar.gz",
     "electron-builder": "^26.0.12",
     "electron-vite": "^6.0.0",
+    "node-addon-api": "^8.9.2",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
@@ -77,6 +85,9 @@
       "build/**/*",
       "src/main/installing.html",
       "package.json"
+    ],
+    "asarUnpack": [
+      "build/Release/snap_overlay.node"
     ],
     "win": {
       "target": [

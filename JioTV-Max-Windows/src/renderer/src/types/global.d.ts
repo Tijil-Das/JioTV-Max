@@ -1,4 +1,5 @@
 import type { StreamDeckApi, UpdaterBridge } from '@shared/types'
+import type { CastApiBridge } from '@shared/cast-types'
 
 declare global {
   interface Window {
@@ -6,6 +7,8 @@ declare global {
     api?: StreamDeckApi
     /** Auto-updater bridge exposed by Electron preload. */
     updater?: UpdaterBridge
+    /** Cast bridge exposed by Electron preload. */
+    castApi?: CastApiBridge
   }
 }
 

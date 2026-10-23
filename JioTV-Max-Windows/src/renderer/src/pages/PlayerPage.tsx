@@ -244,7 +244,8 @@ export function PlayerPage(): JSX.Element {
       imageUrl: channel.logoUrl,
       isLive: Boolean(stream.isLive),
       contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
-      headers: stream.headers
+      headers: stream.headers,
+      isDrm: Boolean(stream.isDrm)
     }
   }, [stream, channel])
 

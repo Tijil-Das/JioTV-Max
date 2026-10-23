@@ -244,18 +244,33 @@ export class DlnaAdapter extends DeviceAdapter {
 
     castLogger.info(`[DlnaAdapter] Loading media on ${this.activeDevice.name}: ${castLogger.maskUrl(streamUrl)}`)
 
+    if (media.isDrm || media.contentType?.includes('dash') || media.url.includes('.mpd')) {
+      const msg = `Channel "${media.title}" is DRM protected (Widevine) and cannot be played directly on DLNA TVs. Please select a non-DRM channel (e.g. Star, Zee, News, Sports) or use "Open on another device" below.`
+      castLogger.warn(`[DlnaAdapter] Cannot cast DRM channel to DLNA: ${media.title}`)
+      this.emit('error', {
+        code: 'unsupported_format',
+        message: msg,
+        details: 'UPnP/DLNA standard does not support Widevine DRM encryption'
+      })
+      throw new Error(msg)
+    }
+
     // Brand-specific protocolInfo customization
     const manufacturer = (this.activeDevice.manufacturer || '').toLowerCase()
+    const deviceName = (this.activeDevice.name || '').toLowerCase()
     let dlnaFeatures = '*'
-    let contentType = media.contentType || (streamUrl.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4')
+    let contentType = 'application/vnd.apple.mpegurl'
 
-    // LG WebOS TVs and older Samsung TVs often require specific DLNA streaming profiles
-    if (manufacturer.includes('lg')) {
+    if (streamUrl.includes('.mp4')) {
+      contentType = 'video/mp4'
+    }
+
+    // Kodi / XBMC DLNA renderer
+    if (manufacturer.includes('xbmc') || manufacturer.includes('kodi') || deviceName.includes('kodi')) {
+      contentType = 'application/vnd.apple.mpegurl'
+    } else if (manufacturer.includes('lg')) {
       dlnaFeatures = 'DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000'
-      // Some LG models prefer video/mp4 or video/vnd.dlna.mpeg-tts for HLS
-      if (contentType.includes('mpegurl')) {
-        contentType = 'application/x-mpegURL'
-      }
+      contentType = 'application/x-mpegURL'
     } else if (manufacturer.includes('samsung')) {
       dlnaFeatures = 'DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000'
     }

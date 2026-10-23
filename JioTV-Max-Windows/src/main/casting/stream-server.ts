@@ -196,9 +196,13 @@ export class StreamServer extends EventEmitter {
   public getStreamUrl(token: string, targetDeviceIp?: string): string {
     const lanIp = getLanIpAddress(targetDeviceIp || this.activeSession?.targetDeviceIp)
     if (this.isLiveRelay(token)) {
-      return `http://${lanIp}:${this.port}/stream/${token}/live`
+      return `http://${lanIp}:${this.port}/stream/${token}/live.mp4`
     }
-    return `http://${lanIp}:${this.port}/stream/${token}`
+    const isDash =
+      this.activeSession?.media.contentType?.includes('dash') ||
+      Boolean(this.activeSession?.media.url && this.activeSession.media.url.includes('.mpd'))
+    const suffix = isDash ? '/manifest.mpd' : '/playlist.m3u8'
+    return `http://${lanIp}:${this.port}/stream/${token}${suffix}`
   }
 
   public async generateFallbackReceiver(media: CastMediaInput): Promise<FallbackReceiverInfo> {
@@ -284,13 +288,13 @@ export class StreamServer extends EventEmitter {
         return
       }
 
-      // Live decrypted relay endpoint (/stream/:token/live or root /stream/:token when live relay is active)
-      if (subpath === '/live' || (subpath === '' && this.isLiveRelay(token))) {
+      // Live decrypted relay endpoint (/stream/:token/live or /stream/:token/live.mp4)
+      if (subpath === '/live' || subpath === '/live.mp4' || (subpath === '' && this.isLiveRelay(token))) {
         this.handleLiveRelayStream(req, res, token)
         return
       }
 
-      if (subpath === '/seg') {
+      if (subpath === '/seg' || subpath.startsWith('/seg')) {
         const upstreamUrl = parsedUrl.searchParams.get('u')
         if (!upstreamUrl) {
           res.writeHead(400)
@@ -301,7 +305,7 @@ export class StreamServer extends EventEmitter {
         return
       }
 
-      // Root manifest request: /stream/:token
+      // Root manifest request: /stream/:token, /stream/:token/playlist.m3u8, /stream/:token/manifest.mpd
       this.proxyMedia(req, res, this.activeSession.media.url, token)
       return
     }
@@ -485,7 +489,8 @@ export class StreamServer extends EventEmitter {
       if (trimmed.startsWith('#EXT-X-KEY:') || trimmed.startsWith('#EXT-X-MAP:') || trimmed.startsWith('#EXT-X-MEDIA:')) {
         line = line.replace(/URI="([^"]+)"/g, (_full, uriMatch: string) => {
           const resolved = this.resolveUrl(uriMatch, playlistUrl)
-          return `URI="${proxyBase}${encodeURIComponent(resolved)}"`
+          const ext = resolved.includes('.m3u8') ? '.m3u8' : '.ts'
+          return `URI="http://${host}/stream/${token}/seg${ext}?u=${encodeURIComponent(resolved)}"`
         })
         output.push(line)
         continue
@@ -499,7 +504,8 @@ export class StreamServer extends EventEmitter {
 
       // Segment or variant URI line
       const resolved = this.resolveUrl(trimmed, playlistUrl)
-      output.push(`${proxyBase}${encodeURIComponent(resolved)}`)
+      const ext = resolved.includes('.m3u8') ? '.m3u8' : '.ts'
+      output.push(`http://${host}/stream/${token}/seg${ext}?u=${encodeURIComponent(resolved)}`)
     }
 
     return output.join('\n')

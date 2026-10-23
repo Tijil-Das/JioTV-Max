@@ -32,6 +32,7 @@ export interface CastMediaInput {
   contentType?: string
   headers?: Record<string, string>
   isDecryptedRelay?: boolean
+  isDrm?: boolean
 }
 
 export interface CastStatePayload {

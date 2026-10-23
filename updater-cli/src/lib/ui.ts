@@ -12,7 +12,10 @@ import pc from 'picocolors'
 // ─── Environment ─────────────────────────────────────────────────────────────
 
 export const IS_TTY = Boolean(process.stdout.isTTY)
-export const UNICODE = IS_TTY && isUnicodeSupported()
+export const UNICODE =
+  process.env['TERM'] !== 'dumb' &&
+  !Boolean(process.env['NO_UNICODE']) &&
+  !process.argv.includes('--no-unicode')
 export const NO_COLOR = Boolean(process.env['NO_COLOR']) || process.argv.includes('--no-color')
 export const FORCE_COLOR =
   Boolean(process.env['FORCE_COLOR']) || process.argv.includes('--force-color')
@@ -21,18 +24,16 @@ export const USE_COLOR = FORCE_COLOR || (!NO_COLOR && IS_TTY)
 // ─── Glyphs ──────────────────────────────────────────────────────────────────
 
 export const G = {
-  tick: UNICODE ? '✔' : 'OK',
-  cross: UNICODE ? '✖' : 'ERR',
+  tick: UNICODE ? '✔' : '√',
+  cross: UNICODE ? '✖' : '×',
   arrow: UNICODE ? '→' : '->',
   dot: UNICODE ? '·' : '.',
-  bar_full: UNICODE ? '█' : '#',
-  bar_empty: UNICODE ? '░' : '-',
-  spinner_frames: UNICODE
-    ? ['◐', '◓', '◑', '◒']
-    : ['-', '\\', '|', '/'],
-  queued: UNICODE ? '○' : 'O',
-  skipped: UNICODE ? '⊘' : 'S',
-  bullet: UNICODE ? '•' : '*',
+  bar_full: '█',
+  bar_empty: '░',
+  spinner_frames: ['◐', '◓', '◑', '◒'],
+  queued: '○',
+  skipped: '⊘',
+  bullet: '•',
   dash: '─',
 }
 
@@ -57,42 +58,72 @@ export const c = {
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
 /**
- * Render a progress bar.
+ * Render a sleek, modern progress bar.
  * @param pct   0–100
  * @param width Total width of bar in chars (default 20)
  */
 export function progressBar(pct: number, width = 20): string {
-  const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * width)
+  const clamped = Math.min(100, Math.max(0, pct))
+  const filled = Math.round((clamped / 100) * width)
   const empty = width - filled
-  return c.cyan(G.bar_full.repeat(filled)) + c.gray(G.bar_empty.repeat(empty))
+
+  if (clamped >= 100) {
+    return c.green(G.bar_full.repeat(width))
+  }
+
+  return c.cyan(G.bar_full.repeat(filled)) + c.dim(c.gray(G.bar_empty.repeat(empty)))
 }
 
 // ─── OSC-8 Clickable Links ───────────────────────────────────────────────────
 
 /**
- * Return a clickable terminal link (OSC-8). Falls back to "text (url)" if terminal doesn't support it.
+ * Return a clickable terminal link (OSC-8). Falls back to text if terminal doesn't support it.
  */
 export function link(text: string, url: string): string {
-  if (!IS_TTY || !UNICODE) return `${text} (${url})`
+  if (!IS_TTY) return text === url ? url : `${text} (${url})`
   // OSC-8 hyperlink escape sequence
   return `\u001B]8;;${url}\u0007${text}\u001B]8;;\u0007`
 }
 
 // ─── Truncation ───────────────────────────────────────────────────────────────
 
+/**
+ * Safely truncate a string to `maxWidth` visible characters without stripping ANSI colors.
+ */
 export function truncate(str: string, maxWidth: number, ellipsis = '…'): string {
   const raw = stripAnsi(str)
   if (stringWidth(raw) <= maxWidth) return str
-  // Truncate the raw string
-  let result = ''
-  let w = 0
-  for (const char of raw) {
-    const cw = stringWidth(char)
-    if (w + cw + stringWidth(ellipsis) > maxWidth) break
-    result += char
-    w += cw
+
+  const targetWidth = Math.max(0, maxWidth - stringWidth(ellipsis))
+  let currentWidth = 0
+  let truncated = ''
+  let inEscape = false
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i]
+
+    if (char === '\u001B') {
+      inEscape = true
+      truncated += char
+      continue
+    }
+
+    if (inEscape) {
+      truncated += char
+      if (char === 'm') inEscape = false
+      continue
+    }
+
+    const charWidth = stringWidth(char)
+    if (currentWidth + charWidth > targetWidth) {
+      break
+    }
+
+    truncated += char
+    currentWidth += charWidth
   }
-  return result + ellipsis
+
+  return truncated + ellipsis + '\u001B[0m'
 }
 
 // ─── Duration formatting ──────────────────────────────────────────────────────

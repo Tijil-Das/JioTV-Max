@@ -192,7 +192,7 @@ function jobElapsed(job: WorkflowJob): string {
   return fmtDuration(ms)
 }
 
-function renderDashboard(
+export function renderDashboard(
   tag: string,
   run: WorkflowRun,
   jobs: WorkflowJob[],
@@ -200,7 +200,7 @@ function renderDashboard(
   avgDurationMs: number | null,
   spinFrame: string
 ): string {
-  const width = Math.min(termWidth(), 100)
+  const width = Math.max(70, termWidth() - 1)
   const elapsed = Date.now() - startMs
   const elapsedStr = fmtDuration(elapsed)
 
@@ -211,23 +211,29 @@ function renderDashboard(
   }
 
   const runUrl = run.html_url
-  const headerLink = link(`${c.bold('Release')} ${c.cyan(tag)} · run #${run.run_number}`, runUrl)
-  const header = `${headerLink} · ${c.dim(elapsedStr + ' elapsed')} · ETA ${c.dim(etaStr)}`
+  const header = `  ${c.bold('Release')} ${c.cyan(tag)} ${c.dim('·')} ${c.bold(`run #${run.run_number}`)} ${c.dim('·')} ${c.cyan(elapsedStr + ' elapsed')} ${c.dim('·')} ETA ${c.yellow(etaStr)}`
+  const urlLine = `  ${c.dim('Action Run:')} ${link(runUrl, runUrl)}`
 
-  const lines: string[] = [header, '']
+  const lines: string[] = [header, urlLine, '']
 
   // Per-job rows
   let totalSteps = 0
   let doneSteps = 0
+
+  // Dynamically calculate available step name width so steps are never unnecessarily truncated:
+  // Layout: "  " (2) + icon (2) + name (14) + " " (1) + bar (20) + " " (1) + pct (4) + "  " (2) = 46 chars
+  // Suffix: "  " (2) + elapsed (6) = 8 chars
+  const maxStepWidth = Math.max(25, width - 56)
 
   for (const job of jobs) {
     const icon = jobIcon(job, spinFrame)
     const pct = jobProgress(job)
     const bar = progressBar(pct, 20)
     const pctStr = String(pct).padStart(3) + '%'
-    const stepName = truncate(currentStepName(job), 30)
+    const rawStep = currentStepName(job)
+    const stepName = truncate(rawStep, maxStepWidth)
     const elapsed = jobElapsed(job)
-    const namePadded = job.name.padEnd(16)
+    const namePadded = job.name.padEnd(14)
 
     lines.push(`  ${icon} ${c.bold(namePadded)} ${bar} ${c.dim(pctStr)}  ${c.dim(stepName)}  ${c.gray(elapsed)}`)
 
@@ -239,7 +245,7 @@ function renderDashboard(
   const overallPct = totalSteps === 0 ? 0 : Math.round((doneSteps / totalSteps) * 100)
   const overallBar = progressBar(overallPct, 20)
   lines.push('')
-  lines.push(`  ${c.dim('Overall')}          ${overallBar} ${c.dim(String(overallPct).padStart(3) + '%')}`)
+  lines.push(`    ${c.dim('Overall'.padEnd(14))} ${overallBar} ${c.dim(String(overallPct).padStart(3) + '%')}`)
 
   // Status line
   const allDone = jobs.length > 0 && jobs.every((j) => j.status === 'completed')

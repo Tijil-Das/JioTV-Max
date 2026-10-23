@@ -286,3 +286,28 @@ describe('renderMarkdown', () => {
   })
 })
 
+// ─── UI Polish & Truncation ───────────────────────────────────────────────────
+
+describe('UI Polish & Progress Bar', () => {
+  it('renders modern block progress bar without ASCII fallbacks', async () => {
+    const { progressBar } = await import('../src/lib/ui.js')
+    const bar25 = progressBar(25, 20)
+    expect(bar25).toContain('█')
+    expect(bar25).toContain('░')
+    expect(bar25).not.toContain('#')
+    expect(bar25).not.toContain('-')
+
+    const bar100 = progressBar(100, 20)
+    expect(bar100).toContain('█')
+    expect(bar100).not.toContain('░')
+  })
+
+  it('safely truncates long text without stripping ANSI formatting', async () => {
+    const { truncate, c } = await import('../src/lib/ui.js')
+    const styled = c.cyan('A very long step description that should truncate')
+    const result = truncate(styled, 20)
+    expect(result).toContain('…')
+    expect(result).toContain('\u001B') // Preserves ANSI escape
+  })
+})
+

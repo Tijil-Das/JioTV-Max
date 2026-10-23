@@ -35,6 +35,35 @@
   padding: 0;
 }
 
+/* --------------------------------------------------------------------------
+   Global UI: Non-selectable text, default cursor & interaction guards
+   -------------------------------------------------------------------------- */
+html, body, * {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body {
+  cursor: default;
+}
+
+a, button {
+  cursor: pointer;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
@@ -187,11 +216,24 @@ a {
 }
 
 .hero-description {
-  max-width: 640px;
+  max-width: 760px;
   margin: 0 auto 36px;
   font-size: clamp(16px, 2vw, 18px);
   color: var(--text-2);
-  line-height: 1.55;
+  line-height: 1.6;
+}
+
+.hero-line-1 {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.hero-line-2 {
+  display: block;
+}
+
+.hero-nowrap {
+  white-space: nowrap;
 }
 
 .hero-cta-group {

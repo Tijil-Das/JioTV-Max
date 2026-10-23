@@ -52,7 +52,7 @@ export function UpdateBanner(): JSX.Element | null {
           onClick={() => {
             window.updater?.restart()
           }}
-          className="rounded-lg bg-[var(--red,#E11D2E)] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_2px_8px_rgba(225,29,46,0.35)] transition-all hover:bg-[#ff2d3f] active:scale-95"
+          className="rounded-lg border border-white/10 bg-[#E11D2E] px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-all hover:bg-[#EC2738] active:bg-[#C81525] active:scale-95"
         >
           Restart
         </button>

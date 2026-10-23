@@ -292,7 +292,7 @@ export function SettingsPage(): JSX.Element {
                     className={cn(
                       'flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border transition-colors',
                       readyVersion
-                        ? 'border-[var(--red)]/40 bg-[var(--red)]/15 text-[var(--red)] shadow-[0_0_12px_rgba(225,29,46,0.25)]'
+                        ? 'border-[var(--red)]/40 bg-[var(--red)]/15 text-[var(--red)]'
                         : 'border-white/10 bg-[#1C1C20] text-[#A1A1A6]'
                     )}
                   >

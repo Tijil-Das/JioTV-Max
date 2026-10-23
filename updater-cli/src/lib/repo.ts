@@ -168,17 +168,25 @@ export async function discoverRepo(): Promise<RepoContext> {
   } catch {}
 
   // Effective version to bump from:
-  // GitHub Releases / Windows latest.yml is the central source of truth.
-  // If remote version exists and is semver-valid:
-  // If remote is greater than local, local machine has stale version; we synchronize from GitHub.
+  // GitHub Releases / Windows latest.yml is the central source of truth for what has been released.
+  // The live published release on GitHub is what users actually have installed.
+  // Bumps (patch, minor, major) MUST be computed relative to the live published release.
+  // If remotePublishedVersion exists, we use it as the base version to bump from.
+  // Otherwise, fall back to last git tag (if valid semver), or finally local package.json version.
   let isRemoteSynced = false
   let appVersion = localVersion
-  if (remotePublishedVersion && semver.valid(remotePublishedVersion)) {
-    if (semver.gt(remotePublishedVersion, localVersion)) {
-      appVersion = remotePublishedVersion
+
+  const cleanLastTag = lastTag ? semver.clean(lastTag) : null
+  const sourceOfTruth = (remotePublishedVersion && semver.valid(remotePublishedVersion))
+    ? remotePublishedVersion
+    : (cleanLastTag && semver.valid(cleanLastTag))
+    ? cleanLastTag
+    : null
+
+  if (sourceOfTruth) {
+    appVersion = sourceOfTruth
+    if (sourceOfTruth !== localVersion) {
       isRemoteSynced = true
-    } else {
-      appVersion = localVersion
     }
   }
 

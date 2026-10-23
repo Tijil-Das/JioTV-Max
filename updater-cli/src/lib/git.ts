@@ -55,8 +55,13 @@ export async function createReleaseCommit(
     await execa('git', ['add', relNotes], { cwd: gitRoot })
   }
 
-  // Commit
-  await execa('git', ['commit', '-m', commitMsg], { cwd: gitRoot })
+  // Commit (supports --allow-empty if package.json was already at newVersion)
+  const { stdout: stagedDiff } = await execa('git', ['diff', '--cached'], { cwd: gitRoot })
+  if (stagedDiff.trim().length > 0) {
+    await execa('git', ['commit', '-m', commitMsg], { cwd: gitRoot })
+  } else {
+    await execa('git', ['commit', '--allow-empty', '-m', commitMsg], { cwd: gitRoot })
+  }
 
   // Get SHA
   const { stdout: sha } = await execa('git', ['rev-parse', 'HEAD'], { cwd: gitRoot })

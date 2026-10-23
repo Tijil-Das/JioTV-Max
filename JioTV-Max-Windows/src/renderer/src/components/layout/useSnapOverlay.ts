@@ -11,11 +11,12 @@ export interface UseSnapOverlayReturn {
 
 export function useSnapOverlay(
   buttonRef: React.RefObject<HTMLButtonElement | null>,
-  maximized: boolean
+  maximized?: boolean
 ): UseSnapOverlayReturn {
   const [isOverlayMode, setIsOverlayMode] = useState(false)
   const [buttonState, setButtonState] = useState<SnapButtonState>('idle')
   const lastBoundsRef = useRef<SnapBounds | null>(null)
+  const scheduleUpdateRef = useRef<(() => void) | null>(null)
   const bridge = getBridge()
 
   // 1. Check if snap layout overlay is supported on this platform / window
@@ -58,11 +59,12 @@ export function useSnapOverlay(
     }
   }, [bridge, isOverlayMode])
 
-  // 3. Monitor button geometry and report bounds changes without continuous per-frame polling
+  // 3. Monitor button geometry and report bounds changes reliably across window moves, snaps, and resizes
   useEffect(() => {
     if (!bridge?.snapLayout || !isOverlayMode) return
 
     let rafId = 0
+    let timers: number[] = []
 
     const sendBounds = (): void => {
       const el = buttonRef.current
@@ -70,7 +72,7 @@ export function useSnapOverlay(
 
       const rect = el.getBoundingClientRect()
       // If hidden, detached, or collapsed to 0 dimensions
-      if (rect.width <= 0 || rect.height <= 0 || el.offsetParent === null) {
+      if (rect.width <= 0 || rect.height <= 0) {
         if (lastBoundsRef.current !== null) {
           lastBoundsRef.current = null
           bridge.snapLayout.updateBounds(null)
@@ -110,16 +112,31 @@ export function useSnapOverlay(
 
     const scheduleUpdate = (): void => {
       cancelAnimationFrame(rafId)
+      timers.forEach((t) => clearTimeout(t))
+      timers = []
+
+      // Immediate measurement on the next animation frame
       rafId = requestAnimationFrame(sendBounds)
+
+      // In Windows 11, snapping, maximizing, and window restoring animate over ~150ms.
+      // Scheduling follow-up checks ensures the settled final position is guaranteed to be captured.
+      timers.push(window.setTimeout(sendBounds, 50))
+      timers.push(window.setTimeout(sendBounds, 150))
+      timers.push(window.setTimeout(sendBounds, 300))
     }
 
-    // Measure initially and when maximized changes
+    scheduleUpdateRef.current = scheduleUpdate
+
+    // Measure initially
     scheduleUpdate()
 
-    // Observe size changes on the button
+    // Observe documentElement resize: this fires whenever the viewport/window resizes or snaps
     const observer = new ResizeObserver(() => {
       scheduleUpdate()
     })
+    if (document.documentElement) {
+      observer.observe(document.documentElement)
+    }
     if (buttonRef.current) {
       observer.observe(buttonRef.current)
     }
@@ -127,29 +144,52 @@ export function useSnapOverlay(
     // Listen for window resize
     window.addEventListener('resize', scheduleUpdate, { passive: true })
 
+    // Listen for requests from the main process (e.g. window moved or restored)
+    const offRequest = bridge.snapLayout.onRequestBoundsUpdate?.(scheduleUpdate)
+
+    // Listen for maximize / restore changes directly
+    const offMax = bridge.onMaximizedChange?.(() => {
+      scheduleUpdate()
+    })
+    const offFs = bridge.onFullscreenChange?.(() => {
+      scheduleUpdate()
+    })
+
     // Listen for display scaling (DPI) changes
     let mql: MediaQueryList | null = null
+    const onDpiChange = (): void => {
+      scheduleUpdate()
+      updateDpiListener()
+    }
     const updateDpiListener = (): void => {
-      mql?.removeEventListener('change', scheduleUpdate)
+      mql?.removeEventListener('change', onDpiChange)
       mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
-      mql.addEventListener('change', () => {
-        scheduleUpdate()
-        updateDpiListener()
-      })
+      mql.addEventListener('change', onDpiChange)
     }
     updateDpiListener()
 
     return () => {
+      scheduleUpdateRef.current = null
       cancelAnimationFrame(rafId)
+      timers.forEach((t) => clearTimeout(t))
+      timers = []
       observer.disconnect()
       window.removeEventListener('resize', scheduleUpdate)
-      mql?.removeEventListener('change', scheduleUpdate)
+      mql?.removeEventListener('change', onDpiChange)
+      offRequest?.()
+      offMax?.()
+      offFs?.()
       if (bridge?.snapLayout) {
         lastBoundsRef.current = null
         bridge.snapLayout.updateBounds(null)
       }
     }
-  }, [bridge, isOverlayMode, buttonRef, maximized])
+  }, [bridge, isOverlayMode, buttonRef])
+
+  // 4. Trigger bounds recalculation when maximized state prop changes without tearing down the overlay
+  useEffect(() => {
+    scheduleUpdateRef.current?.()
+  }, [maximized])
 
   return {
     isOverlayMode,

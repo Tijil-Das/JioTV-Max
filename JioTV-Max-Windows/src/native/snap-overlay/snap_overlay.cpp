@@ -254,6 +254,7 @@ static Napi::Value Attach(const Napi::CallbackInfo& info) {
 
     // Position on top of Chromium child render window
     SetWindowPos(hChild, HWND_TOP, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    BringWindowToTop(hChild);
 
     OverlayContext* ctx = new OverlayContext();
     ctx->hParent = hParent;
@@ -301,7 +302,28 @@ static Napi::Value UpdateRect(const Napi::CallbackInfo& info) {
     int width = info[3].As<Napi::Number>().Int32Value();
     int height = info[4].As<Napi::Number>().Int32Value();
 
-    SetWindowPos(hChild, HWND_TOP, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW);
+    // CRITICAL: Must NOT use SWP_NOZORDER so that HWND_TOP is honored and
+    // the overlay child window is re-asserted on top of Chromium's render widget.
+    SetWindowPos(hChild, HWND_TOP, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    BringWindowToTop(hChild);
+    return Napi::Boolean::New(env, true);
+  } catch (...) {
+    return Napi::Boolean::New(env, false);
+  }
+}
+
+static Napi::Value BringToTop(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  try {
+    if (info.Length() < 1) return Napi::Boolean::New(env, false);
+
+    bool lossless = false;
+    uint64_t childVal = info[0].As<Napi::BigInt>().Uint64Value(&lossless);
+    HWND hChild = reinterpret_cast<HWND>(childVal);
+    if (!IsWindow(hChild)) return Napi::Boolean::New(env, false);
+
+    SetWindowPos(hChild, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    BringWindowToTop(hChild);
     return Napi::Boolean::New(env, true);
   } catch (...) {
     return Napi::Boolean::New(env, false);
@@ -320,6 +342,9 @@ static Napi::Value SetVisible(const Napi::CallbackInfo& info) {
 
     bool visible = info[1].As<Napi::Boolean>().Value();
     ShowWindow(hChild, visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+    if (visible) {
+      BringWindowToTop(hChild);
+    }
     return Napi::Boolean::New(env, true);
   } catch (...) {
     return Napi::Boolean::New(env, false);
@@ -385,6 +410,7 @@ static Napi::Value Detach(const Napi::CallbackInfo& info) {
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("attach", Napi::Function::New(env, Attach));
   exports.Set("updateRect", Napi::Function::New(env, UpdateRect));
+  exports.Set("bringToTop", Napi::Function::New(env, BringToTop));
   exports.Set("setVisible", Napi::Function::New(env, SetVisible));
   exports.Set("debugHitTest", Napi::Function::New(env, DebugHitTest));
   exports.Set("detach", Napi::Function::New(env, Detach));

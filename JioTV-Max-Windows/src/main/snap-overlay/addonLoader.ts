@@ -13,6 +13,7 @@ export interface SnapOverlayAddon {
   ): bigint
   updateRect(childHwnd: bigint, x: number, y: number, width: number, height: number): boolean
   setVisible(childHwnd: bigint, visible: boolean): boolean
+  bringToTop(childHwnd: bigint): boolean
   debugHitTest(childHwnd: bigint, screenX: number, screenY: number): number
   detach(childHwnd: bigint): boolean
 }

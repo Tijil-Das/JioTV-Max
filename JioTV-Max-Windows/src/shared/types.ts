@@ -206,6 +206,7 @@ export interface SnapBridge {
   getSupportStatus(): Promise<SnapSupportStatus>
   updateBounds(bounds: SnapBounds | null): void
   onStateChange(callback: (state: SnapButtonState) => void): () => void
+  onRequestBoundsUpdate?(callback: () => void): () => void
 }
 
 export interface UpdaterBridge {

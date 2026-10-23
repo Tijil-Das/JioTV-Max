@@ -36,6 +36,7 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
   const setHelpOpen = useCastStore((s) => s.setHelpOpen)
   const startDiscovery = useCastStore((s) => s.startDiscovery)
   const startCast = useCastStore((s) => s.startCast)
+  const stopCast = useCastStore((s) => s.stopCast)
   const cancelConnecting = useCastStore((s) => s.cancelConnecting)
   const fetchDiagnostics = useCastStore((s) => s.fetchDiagnostics)
   const clearError = useCastStore((s) => s.clearError)
@@ -243,6 +244,40 @@ export function CastDialog({ media, onOpenFallback }: CastDialogProps): JSX.Elem
             </div>
           ) : (
             <div className="mt-4 space-y-4">
+              {/* Active Cast Session Banner */}
+              {activeState.device && (activeState.state === 'casting' || activeState.state === 'loading') ? (
+                <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">
+                        Casting to {activeState.device.name}
+                      </p>
+                      <p className="text-[11px] text-zinc-400 truncate">
+                        {activeState.media?.title || 'Live Broadcast'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void stopCast()
+                      setDialogOpen(false)
+                    }}
+                    className="shrink-0 ml-2 rounded-lg border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/30 active:scale-95"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ) : null}
+
+              {/* No media notice */}
+              {!media && activeState.state !== 'casting' && activeState.state !== 'loading' ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-400">
+                  Select and play a channel in the app to cast it to your TV.
+                </div>
+              ) : null}
+
               {/* Searching live status indicator */}
               {isSearching ? (
                 <div className="flex items-center gap-2.5 text-xs text-zinc-400 px-1 py-1">

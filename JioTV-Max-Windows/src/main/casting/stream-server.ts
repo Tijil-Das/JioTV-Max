@@ -3,6 +3,7 @@ import https from 'node:https'
 import { randomBytes } from 'node:crypto'
 import { type Socket } from 'node:net'
 import { readFileSync, existsSync } from 'node:fs'
+import { EventEmitter } from 'node:events'
 import path from 'node:path'
 import QRCode from 'qrcode'
 import type { CastMediaInput, FallbackReceiverInfo } from '@shared/cast-types'
@@ -30,7 +31,7 @@ export interface LiveRelayState {
   clients: Set<ServerResponse>
 }
 
-export class StreamServer {
+export class StreamServer extends EventEmitter {
   private server: http.Server | null = null
   private port = 0
   private readonly sockets = new Set<Socket>()
@@ -39,6 +40,7 @@ export class StreamServer {
   private readonly liveRelays = new Map<string, LiveRelayState>()
 
   constructor() {
+    super()
     this.preloadHlsLib()
   }
 
@@ -340,8 +342,10 @@ export class StreamServer {
     })
 
     relay.clients.add(res)
+    this.emit('clientConnected', { token, clientIp: req.socket.remoteAddress })
     req.on('close', () => {
       relay?.clients.delete(res)
+      this.emit('clientDisconnected', { token, clientIp: req.socket.remoteAddress })
     })
 
     if (relay.initChunk) {

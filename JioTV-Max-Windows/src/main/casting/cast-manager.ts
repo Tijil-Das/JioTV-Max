@@ -361,9 +361,6 @@ export class CastManager extends EventEmitter {
       return false
     }
 
-    // State = loading
-    this.setState('loading', 'buffering')
-
     // Resolve stream URL (direct or proxied)
     let streamUrlToCast = media.url
     try {
@@ -385,6 +382,9 @@ export class CastManager extends EventEmitter {
       this.setState('error', 'idle')
       return false
     }
+
+    // State = loading (activeSessionToken is already available)
+    this.setState('loading', 'buffering')
 
     // Load media on device
     try {
@@ -408,10 +408,19 @@ export class CastManager extends EventEmitter {
           resolve()
         }
       }
+      const onClientConnected = (event: { token: string }) => {
+        if (this.activeSessionToken && event.token === this.activeSessionToken) {
+          castLogger.info(`[CastManager] TV connected to LAN stream relay for token: ${event.token}`)
+          cleanupListener()
+          resolve()
+        }
+      }
       const cleanupListener = () => {
         adapter.removeListener('status', onStatusCheck)
+        this.streamServer?.removeListener('clientConnected', onClientConnected)
       }
       adapter.on('status', onStatusCheck)
+      this.streamServer?.on('clientConnected', onClientConnected)
 
       this.playbackStartTimer = setTimeout(() => {
         cleanupListener()
@@ -449,7 +458,6 @@ export class CastManager extends EventEmitter {
     castLogger.info(`[CastManager] Switching channel to "${newMedia.title}" on ${this.activeDevice.name}`)
 
     this.activeMedia = newMedia
-    this.setState('loading', 'buffering')
 
     try {
       // Re-resolve or update stream
@@ -457,9 +465,11 @@ export class CastManager extends EventEmitter {
       if (this.checkNeedsProxy(newMedia)) {
         if (!this.streamServer) this.streamServer = new StreamServer()
         const sessionToken = await this.streamServer.startSession(newMedia, this.activeDevice.host)
+        this.activeSessionToken = sessionToken
         streamUrlToCast = this.streamServer.getStreamUrl(sessionToken, this.activeDevice.host)
       }
 
+      this.setState('loading', 'buffering')
       await this.activeAdapter.load(newMedia, streamUrlToCast)
       this.setState('casting', 'playing')
       return true

@@ -91,6 +91,11 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, state: SnapButtonState) => callback(state)
       ipcRenderer.on(IPC.snapStateChanged, listener)
       return () => ipcRenderer.removeListener(IPC.snapStateChanged, listener)
+    },
+    onRequestBoundsUpdate: (callback: () => void): (() => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IPC.snapRequestBoundsUpdate, listener)
+      return () => ipcRenderer.removeListener(IPC.snapRequestBoundsUpdate, listener)
     }
   }
 }

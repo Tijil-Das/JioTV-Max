@@ -5,6 +5,7 @@ import { useNow } from '@/hooks/useNow'
 import { useOnline } from '@/hooks/useOnline'
 import { usePlayerStore } from '@/store/usePlayerStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { CastButton } from '@/components/casting/CastButton'
 import { WindowControls } from './WindowControls'
 import appIcon from '@/assets/icons/app-icon-32.png'
 
@@ -73,6 +74,7 @@ export function TitleBar(): JSX.Element {
           {clockFormatter.format(now)}
         </span>
 
+        <CastButton scale={0.8} isCastable={true} className="no-drag" />
         <WindowControls />
       </div>
     </header>

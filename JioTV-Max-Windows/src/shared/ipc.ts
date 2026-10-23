@@ -28,6 +28,7 @@ export const IPC = {
   snapGetSupport: 'snap:get-support',
   snapUpdateBounds: 'snap:update-bounds',
   snapStateChanged: 'snap:state-changed',
+  snapRequestBoundsUpdate: 'snap:request-bounds-update',
   // Casting IPC
   castStartDiscovery: 'cast:start-discovery',
   castStopDiscovery: 'cast:stop-discovery',

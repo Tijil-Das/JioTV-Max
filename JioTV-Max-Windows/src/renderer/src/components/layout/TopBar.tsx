@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
+import { CastButton } from '@/components/casting/CastButton'
 import { SearchBox } from './SearchBox'
 import { WindowControls } from './WindowControls'
 
@@ -47,8 +48,9 @@ export function TopBar(): JSX.Element {
         {/* Middle: draggable empty spacer */}
         <div className="min-w-0 flex-1" />
 
-        {/* Right: window controls */}
+        {/* Right: window controls & casting */}
         <div className="no-drag flex h-full shrink-0 items-center">
+          <CastButton scale={0.9} isCastable={true} className="mr-2" />
           <WindowControls className="self-start" />
         </div>
       </div>

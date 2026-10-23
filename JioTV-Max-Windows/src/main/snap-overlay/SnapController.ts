@@ -96,16 +96,29 @@ export class SnapController {
   private initWindowListeners(): void {
     if (this.win.isDestroyed()) return
 
-    const onGeometryChange = (): void => {
+    const onLayoutChange = (): void => {
       if (this.isDisposed || this.win.isDestroyed()) return
-      this.syncPhysicalPosition()
+      this.reassertTop()
+      this.requestRendererBounds()
     }
 
-    this.win.on('resize', onGeometryChange)
-    this.win.on('move', onGeometryChange)
-    this.win.on('maximize', onGeometryChange)
-    this.win.on('unmaximize', onGeometryChange)
-    this.win.on('restore', onGeometryChange)
+    // Window layout/geometry change events
+    this.win.on('resize', onLayoutChange)
+    this.win.on('maximize', onLayoutChange)
+    this.win.on('unmaximize', onLayoutChange)
+
+    // Window move end (drag finished or snapped into a zone)
+    this.win.on('moved', () => {
+      if (this.isDisposed || this.win.isDestroyed()) return
+      this.reassertTop()
+      this.requestRendererBounds()
+    })
+
+    // Reassert top of Z-order whenever window gains focus
+    this.win.on('focus', () => {
+      if (this.isDisposed || this.win.isDestroyed()) return
+      this.reassertTop()
+    })
 
     this.win.on('enter-full-screen', () => {
       this.setOverlayVisibility(false)
@@ -113,7 +126,7 @@ export class SnapController {
 
     this.win.on('leave-full-screen', () => {
       this.setOverlayVisibility(true)
-      this.syncPhysicalPosition()
+      onLayoutChange()
     })
 
     this.win.on('minimize', () => {
@@ -122,14 +135,13 @@ export class SnapController {
 
     this.win.on('restore', () => {
       this.setOverlayVisibility(true)
-      this.syncPhysicalPosition()
+      onLayoutChange()
     })
 
     this.win.webContents.on('did-finish-load', () => {
       if (this.isDisposed || this.win.isDestroyed()) return
-      if (this.lastBounds) {
-        this.syncPhysicalPosition()
-      }
+      this.reassertTop()
+      this.requestRendererBounds()
     })
 
     this.win.webContents.on('render-process-gone', () => {
@@ -174,21 +186,24 @@ export class SnapController {
     }
   }
 
-  private syncPhysicalPosition(): void {
-    if (!this.lastBounds || this.childHwnd === null || !this.addon) return
-    if (this.win.isFullScreen() || this.win.isMinimized()) {
-      this.setOverlayVisibility(false)
-      return
+  private reassertTop(): void {
+    if (this.childHwnd === null || !this.addon || this.win.isDestroyed()) return
+    if (this.win.isFullScreen() || this.win.isMinimized()) return
+    try {
+      this.addon.bringToTop(this.childHwnd)
+    } catch {
+      // non-fatal
     }
+  }
 
-    this.addon.updateRect(
-      this.childHwnd,
-      this.lastBounds.x,
-      this.lastBounds.y,
-      this.lastBounds.width,
-      this.lastBounds.height
-    )
-    this.setOverlayVisibility(true)
+  private requestRendererBounds(): void {
+    if (this.win.isDestroyed() || this.isDisposed) return
+    if (this.win.isFullScreen() || this.win.isMinimized()) return
+    try {
+      this.win.webContents.send(IPC.snapRequestBoundsUpdate)
+    } catch {
+      // non-fatal
+    }
   }
 
   private setOverlayVisibility(visible: boolean): void {

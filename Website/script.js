@@ -94,12 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault()
 
-      const userOS = detectOS()
-      if (userOS === 'Windows') {
-        showToast('Starting direct download for Windows (64-bit)...')
-      } else {
-        showToast(`JioTv Max is built for Windows 10/11 x64. Downloading Windows setup for ${userOS}...`)
-      }
+      showToast('Downloading the latest version')
 
       // If resolving is in flight, await it quickly, then trigger direct download
       const targetUrl = latestExeDownloadUrl || (await resolveLatestRelease())

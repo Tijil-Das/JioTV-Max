@@ -11,7 +11,7 @@ export const HERO_LAST_KEY = 'hero:last'
 
 export const APP_NAME = 'JioTv Max'
 export const APP_SHORT = 'JioTv Max'
-export const APP_TAGLINE = 'Enjoy on desktop with mobile plans'
+export const APP_TAGLINE = 'Enjoy JioTV on desktop with mobile plans only'
 export const DEMO_OTP = '123456'
 export const DEMO_PHONE = '9876543210'
 

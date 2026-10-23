@@ -703,7 +703,7 @@ export class JioService {
     if (selected) return selected
 
     // 2. Try candidate fallback order: high, auto, medium, low
-    for (const candidate of [high, auto, med, low]) {
+    for (const candidate of [high, med, auto, low]) {
       if (candidate) return candidate
     }
 
@@ -736,7 +736,7 @@ export class JioService {
     if (selected) return selected
 
     // 2. Try candidate fallback order: high, auto, medium, low
-    for (const candidate of [high, auto, med, low]) {
+    for (const candidate of [high, med, auto, low]) {
       if (candidate) return candidate
     }
 

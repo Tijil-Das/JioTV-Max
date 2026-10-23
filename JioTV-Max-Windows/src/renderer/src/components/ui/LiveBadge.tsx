@@ -4,13 +4,14 @@ interface LiveBadgeProps {
   label?: string
   size?: 'sm' | 'md'
   className?: string
+  style?: React.CSSProperties
 }
 
 /**
  * LIVE badge: solid red, white dot that pulses.
  * 20px height, 4px radius, 10px/700 uppercase with 0.08em tracking.
  */
-export function LiveBadge({ label = 'LIVE', size = 'sm', className }: LiveBadgeProps): JSX.Element {
+export function LiveBadge({ label = 'LIVE', size = 'sm', className, style }: LiveBadgeProps): JSX.Element {
   return (
     <span
       className={cn(
@@ -18,6 +19,7 @@ export function LiveBadge({ label = 'LIVE', size = 'sm', className }: LiveBadgeP
         size === 'sm' ? 'h-5 px-[6px] text-[12px]' : 'h-[22px] px-2 text-[12px]',
         className
       )}
+      style={style}
     >
       <span className="live-dot" aria-hidden />
       {label}

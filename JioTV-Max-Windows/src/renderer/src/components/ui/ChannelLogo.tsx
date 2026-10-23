@@ -27,6 +27,7 @@ export interface ChannelLogoProps {
   context?: ChannelLogoContext
   size?: LogoSizeVariant
   className?: string
+  style?: React.CSSProperties
   /** Force early processing for above-the-fold artwork (hero, dev sheet). */
   priority?: 'visible' | 'idle'
   /** Explicit override for pipeline area factor (0.30 for tiles, 0.38 for cells). */
@@ -83,6 +84,7 @@ export const ChannelLogo = memo(function ChannelLogo({
   context: rawContext,
   size,
   className,
+  style,
   priority = 'idle',
   areaFactor: explicitAreaFactor,
   glow: _glow,
@@ -212,6 +214,7 @@ export const ChannelLogo = memo(function ChannelLogo({
   if (isCell) {
     return (
       <span
+        style={style}
         className={cn(
           'relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] p-2 border border-[rgba(255,255,255,0.07)] bg-[#0E0E10]',
           className

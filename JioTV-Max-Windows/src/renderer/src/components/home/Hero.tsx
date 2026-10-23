@@ -97,6 +97,34 @@ export function Hero(): JSX.Element {
   const sectionRef = useRef<HTMLElement>(null)
   const chipRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
+  // Measure actual rendered width of the hero card to scale all overlay elements proportionally
+  const [heroWidth, setHeroWidth] = useState(1100)
+
+  useEffect(() => {
+    const el = sectionRef.current
+    if (!el) return
+    const update = (w: number) => {
+      if (w > 0) setHeroWidth(w)
+    }
+    update(el.offsetWidth)
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          update(entry.contentRect.width)
+        }
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const heroScale = useMemo(() => {
+    // 1100px is the reference desktop hero width (scale 1.0)
+    // 440px is minimum hero width on small window (scale 0.58)
+    const clamped = Math.max(440, Math.min(1100, heroWidth))
+    return Number((0.58 + ((clamped - 440) / (1100 - 440)) * 0.42).toFixed(3))
+  }, [heroWidth])
+
   const channelById = useMemo(
     () => new Map(channels.map((channel) => [channel.id, channel])),
     [channels]
@@ -470,7 +498,7 @@ export function Hero(): JSX.Element {
             expanded ? 'overflow-visible' : 'overflow-hidden'
           )}
         >
-          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px] px-1 sm:px-2 overflow-visible">
+          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px] px-3 sm:px-6 md:px-8 overflow-visible">
             {/* Left Channel Skip Arrow (in free space to the left of the video container) */}
             {verifiedOrdered.length > 1 ? (
               <button
@@ -481,17 +509,30 @@ export function Hero(): JSX.Element {
                   e.stopPropagation()
                   goToPrev()
                 }}
+                style={{
+                  width: `${Math.max(38, Math.round(52 * Math.max(0.75, heroScale)))}px`,
+                  height: `${Math.max(38, Math.round(52 * Math.max(0.75, heroScale)))}px`,
+                  transform: videoHovered
+                    ? `translateX(-${Math.max(7, Math.round(18 * heroScale))}px)`
+                    : 'translateX(0px)',
+                  transition: 'transform 250ms ease-out, opacity 250ms ease-out, background-color 200ms ease'
+                }}
                 className={cn(
-                  'mr-4 sm:mr-7 md:mr-9 shrink-0 z-30',
-                  'flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full',
-                  'border border-white/15 bg-white/[0.08] hover:bg-white/[0.18] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
-                  'transition-all duration-300 ease-out active:scale-95 hover:scale-110',
+                  'mr-1.5 sm:mr-3 md:mr-5 shrink-0 z-30',
+                  'flex items-center justify-center rounded-full',
+                  'border border-white/15 bg-white/[0.08] hover:bg-white/[0.22] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
+                  'active:scale-95 hover:scale-110 hover:border-white/30',
                   'opacity-80 hover:opacity-100',
-                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
-                  videoHovered ? '-translate-x-4 sm:-translate-x-6 opacity-95' : 'translate-x-0'
+                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
                 )}
               >
-                <ChevronLeft className="h-6 w-6 stroke-[2.5]" />
+                <ChevronLeft
+                  style={{
+                    width: `${Math.max(20, Math.round(26 * Math.max(0.75, heroScale)))}px`,
+                    height: `${Math.max(20, Math.round(26 * Math.max(0.75, heroScale)))}px`
+                  }}
+                  className="stroke-[2.5]"
+                />
               </button>
             ) : null}
 
@@ -509,11 +550,12 @@ export function Hero(): JSX.Element {
               }}
               onClick={() => activeChannel && watch(activeChannel.id)}
               style={{
-                width: 'min(calc(100% - 150px), calc(72vh * 16 / 9))',
+                width: 'min(calc(100% - clamp(88px, 13vw, 150px)), calc(72vh * 16 / 9))',
                 maxWidth: '1340px',
-                aspectRatio: '16 / 9'
+                aspectRatio: '16 / 9',
+                borderRadius: `${Math.max(12, Math.round(24 * heroScale))}px`
               }}
-              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] rounded-[24px] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08]"
+              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08]"
             >
             {/* Cinema Stage — 16:9 aspect ratio strictly preserved */}
             <div className="relative h-full w-full overflow-hidden">
@@ -602,7 +644,14 @@ export function Hero(): JSX.Element {
 
               {/* Content with Side Scrolling Slide Animation */}
               {activeChannel ? (
-                <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col px-6 sm:px-8 pb-7">
+                <div
+                  className="absolute inset-x-0 bottom-0 z-20 flex flex-col"
+                  style={{
+                    paddingLeft: `${Math.max(14, Math.round(28 * heroScale))}px`,
+                    paddingRight: `${Math.max(14, Math.round(28 * heroScale))}px`,
+                    paddingBottom: `${Math.max(12, Math.round(26 * heroScale))}px`
+                  }}
+                >
                   <AnimatePresence custom={direction} mode="wait">
                     <motion.div
                       key={activeChannel.id}
@@ -611,46 +660,83 @@ export function Hero(): JSX.Element {
                       initial="enter"
                       animate="center"
                       exit="exit"
-                      className="flex max-w-[540px] flex-col gap-2.5 drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]"
+                      style={{
+                        maxWidth: `${Math.max(300, Math.round(540 * heroScale))}px`,
+                        gap: `${Math.max(5, Math.round(10 * heroScale))}px`
+                      }}
+                      className="flex flex-col drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]"
                     >
                       {/* 1. Overline: LIVE NOW */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center" style={{ gap: `${Math.max(5, Math.round(8 * heroScale))}px` }}>
                         <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--red)]"
+                          className="shrink-0 rounded-full bg-[var(--red)]"
+                          style={{ width: `${Math.max(5, Math.round(6 * heroScale))}px`, height: `${Math.max(5, Math.round(6 * heroScale))}px` }}
                           aria-hidden
                         />
-                        <span className="text-[11px] font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]">
+                        <span
+                          className="font-[600] uppercase tracking-[0.12em] text-[#A1A1A6]"
+                          style={{ fontSize: `${Math.max(9, Math.round(11 * heroScale))}px` }}
+                        >
                           LIVE NOW
                         </span>
-                        <span className="font-sans text-[12px] font-[650] tabular-nums text-[#F4F4F5]">
+                        <span
+                          className="font-sans font-[650] tabular-nums text-[#F4F4F5]"
+                          style={{ fontSize: `${Math.max(10, Math.round(12 * heroScale))}px` }}
+                        >
                           · CH {activeChannel.number}
                         </span>
                       </div>
 
                       {/* 2. Channel icon to the left side of the channel name */}
-                      <div className="flex items-center gap-3.5">
-                        <div className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 overflow-hidden rounded-[14px]">
+                      <div className="flex items-center" style={{ gap: `${Math.max(8, Math.round(14 * heroScale))}px` }}>
+                        <div
+                          className="shrink-0 overflow-hidden"
+                          style={{
+                            width: `${Math.max(32, Math.round(52 * heroScale))}px`,
+                            height: `${Math.max(32, Math.round(52 * heroScale))}px`,
+                            borderRadius: `${Math.max(7, Math.round(13 * heroScale))}px`
+                          }}
+                        >
                           <ChannelLogo
                             channelId={activeChannel.id}
                             channel={activeChannel}
                             context="switcher"
                             priority="visible"
                             className="h-full w-full"
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              padding: `${Math.max(4, Math.round(7 * heroScale))}px`,
+                              borderRadius: `${Math.max(7, Math.round(13 * heroScale))}px`
+                            }}
                           />
                         </div>
-                        <h1 className="line-clamp-2 text-[26px] sm:text-[34px] lg:text-[40px] font-[700] leading-[1.08] tracking-[-0.03em] text-[#F4F4F5]">
+                        <h1
+                          className="line-clamp-2 font-[700] leading-[1.08] tracking-[-0.03em] text-[#F4F4F5]"
+                          style={{ fontSize: `${Math.max(17, Math.round(36 * heroScale))}px` }}
+                        >
                           {cleanTitle}
                         </h1>
                       </div>
 
                       {/* 4. Meta */}
                       {metaParts.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2 text-[13px] sm:text-[14px] font-[500] text-[#A1A1A6]">
+                        <div
+                          className="flex flex-wrap items-center font-[500] text-[#A1A1A6]"
+                          style={{
+                            gap: `${Math.max(6, Math.round(8 * heroScale))}px`,
+                            fontSize: `${Math.max(10.5, Math.round(13 * heroScale))}px`
+                          }}
+                        >
                           <span>{metaParts.join(' · ')}</span>
                           {current && progress > 0 ? (
                             <span
                               aria-hidden="true"
-                              className="inline-block h-[2px] w-[140px] overflow-hidden rounded-full bg-white/[0.12]"
+                              className="inline-block overflow-hidden rounded-full bg-white/[0.12]"
+                              style={{
+                                height: '2px',
+                                width: `${Math.max(70, Math.round(130 * heroScale))}px`
+                              }}
                             >
                               <span
                                 className="block h-full bg-[var(--red)]"
@@ -662,21 +748,39 @@ export function Hero(): JSX.Element {
                       ) : null}
 
                       {/* 5. Description */}
-                      {current?.description ? (
-                        <p className="line-clamp-2 max-w-[480px] text-[13px] sm:text-[14px] font-[450] leading-relaxed text-[#A1A1A6]">
+                      {current?.description && heroWidth > 680 ? (
+                        <p
+                          className="line-clamp-1 max-w-[480px] font-[450] leading-relaxed text-[#A1A1A6]"
+                          style={{ fontSize: `${Math.max(11, Math.round(13 * heroScale))}px` }}
+                        >
                           {current.description}
                         </p>
                       ) : null}
 
                       {/* 6. Buttons */}
-                      <div className="mt-1 flex items-center gap-3">
+                      <div style={{ marginTop: `${Math.max(3, Math.round(6 * heroScale))}px` }}>
                         <Button
                           variant="primary"
-                          size="lg"
-                          icon={<Play className="h-4 w-4 fill-current" />}
+                          icon={
+                            <Play
+                              style={{
+                                width: `${Math.max(11, Math.round(15 * heroScale))}px`,
+                                height: `${Math.max(11, Math.round(15 * heroScale))}px`
+                              }}
+                              className="fill-current"
+                            />
+                          }
                           onClick={(e) => {
                             e.stopPropagation()
                             watch(activeChannel.id)
+                          }}
+                          style={{
+                            height: `${Math.max(28, Math.round(42 * heroScale))}px`,
+                            paddingLeft: `${Math.max(11, Math.round(18 * heroScale))}px`,
+                            paddingRight: `${Math.max(11, Math.round(18 * heroScale))}px`,
+                            fontSize: `${Math.max(11, Math.round(13.5 * heroScale))}px`,
+                            borderRadius: `${Math.max(6, Math.round(8 * heroScale))}px`,
+                            gap: `${Math.max(5, Math.round(7 * heroScale))}px`
                           }}
                         >
                           Watch live
@@ -703,17 +807,23 @@ export function Hero(): JSX.Element {
                       setUserPaused(false)
                     }
                   }}
+                  style={{
+                    top: `${Math.max(10, Math.round(18 * heroScale))}px`,
+                    right: `${Math.max(10, Math.round(18 * heroScale))}px`,
+                    width: `${Math.max(26, Math.round(32 * heroScale))}px`,
+                    height: `${Math.max(26, Math.round(32 * heroScale))}px`
+                  }}
                   className={cn(
-                    'absolute right-5 top-5 z-30 flex h-8 w-8 items-center justify-center rounded-full',
+                    'absolute z-30 flex items-center justify-center rounded-full',
                     'border border-[rgba(255,255,255,0.14)] bg-black/55 text-[#F4F4F5] backdrop-blur-sm',
                     'transition-colors duration-150 hover:bg-black/75',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
                   )}
                 >
                   {previewOn ? (
-                    <Pause className="h-3.5 w-3.5 fill-current" strokeWidth={0} />
+                    <Pause style={{ width: `${Math.max(11, Math.round(14 * heroScale))}px`, height: `${Math.max(11, Math.round(14 * heroScale))}px` }} className="fill-current" strokeWidth={0} />
                   ) : (
-                    <Play className="ml-[1px] h-3.5 w-3.5 fill-current" strokeWidth={0} />
+                    <Play style={{ width: `${Math.max(11, Math.round(14 * heroScale))}px`, height: `${Math.max(11, Math.round(14 * heroScale))}px` }} className="ml-[1px] fill-current" strokeWidth={0} />
                   )}
                 </button>
               ) : null}
@@ -724,18 +834,26 @@ export function Hero(): JSX.Element {
                   role="tablist"
                   aria-label="Featured channels switcher"
                   onKeyDown={onTablistKeyDown}
-                  className="absolute bottom-7 right-7 z-30 flex items-center gap-[10px]"
+                  style={{
+                    bottom: `${Math.max(12, Math.round(26 * heroScale))}px`,
+                    right: `${Math.max(12, Math.round(26 * heroScale))}px`,
+                    gap: `${Math.max(5, Math.round(9 * heroScale))}px`
+                  }}
+                  className="absolute z-30 flex items-center"
                 >
                   {verifiedOrdered.map((id, index) => {
                     const channel = channelById.get(id)
                     if (!channel) return null
                     const selected = id === activeId
+                    const chipSize = Math.max(32, Math.round(52 * heroScale))
+                    const chipPad = Math.max(3, Math.round(7 * heroScale))
+                    const chipRad = Math.max(7, Math.round(12 * heroScale))
                     return (
                       <div key={id} className="relative">
                         {tooltipId === id ? (
                           <div
                             role="tooltip"
-                            className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-[8px] border border-[rgba(255,255,255,0.12)] bg-[#111113] px-2.5 py-1 text-[12px] font-[500] text-[#F4F4F5] shadow-lg"
+                            className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 -translate-x-1/2 whitespace-nowrap rounded-[8px] border border-[rgba(255,255,255,0.12)] bg-[#111113] px-2 py-0.5 text-[11px] font-[500] text-[#F4F4F5] shadow-lg"
                           >
                             {channel.name} · CH {channel.number}
                           </div>
@@ -778,15 +896,29 @@ export function Hero(): JSX.Element {
                             cancelDwell()
                             hideTooltip()
                           }}
+                          style={{
+                            borderRadius: `${chipRad}px`
+                          }}
                           className={cn(
-                            'relative rounded-[14px] transition-all duration-200',
+                            'relative transition-all duration-200',
                             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
                             selected
-                              ? 'opacity-100 scale-105 after:absolute after:inset-[-2px] after:rounded-[16px] after:border-2 after:border-[var(--red-line)] after:content-[""]'
+                              ? 'opacity-100 scale-105 after:absolute after:inset-[-2px] after:rounded-[inherit] after:border-2 after:border-[var(--red-line)] after:content-[""]'
                               : 'opacity-75 hover:opacity-100 hover:scale-105'
                           )}
                         >
-                          <ChannelLogo channelId={channel.id} channel={channel} context="switcher" priority="visible" />
+                          <ChannelLogo
+                            channelId={channel.id}
+                            channel={channel}
+                            context="switcher"
+                            priority="visible"
+                            style={{
+                              width: `${chipSize}px`,
+                              height: `${chipSize}px`,
+                              padding: `${chipPad}px`,
+                              borderRadius: `${chipRad}px`
+                            }}
+                          />
                         </button>
                       </div>
                     )
@@ -807,17 +939,30 @@ export function Hero(): JSX.Element {
                 e.stopPropagation()
                 goToNext()
               }}
+              style={{
+                width: `${Math.max(38, Math.round(52 * Math.max(0.75, heroScale)))}px`,
+                height: `${Math.max(38, Math.round(52 * Math.max(0.75, heroScale)))}px`,
+                transform: videoHovered
+                  ? `translateX(${Math.max(7, Math.round(18 * heroScale))}px)`
+                  : 'translateX(0px)',
+                transition: 'transform 250ms ease-out, opacity 250ms ease-out, background-color 200ms ease'
+              }}
               className={cn(
-                'ml-4 sm:ml-7 md:ml-9 shrink-0 z-30',
-                'flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full',
-                'border border-white/15 bg-white/[0.08] hover:bg-white/[0.18] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
-                'transition-all duration-300 ease-out active:scale-95 hover:scale-110',
+                'ml-1.5 sm:ml-3 md:ml-5 shrink-0 z-30',
+                'flex items-center justify-center rounded-full',
+                'border border-white/15 bg-white/[0.08] hover:bg-white/[0.22] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
+                'active:scale-95 hover:scale-110 hover:border-white/30',
                 'opacity-80 hover:opacity-100',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]',
-                videoHovered ? 'translate-x-4 sm:translate-x-6 opacity-95' : 'translate-x-0'
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)]'
               )}
             >
-              <ChevronRight className="h-6 w-6 stroke-[2.5]" />
+              <ChevronRight
+                style={{
+                  width: `${Math.max(20, Math.round(26 * Math.max(0.75, heroScale)))}px`,
+                  height: `${Math.max(20, Math.round(26 * Math.max(0.75, heroScale)))}px`
+                }}
+                className="stroke-[2.5]"
+              />
             </button>
           ) : null}
         </div>

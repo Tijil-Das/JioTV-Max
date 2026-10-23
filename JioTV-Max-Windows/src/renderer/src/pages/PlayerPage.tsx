@@ -10,7 +10,6 @@ import {
   Minimize,
   Play,
   Pause,
-  Radio,
   RefreshCw,
   SkipBack,
   SkipForward,
@@ -48,6 +47,7 @@ import { SeekOverlay } from '@/components/player/SeekOverlay'
 import { useDoubleTapSeek } from '@/hooks/useDoubleTapSeek'
 import { PinDialog } from '@/components/settings/PinDialog'
 import { WindowControls } from '@/components/layout/WindowControls'
+import appIcon from '@/assets/icons/app-icon-32.png'
 
 interface StreamFailure {
   message: string
@@ -128,6 +128,56 @@ export function PlayerPage(): JSX.Element {
       setShowVolumeOsd(false)
     }, 1500)
   }, [])
+
+  // Window size tracking for responsive player controls scaling
+  const [windowSize, setWindowSize] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? window.innerHeight : 720
+  }))
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({ width: window.innerWidth, height: window.innerHeight })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Responsive scale factor for player controls and overlays.
+  // Fullscreen maintains 1.0 (current reference size).
+  // When window shrinks toward minimum dimensions (480x320), scale clamps to MIN_SCALE (0.80),
+  // which is close to full size while keeping interactive controls neatly clickable.
+  const ctrlScale = useMemo(() => {
+    if (isFullscreen) return 1.0
+    const { width, height } = windowSize
+    const refW = typeof window !== 'undefined' && window.screen?.width ? Math.max(1280, window.screen.width) : 1920
+    const refH = typeof window !== 'undefined' && window.screen?.height ? Math.max(720, window.screen.height) : 1080
+    const MIN_SCALE = 0.80
+    const MAX_SCALE = 1.0
+    const factorW = (width - 480) / (refW - 480)
+    const factorH = (height - 320) / (refH - 320)
+    const factor = Math.min(factorW, factorH)
+    const calculated = MIN_SCALE + factor * (MAX_SCALE - MIN_SCALE)
+    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(calculated.toFixed(3))))
+  }, [isFullscreen, windowSize])
+
+  // Responsive scale factor specifically tailored for the center Volume OSD HUD indicator.
+  // In fullscreen, maintains 1.0 reference scale.
+  // In smaller windowed viewports, it scales down much more aggressively (down to 0.50)
+  // so the center card never dominates or obscures the video in smaller app windows.
+  const volumeOsdScale = useMemo(() => {
+    if (isFullscreen) return 1.0
+    const { width, height } = windowSize
+    const refW = typeof window !== 'undefined' && window.screen?.width ? Math.max(1280, window.screen.width) : 1920
+    const refH = typeof window !== 'undefined' && window.screen?.height ? Math.max(720, window.screen.height) : 1080
+    const MIN_SCALE = 0.50
+    const MAX_SCALE = 1.0
+    const factorW = (width - 480) / (refW - 480)
+    const factorH = (height - 320) / (refH - 320)
+    const factor = Math.min(Math.max(0, factorW), Math.max(0, factorH))
+    const calculated = MIN_SCALE + factor * (MAX_SCALE - MIN_SCALE)
+    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(calculated.toFixed(3))))
+  }, [isFullscreen, windowSize])
 
   const locked = parentalEnabled && channel?.category === 'kids' && unlockedChannelId !== channelId
 
@@ -592,12 +642,16 @@ export function PlayerPage(): JSX.Element {
           ? quality
           : videoRef.current?.videoHeight || 0
         : engine.levels[engine.activeLevel]?.height ?? (videoRef.current?.videoHeight || 0)
-  const qualityLabel =
-    engine.activeLevel === 'auto'
-      ? 'Auto'
-      : engine.levels[engine.activeLevel]?.height
-        ? `${engine.levels[engine.activeLevel].height}p`
-        : QUALITY_OPTIONS.find((option) => option.value === quality)?.label ?? 'Auto'
+  const isAutoQuality = engine.activeLevel === 'auto' || quality === 'auto'
+  const qualityLabel = isAutoQuality
+    ? activeHeight > 0
+      ? `Auto (${activeHeight}p)`
+      : 'Auto'
+    : typeof engine.activeLevel === 'number' && engine.levels[engine.activeLevel]?.height
+      ? `${engine.levels[engine.activeLevel].height}p`
+      : typeof quality === 'number'
+        ? `${quality}p`
+        : 'Auto'
 
   const stageBackground = channel
     ? `radial-gradient(110% 120% at 70% 0%, ${hexToRgba(channel.brandColor, 0.42)} 0%, transparent 60%), linear-gradient(160deg, #0d0d14, #050507)`
@@ -607,18 +661,12 @@ export function PlayerPage(): JSX.Element {
     return (
       <div className="flex h-full w-full flex-col bg-black">
         {!isFullscreen ? (
-          <header className="drag-region relative z-30 flex h-[38px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
+          <header className="drag-region relative z-30 flex h-[36px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
             <div className="no-drag flex items-center gap-2">
-              <IconButton
-                label="Back"
-                variant="ghost"
-                size="sm"
-                onClick={() => void handleBack()}
-                className="h-7 w-7 text-[#A1A1A6] hover:text-[#F4F4F5]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </IconButton>
-              <span className="text-[12px] font-semibold text-[#F4F4F5]">JioTv Max</span>
+              <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
+              <span className="text-[12px] font-semibold tracking-wide text-[#F4F4F5]">
+                JioTv <span className="text-[var(--red)]">Max</span>
+              </span>
             </div>
             <div className="drag-region h-full flex-1" />
             <div className="no-drag flex h-full shrink-0 items-center">
@@ -663,43 +711,17 @@ export function PlayerPage(): JSX.Element {
     >
       {/* Windowed Top Bar */}
       {!isFullscreen ? (
-        <header className="drag-region relative z-30 flex h-[38px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
-          <div className="no-drag flex min-w-0 items-center gap-2.5">
-            <IconButton
-              label="Back to browse"
-              variant="ghost"
-              size="sm"
-              onClick={() => void handleBack()}
-              className="h-7 w-7 rounded-lg text-[#A1A1A6] hover:bg-white/[0.08] hover:text-[#F4F4F5]"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </IconButton>
-            <ChannelLogo channel={channel} size="sm" />
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-[12px] font-semibold text-[#F4F4F5] max-w-[160px] sm:max-w-[240px]">
-                {channel.name}
-              </span>
-              <LiveBadge />
-              {current ? (
-                <span className="hidden truncate text-[11.5px] text-[#A1A1A6] md:inline">
-                  · {current.title}
-                </span>
-              ) : null}
-            </div>
+        <header className="drag-region relative z-30 flex h-[36px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0A0A0B] pl-3 pr-0 select-none">
+          <div className="no-drag flex items-center gap-2">
+            <img src={appIcon} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-contain" />
+            <span className="text-[12px] font-semibold tracking-wide text-[#F4F4F5]">
+              JioTv <span className="text-[var(--red)]">Max</span>
+            </span>
           </div>
 
-          <div className="drag-region h-full min-w-4 flex-1" />
+          <div className="drag-region h-full flex-1" />
 
           <div className="no-drag flex h-full shrink-0 items-center">
-            <button
-              type="button"
-              title="Fullscreen (F)"
-              aria-label="Fullscreen"
-              onClick={() => void toggleFullscreen()}
-              className="flex h-full w-[42px] items-center justify-center text-[#A1A1A6] transition-colors duration-75 hover:bg-white/[0.08] hover:text-[#F4F4F5] active:bg-white/[0.12]"
-            >
-              <Maximize className="h-3.5 w-3.5" />
-            </button>
             <WindowControls />
           </div>
         </header>
@@ -767,15 +789,15 @@ export function PlayerPage(): JSX.Element {
         ) : null}
       </AnimatePresence>
 
-      {/* Fullscreen Top Overlay */}
-      {isFullscreen ? (
-        <div
-          className={cn(
-            'drag-region absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/60 to-transparent pb-14 pt-3 pl-4 pr-0 transition-opacity duration-300',
-            controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-          )}
-        >
-          <div className="no-drag flex min-w-0 items-center gap-3">
+      {/* Top player overlay (Back button + Channel details) */}
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/95 via-black/60 to-transparent px-5 pb-16 pt-4 transition-opacity duration-300',
+          controlsVisible ? 'opacity-100' : 'opacity-0'
+        )}
+      >
+        <div className="pointer-events-none flex items-start justify-between gap-6">
+          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-3">
             <IconButton
               label="Back"
               variant="glass"
@@ -797,21 +819,8 @@ export function PlayerPage(): JSX.Element {
               </p>
             </div>
           </div>
-
-          <div className="no-drag flex h-full shrink-0 items-center pr-2">
-            <IconButton
-              variant="glass"
-              size="sm"
-              label="Exit Fullscreen (Esc or F)"
-              onClick={() => void toggleFullscreen()}
-              className="mr-2"
-            >
-              <Minimize className="h-4 w-4" />
-            </IconButton>
-            <WindowControls />
-          </div>
         </div>
-      ) : null}
+      </div>
 
 
       {/* Buffering: only the spinner itself (thicker stroke, no background circle or pill) */}
@@ -963,13 +972,25 @@ export function PlayerPage(): JSX.Element {
       {/* Bottom control layer */}
       <div
         className={cn(
-          'absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-5 pb-5 pt-24 transition-opacity duration-300',
-          controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          'pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300',
+          controlsVisible ? 'opacity-100' : 'opacity-0'
         )}
+        style={{
+          paddingLeft: `${Math.round(20 * ctrlScale)}px`,
+          paddingRight: `${Math.round(20 * ctrlScale)}px`,
+          paddingBottom: `${Math.round(20 * ctrlScale)}px`,
+          paddingTop: `${Math.round(80 * ctrlScale)}px`
+        }}
       >
 
         {/* DVR timeline: the thumbs maps to the manifest's seekable window. */}
-        <div className="mb-5 flex items-center gap-3">
+        <div
+          className="pointer-events-auto flex items-center"
+          style={{
+            marginBottom: `${Math.round(18 * ctrlScale)}px`,
+            gap: `${Math.round(12 * ctrlScale)}px`
+          }}
+        >
           <DvrSeekBar
             seekRange={engine.seekRange}
             currentTime={liveEdge.currentTime}
@@ -979,19 +1000,35 @@ export function PlayerPage(): JSX.Element {
             isLive={Boolean(stream?.isLive)}
             onSeek={handleSeek}
             onGoLive={handleGoLive}
+            scale={ctrlScale}
           />
         </div>
 
-        <div className="relative flex min-h-[48px] items-center justify-between gap-6">
-          <div className="pointer-events-none flex flex-1 items-center gap-3">
-            <div className="pointer-events-auto flex items-center gap-3">
-              <IconButton label={muted ? 'Unmute' : 'Mute'} size="sm" onClick={handleToggleMute} variant="glass">
+        <div
+          className="relative flex items-center justify-between"
+          style={{
+            minHeight: `${Math.round(48 * ctrlScale)}px`,
+            gap: `${Math.round(20 * ctrlScale)}px`
+          }}
+        >
+          <div className="pointer-events-none flex flex-1 items-center" style={{ gap: `${Math.round(12 * ctrlScale)}px` }}>
+            <div className="pointer-events-auto flex items-center" style={{ gap: `${Math.round(10 * ctrlScale)}px` }}>
+              <IconButton
+                label={muted ? 'Unmute' : 'Mute'}
+                size="sm"
+                onClick={handleToggleMute}
+                variant="glass"
+                style={{
+                  width: `${Math.round(32 * ctrlScale)}px`,
+                  height: `${Math.round(32 * ctrlScale)}px`
+                }}
+              >
                 {muted ? (
-                  <VolumeX className="h-4 w-4" />
+                  <VolumeX style={{ width: Math.round(16 * ctrlScale), height: Math.round(16 * ctrlScale) }} />
                 ) : volume > 0.5 ? (
-                  <Volume2 className="h-4 w-4" />
+                  <Volume2 style={{ width: Math.round(16 * ctrlScale), height: Math.round(16 * ctrlScale) }} />
                 ) : (
-                  <Volume1 className="h-4 w-4" />
+                  <Volume1 style={{ width: Math.round(16 * ctrlScale), height: Math.round(16 * ctrlScale) }} />
                 )}
               </IconButton>
               <input
@@ -1002,12 +1039,18 @@ export function PlayerPage(): JSX.Element {
                 value={muted ? 0 : volume}
                 onChange={(event) => changeVolume(Number(event.target.value))}
                 aria-label="Volume"
-                className="h-1 w-16 sm:w-24 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#E11D2E]"
+                className="h-1 cursor-pointer appearance-none rounded-pill bg-white/15 accent-[#E11D2E]"
+                style={{
+                  width: `${Math.round((windowSize.width < 640 ? 64 : 96) * ctrlScale)}px`
+                }}
               />
             </div>
           </div>
 
-          <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 sm:gap-1.5">
+          <div
+            className="pointer-events-auto absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex items-center"
+            style={{ gap: `${Math.round(6 * ctrlScale)}px` }}
+          >
             <SkipButton
               ref={rewindButtonRef}
               direction="backward"
@@ -1016,6 +1059,7 @@ export function PlayerPage(): JSX.Element {
                 triggerSkip('backward')
                 wake()
               }}
+              scale={ctrlScale}
             />
 
             <button
@@ -1025,15 +1069,34 @@ export function PlayerPage(): JSX.Element {
                 togglePlay()
               }}
               aria-label={isPlaying ? 'Pause' : 'Play'}
-              className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white text-neutral-900 shadow-[0_2px_14px_rgba(0,0,0,0.5)] border border-white/25 transition-all hover:bg-neutral-100 hover:scale-105 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="flex items-center justify-center rounded-full bg-white text-neutral-900 shadow-[0_2px_14px_rgba(0,0,0,0.5)] border border-white/25 transition-all hover:bg-neutral-100 hover:scale-105 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              style={{
+                width: `${Math.round(48 * ctrlScale)}px`,
+                height: `${Math.round(48 * ctrlScale)}px`
+              }}
             >
               {isPlaying ? (
-                <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style={{
+                    width: `${Math.round(24 * ctrlScale)}px`,
+                    height: `${Math.round(24 * ctrlScale)}px`
+                  }}
+                  aria-hidden="true"
+                >
                   <rect x="5.25" y="2.5" width="5" height="19" rx="1.5" />
                   <rect x="13.75" y="2.5" width="5" height="19" rx="1.5" />
                 </svg>
               ) : (
-                <Play className="ml-0.5 h-6 w-6 fill-current" />
+                <Play
+                  className="fill-current"
+                  style={{
+                    width: `${Math.round(24 * ctrlScale)}px`,
+                    height: `${Math.round(24 * ctrlScale)}px`,
+                    marginLeft: `${Math.round(2 * ctrlScale)}px`
+                  }}
+                />
               )}
             </button>
 
@@ -1045,10 +1108,14 @@ export function PlayerPage(): JSX.Element {
                 triggerSkip('forward')
                 wake()
               }}
+              scale={ctrlScale}
             />
           </div>
 
-          <div className="pointer-events-none relative flex flex-1 items-center justify-end gap-2">
+          <div
+            className="pointer-events-none relative flex flex-1 items-center justify-end"
+            style={{ gap: `${Math.round(8 * ctrlScale)}px` }}
+          >
             <div className="pointer-events-auto relative">
               <button
                 type="button"
@@ -1056,9 +1123,23 @@ export function PlayerPage(): JSX.Element {
                 aria-haspopup="menu"
                 aria-label="Stream quality"
                 aria-expanded={qualityOpen}
-                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/90 backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12]"
+                className="flex items-center rounded-lg border border-white/10 bg-white/[0.06] font-medium text-white/90 backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12]"
+                style={{
+                  gap: `${Math.round(6 * ctrlScale)}px`,
+                  paddingLeft: `${Math.round(12 * ctrlScale)}px`,
+                  paddingRight: `${Math.round(12 * ctrlScale)}px`,
+                  paddingTop: `${Math.round(6 * ctrlScale)}px`,
+                  paddingBottom: `${Math.round(6 * ctrlScale)}px`,
+                  fontSize: `${(12 * ctrlScale).toFixed(1)}px`
+                }}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-[#E11D2E]" />
+                <span
+                  className="rounded-full bg-[#E11D2E]"
+                  style={{
+                    width: `${Math.round(6 * ctrlScale)}px`,
+                    height: `${Math.round(6 * ctrlScale)}px`
+                  }}
+                />
                 {qualityLabel}
               </button>
               <AnimatePresence>
@@ -1073,7 +1154,7 @@ export function PlayerPage(): JSX.Element {
                     />
                     <QualityMenu
                       levels={engine.levels}
-                      activeLevel={engine.activeLevel}
+                      activeLevel={isAutoQuality ? 'auto' : engine.activeLevel}
                       activeHeight={activeHeight}
                       onSelect={(level) => {
                         engine.setLevel(level)
@@ -1086,16 +1167,23 @@ export function PlayerPage(): JSX.Element {
               </AnimatePresence>
             </div>
 
-            <div className="pointer-events-auto">
-              <IconButton
-                label={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-                size="sm"
-                variant="glass"
+            <div className="pointer-events-auto flex items-center" style={{ gap: `${Math.round(4 * ctrlScale)}px` }}>
+              <button
+                type="button"
                 onClick={() => void toggleFullscreen()}
-                className="h-8 w-8 rounded-lg"
+                title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                aria-label={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                className="flex items-center justify-center text-white/75 transition-colors hover:text-white active:scale-95"
+                style={{
+                  padding: `${Math.round(6 * ctrlScale)}px`
+                }}
               >
-                {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-              </IconButton>
+                {isFullscreen ? (
+                  <Minimize style={{ width: Math.round(20 * ctrlScale), height: Math.round(20 * ctrlScale) }} />
+                ) : (
+                  <Maximize style={{ width: Math.round(20 * ctrlScale), height: Math.round(20 * ctrlScale) }} />
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1103,12 +1191,25 @@ export function PlayerPage(): JSX.Element {
 
       {/* Persistent Go Live affordance when UI controls disappear due to inactivity */}
       {!controlsVisible && liveEdge.isDelayed && stream?.isLive ? (
-        <div className="absolute bottom-6 right-6 z-30 flex items-center gap-2 transition-opacity duration-300">
+        <div
+          className="absolute z-30 flex items-center transition-opacity duration-300"
+          style={{
+            bottom: `${Math.round(24 * ctrlScale)}px`,
+            right: `${Math.round(24 * ctrlScale)}px`,
+            gap: `${Math.round(7 * ctrlScale)}px`
+          }}
+        >
           <span
-            className="rounded-md border border-white/10 bg-[#141416]/90 px-2 py-1 font-mono text-[11.5px] font-medium tabular-nums text-zinc-300 backdrop-blur-md shadow-md"
+            className="inline-flex items-center justify-center rounded-md border border-white/10 bg-[#18181b]/90 font-mono font-medium tabular-nums text-zinc-300 shadow-sm backdrop-blur-md"
+            style={{
+              height: `${Math.round(31 * ctrlScale)}px`,
+              paddingLeft: `${Math.round(10 * ctrlScale)}px`,
+              paddingRight: `${Math.round(10 * ctrlScale)}px`,
+              fontSize: `${(12.5 * ctrlScale).toFixed(1)}px`
+            }}
             title={`${formatBehindLive(liveEdge.behindLive)} behind live`}
           >
-            -{formatBehindLive(liveEdge.behindLive)}
+            {formatBehindLive(liveEdge.behindLive)}
           </span>
           <button
             type="button"
@@ -1116,9 +1217,14 @@ export function PlayerPage(): JSX.Element {
               e.stopPropagation()
               handleGoLive()
             }}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/15 bg-[#1e1e22]/90 px-3 text-[12px] font-medium text-zinc-200 backdrop-blur-md shadow-lg transition-all hover:bg-[#28282e] hover:text-white hover:border-white/25 active:scale-95"
+            className="inline-flex items-center justify-center rounded-md border border-white/12 bg-[#222226]/90 font-semibold text-zinc-200 tracking-wide backdrop-blur-md shadow-sm transition-all hover:bg-[#2c2c32] hover:text-white hover:border-white/25 active:scale-95"
+            style={{
+              height: `${Math.round(31 * ctrlScale)}px`,
+              paddingLeft: `${Math.round(14 * ctrlScale)}px`,
+              paddingRight: `${Math.round(14 * ctrlScale)}px`,
+              fontSize: `${(13 * ctrlScale).toFixed(1)}px`
+            }}
           >
-            <Radio className="h-3.5 w-3.5 text-zinc-400" />
             Go Live
           </button>
         </div>
@@ -1129,10 +1235,11 @@ export function PlayerPage(): JSX.Element {
         {showVolumeOsd ? (
           <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
             <motion.div
-              initial={{ opacity: 0, scale: 0.88 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
+              initial={{ opacity: 0, scale: 0.88 * volumeOsdScale }}
+              animate={{ opacity: 1, scale: volumeOsdScale }}
+              exit={{ opacity: 0, scale: 0.92 * volumeOsdScale }}
               transition={{ duration: 0.15 }}
+              style={{ transformOrigin: 'center center' }}
               className="flex min-w-[150px] flex-col items-center gap-2.5 rounded-2xl border border-white/15 bg-black/85 px-6 py-4 shadow-2xl backdrop-blur-xl"
             >
               <div className="flex items-center gap-3">

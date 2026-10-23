@@ -38,6 +38,7 @@ interface SlotState {
   recoveryAttempted: boolean
   revealTimer: number | null
   listeners: AbortController
+  pausedAt: number
 }
 
 function emptySlot(): SlotState {
@@ -52,7 +53,8 @@ function emptySlot(): SlotState {
     stalledSince: 0,
     recoveryAttempted: false,
     revealTimer: null,
-    listeners: new AbortController()
+    listeners: new AbortController(),
+    pausedAt: 0
   }
 }
 
@@ -128,17 +130,92 @@ export function useHeroPlayer({
     setOpacity([0, 0])
   }, [destroySlot])
 
-  const seekLive = useCallback((index: number): void => {
+  const getLiveEdge = useCallback((index: number): number | null => {
     const slot = slotsRef.current[index]
     const video = videoRefs[index].current
-    if (!slot.hls || !video) return
-    const position = slot.hls.liveSyncPosition
-    if (typeof position === 'number' && Number.isFinite(position)) {
+    if (!video) return null
+
+    // 1. Shaka Player seek range
+    if (slot.shaka) {
       try {
-        video.currentTime = position
+        const range = slot.shaka.seekRange()
+        if (range && Number.isFinite(range.end) && range.end > 0) {
+          return range.end
+        }
       } catch {
         // ignore
       }
+    }
+
+    // 2. HLS.js live sync position
+    if (slot.hls) {
+      const position = slot.hls.liveSyncPosition
+      if (typeof position === 'number' && Number.isFinite(position) && position > 0) {
+        return position
+      }
+    }
+
+    // 3. Fallback: seekable buffer end
+    try {
+      if (video.seekable && video.seekable.length > 0) {
+        const end = video.seekable.end(video.seekable.length - 1)
+        if (Number.isFinite(end) && end > 0) {
+          return end
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null
+  }, [videoRefs])
+
+  const seekLive = useCallback((index: number): void => {
+    const slot = slotsRef.current[index]
+    const video = videoRefs[index].current
+    if (!video) return
+
+    // 1. Shaka Player (DASH / Widevine)
+    if (slot.shaka) {
+      try {
+        slot.shaka.goToLive()
+        return
+      } catch {
+        try {
+          const range = slot.shaka.seekRange()
+          if (range && Number.isFinite(range.end) && range.end > 0) {
+            video.currentTime = Math.max(0, range.end - 1.0)
+            return
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 2. HLS.js
+    if (slot.hls) {
+      const position = slot.hls.liveSyncPosition
+      if (typeof position === 'number' && Number.isFinite(position) && position > 0) {
+        try {
+          video.currentTime = position
+          return
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 3. Fallback: seek to end of seekable range
+    try {
+      if (video.seekable && video.seekable.length > 0) {
+        const end = video.seekable.end(video.seekable.length - 1)
+        if (Number.isFinite(end) && end > 0) {
+          video.currentTime = Math.max(0, end - 1.0)
+        }
+      }
+    } catch {
+      // ignore
     }
   }, [videoRefs])
 
@@ -180,10 +257,20 @@ export function useHeroPlayer({
       }
 
       // Multiple event listeners guarantee the slot is revealed immediately upon first media arrival
-      video.addEventListener('playing', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('playing', () => {
+        trackFrame()
+        if (slotsRef.current[index] === slot) {
+          slot.pausedAt = 0
+        }
+      }, { signal: slot.listeners.signal })
       video.addEventListener('timeupdate', () => trackFrame(), { signal: slot.listeners.signal })
       video.addEventListener('loadeddata', () => trackFrame(), { signal: slot.listeners.signal })
       video.addEventListener('canplay', () => trackFrame(), { signal: slot.listeners.signal })
+
+      video.addEventListener('pause', () => {
+        if (slotsRef.current[index] !== slot) return
+        slot.pausedAt = Date.now()
+      }, { signal: slot.listeners.signal })
 
       video.addEventListener('waiting', () => {
         if (slotsRef.current[index] !== slot) return
@@ -343,6 +430,38 @@ export function useHeroPlayer({
     [destroySlot, playSlot, seekLive, videoRefs]
   )
 
+  const resumePlayback = useCallback(
+    (index: number): void => {
+      const slot = slotsRef.current[index]
+      const video = videoRefs[index].current
+      if (!video) return
+
+      const pausedAt = slot.pausedAt
+      const pausedDurationSec = pausedAt > 0 ? (Date.now() - pausedAt) / 1000 : 0
+      const liveEdge = getLiveEdge(index)
+      const behindSec =
+        liveEdge !== null && Number.isFinite(video.currentTime)
+          ? Math.max(0, liveEdge - video.currentTime)
+          : 0
+
+      // If paused for more than 60s, reload slot to avoid stale CDN tokens and restart live cleanly
+      if (pausedDurationSec >= 60 && stream && channelId) {
+        slot.pausedAt = 0
+        loadSlot(index, stream, channelId)
+        return
+      }
+
+      // If 15s or more behind the live stream, auto play the live stream instead of expired content
+      if (pausedDurationSec >= 15 || behindSec >= 15) {
+        seekLive(index)
+      }
+
+      slot.pausedAt = 0
+      playSlot(index)
+    },
+    [channelId, getLiveEdge, loadSlot, playSlot, seekLive, stream, videoRefs]
+  )
+
   // Load/switch streams.
   useEffect(() => {
     if (!enabled || !stream || !channelId) {
@@ -381,17 +500,18 @@ export function useHeroPlayer({
 
   // Pause/resume without tearing the stream down.
   useEffect(() => {
-    for (const video of videoRefs) {
-      if (!video.current) continue
-      if (paused) video.current.pause()
-    }
-    if (!paused && enabled) {
+    if (paused) {
+      const now = Date.now()
+      for (let i = 0; i < 2; i++) {
+        slotsRef.current[i].pausedAt = now
+        videoRefs[i].current?.pause()
+      }
+    } else if (enabled) {
       const index = activeSlotRef.current
-      seekLive(index)
-      playSlot(index)
+      resumePlayback(index)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, enabled])
+  }, [paused, enabled, resumePlayback])
 
   // Runtime watchdog: stall recovery (non-destructive)
   useEffect(() => {
@@ -419,17 +539,20 @@ export function useHeroPlayer({
   useEffect(() => {
     const onVisibility = (): void => {
       if (document.hidden) {
-        for (const video of videoRefs) video.current?.pause()
+        const now = Date.now()
+        for (let i = 0; i < 2; i++) {
+          slotsRef.current[i].pausedAt = now
+          videoRefs[i].current?.pause()
+        }
       } else if (enabled && !paused) {
         const index = activeSlotRef.current
-        seekLive(index)
-        playSlot(index)
+        resumePlayback(index)
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, paused])
+  }, [enabled, paused, resumePlayback])
 
   useEffect(() => () => destroyAll(), [destroyAll])
 

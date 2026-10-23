@@ -21,6 +21,10 @@ export interface SkipButtonProps {
   className?: string
   /** Whether the button is disabled. */
   disabled?: boolean
+  /** Scale factor between threshold and full size (default: 1). */
+  scale?: number
+  /** Optional inline styles. */
+  style?: React.CSSProperties
 }
 
 export interface SkipButtonHandle {
@@ -37,7 +41,7 @@ export interface SkipButtonHandle {
  * - Accessible with visible focus ring and prefers-reduced-motion support
  */
 export const SkipButton = forwardRef<SkipButtonHandle, SkipButtonProps>(function SkipButton(
-  { direction, seconds = 5, onSkip, className, disabled = false },
+  { direction, seconds = 5, onSkip, className, disabled = false, scale = 1, style },
   ref
 ): JSX.Element {
   const iconWrapperRef = useRef<HTMLSpanElement>(null)
@@ -120,7 +124,7 @@ export const SkipButton = forwardRef<SkipButtonHandle, SkipButtonProps>(function
       title={tooltip}
       className={cn(
         // Compact, balanced hit area
-        'relative z-10 flex h-11 w-11 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full',
+        'relative z-10 flex cursor-pointer items-center justify-center rounded-full',
         // Transparent subtle background with soft hover/active states
         'bg-transparent text-white/85 hover:bg-white/[0.08] hover:text-white',
         'active:scale-[0.92] active:bg-white/[0.14] transition-all duration-150',
@@ -129,6 +133,11 @@ export const SkipButton = forwardRef<SkipButtonHandle, SkipButtonProps>(function
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
         className
       )}
+      style={{
+        width: Math.round(46 * scale),
+        height: Math.round(46 * scale),
+        ...style
+      }}
     >
       {/* Transform wrapper with inline-block / inline-flex and origin-center for Web Animations API */}
       <span
@@ -144,7 +153,11 @@ export const SkipButton = forwardRef<SkipButtonHandle, SkipButtonProps>(function
         <SkipIcon
           direction={direction}
           seconds={seconds}
-          className="h-8 w-8 sm:h-9 sm:w-9 text-current drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+          className="text-current drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+          style={{
+            width: Math.round(34 * scale),
+            height: Math.round(34 * scale)
+          }}
         />
       </span>
     </button>

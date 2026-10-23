@@ -856,14 +856,39 @@ export function useMediaPlayer({
         hlsRef.current = hls
         let mediaRecoveryAttempts = 0
 
+        // Helper to select the highest quality audio track available in the stream
+        const selectBestAudioTrack = () => {
+          const audioTracks = hls.audioTracks
+          if (!audioTracks || audioTracks.length === 0) return
+          let bestAudioIdx = 0
+          let maxAudioBitrate = -1
+          audioTracks.forEach((t, idx) => {
+            const bitrate = t.bitrate || 0
+            // Prioritize primary/main program tracks (skip commentary/audio-description)
+            const isMain = !/description|commentary|\bad\b/i.test(t.name || '')
+            if (isMain && bitrate > maxAudioBitrate) {
+              maxAudioBitrate = bitrate
+              bestAudioIdx = idx
+            }
+          })
+          if (hls.audioTrack !== bestAudioIdx) {
+            hls.audioTrack = bestAudioIdx
+          }
+        }
+
         hls.on(HlsEvents.MANIFEST_LOADING, () => {
           // console.log('[useMediaPlayer] HlsEvent: MANIFEST_LOADING')
         })
         hls.on(HlsEvents.MANIFEST_LOADED, (_event, data) => {
           // console.log(`[useMediaPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
         })
+        hls.on(HlsEvents.AUDIO_TRACKS_UPDATED, () => {
+          if (disposed) return
+          selectBestAudioTrack()
+        })
         hls.on(HlsEvents.MANIFEST_PARSED, () => {
           if (disposed) return
+          selectBestAudioTrack()
           const mapped: EngineLevel[] = hls.levels.map((level, index) => ({
             index,
             height: level.height ?? 0,
@@ -885,33 +910,32 @@ export function useMediaPlayer({
             hls.config.minAutoBitrate = minBitrate
           }
 
+          // Sort mapped levels to find highest resolution & bitrate variant
+          const sortedBest = [...mapped].sort((a, b) => (b.height || 0) - (a.height || 0) || b.bitrate - a.bitrate)
+          const topLevel = sortedBest[0]
+
           const desired = desiredRef.current
-          if (desired === 'auto' || typeof desired === 'number') {
-            const maxAllowedHeight = typeof desired === 'number' ? desired : 1080
-            const eligible = mapped.filter((l) => l.height > 0 && l.height <= maxAllowedHeight)
-            const highestEligible = (eligible.length > 0 ? eligible : mapped).reduce(
-              (prev, curr) => (curr.height > prev.height ? curr : prev),
-              mapped[0]
-            )
-            if (highestEligible) {
-              hls.autoLevelCapping = highestEligible.index
-              hls.startLevel = highestEligible.index
-              hls.nextLevel = highestEligible.index
-              if (highestEligible.height) setActiveHeight(highestEligible.height)
+          if (desired === 'auto') {
+            hls.autoLevelCapping = -1
+            if (topLevel) {
+              hls.startLevel = topLevel.index
+              hls.nextLevel = topLevel.index
+              if (topLevel.height) setActiveHeight(topLevel.height)
             }
-            if (desired === 'auto') {
-              hls.autoLevelCapping = highestEligible.index
-              hls.currentLevel = highestEligible.index
-              setActiveLevel('auto')
+            // CRITICAL: currentLevel MUST be -1 so Hls.js keeps auto ABR enabled!
+            hls.currentLevel = -1
+            setActiveLevel('auto')
+          } else if (typeof desired === 'number') {
+            const exact = mapped.find((l) => l.height === desired)
+            const fallback = sortedBest.find((l) => l.height <= desired) ?? topLevel
+            const chosen = exact ?? fallback
+            if (chosen) {
+              hls.currentLevel = chosen.index
+              if (chosen.height) setActiveHeight(chosen.height)
+              setActiveLevel(chosen.index)
             } else {
-              const exact = mapped.find((l) => l.height === desired)
-              if (exact) {
-                hls.currentLevel = exact.index
-                setActiveLevel(exact.index)
-              } else {
-                hls.currentLevel = highestEligible.index
-                setActiveLevel('auto')
-              }
+              hls.currentLevel = -1
+              setActiveLevel('auto')
             }
           }
           void media.play().catch((err: unknown) => {
@@ -935,7 +959,7 @@ export function useMediaPlayer({
           if (eligibleIdxs.length > 0) {
             const minAllowedIdx = eligibleIdxs.reduce((min, curr) => (curr.idx < min.idx ? curr : min)).idx
             if (hls.autoLevelEnabled && data.level < minAllowedIdx) {
-              // console.log(`[useMediaPlayer] Guarding HLS Auto quality: preventing drop below ${targetFloor}p (attempted ${data.level})`)
+              // Guard auto quality from dropping below 720p
               hls.nextLevel = minAllowedIdx
             }
           }
@@ -943,8 +967,12 @@ export function useMediaPlayer({
 
         hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
           if (disposed) return
-          // console.log(`[useMediaPlayer] HlsEvent: LEVEL_SWITCHED to ${data.level}`)
-          setActiveLevel(hls.autoLevelEnabled ? 'auto' : data.level)
+          // If the user's intent is auto, activeLevel MUST STAY 'auto' so it never hides itself!
+          if (desiredRef.current === 'auto' || hls.autoLevelEnabled) {
+            setActiveLevel('auto')
+          } else {
+            setActiveLevel(data.level)
+          }
           const levelObj = hls.levels[data.level]
           if (levelObj?.height) setActiveHeight(levelObj.height)
         })
@@ -1263,8 +1291,10 @@ export function useMediaPlayer({
           const tracks = player.getVariantTracks()
           const active = tracks.find((t: { active?: boolean }) => t.active)
           if (active?.height) {
-            // console.log(`[useMediaPlayer] Shaka ABR switched to ${active.height}p (video: ${active.videoBandwidth}, audio: ${active.audioBandwidth})`)
             setActiveHeight(active.height)
+            if (desiredRef.current === 'auto') {
+              setActiveLevel('auto')
+            }
           }
         })
 
@@ -1306,12 +1336,18 @@ export function useMediaPlayer({
         setLevels(mapped)
 
         applyInitialHeight(mapped, (index) => {
-          player.configure({
-            preferredAudioChannelCount: 2,
-            abr: { enabled: false }
-          })
-
           if (index === 'auto') {
+            player.configure({
+              preferredAudioChannelCount: 2,
+              abr: {
+                enabled: true,
+                defaultBandwidthEstimate: 30_000_000,
+                useNetworkInformation: false,
+                switchInterval: 1,
+                bandwidthDowngradeTarget: 0.85,
+                bandwidthUpgradeTarget: 0.85
+              }
+            })
             const best = pickBestVariantTrack(tracks)
             if (best) {
               player.selectVariantTrack(best, false)
@@ -1320,6 +1356,10 @@ export function useMediaPlayer({
             setActiveLevel('auto')
             return
           }
+          player.configure({
+            preferredAudioChannelCount: 2,
+            abr: { enabled: false }
+          })
           const target = mapped[index]
           if (!target) return
           const best = pickBestVariantTrack(tracks, target.height)
@@ -1437,14 +1477,20 @@ export function useMediaPlayer({
       const hls = hlsRef.current
       if (level === 'auto') {
         const levels = hls.levels || []
-        const highestEligibleIdx = levels.reduce(
-          (prev, curr, idx) => ((curr.height || 0) > (levels[prev]?.height || 0) ? idx : prev),
+        const topLevelIdx = levels.reduce(
+          (prev, curr, idx) =>
+            (curr.height || 0) > (levels[prev]?.height || 0) ||
+            (curr.bitrate || 0) > (levels[prev]?.bitrate || 0)
+              ? idx
+              : prev,
           0
         )
-        hls.autoLevelCapping = highestEligibleIdx
-        hls.currentLevel = highestEligibleIdx
-        if (levels[highestEligibleIdx]?.height) {
-          setActiveHeight(levels[highestEligibleIdx].height)
+        hls.autoLevelCapping = -1
+        hls.startLevel = topLevelIdx
+        hls.nextLevel = topLevelIdx
+        hls.currentLevel = -1
+        if (levels[topLevelIdx]?.height) {
+          setActiveHeight(levels[topLevelIdx].height)
         }
         setActiveLevel('auto')
       } else {
@@ -1459,13 +1505,18 @@ export function useMediaPlayer({
 
     const player = shakaRef.current
     if (!player) return
-    player.configure({
-      preferredAudioChannelCount: 2,
-      abr: { enabled: false }
-    })
     const tracks = player.getVariantTracks()
 
     if (level === 'auto') {
+      player.configure({
+        preferredAudioChannelCount: 2,
+        abr: {
+          enabled: true,
+          defaultBandwidthEstimate: 30_000_000,
+          useNetworkInformation: false,
+          switchInterval: 1
+        }
+      })
       const best = pickBestVariantTrack(tracks)
       if (best) {
         player.selectVariantTrack(best, false)
@@ -1475,6 +1526,10 @@ export function useMediaPlayer({
       return
     }
 
+    player.configure({
+      preferredAudioChannelCount: 2,
+      abr: { enabled: false }
+    })
     const target = levelsRef.current[level]
     if (!target) return
     const best = pickBestVariantTrack(tracks, target.height)

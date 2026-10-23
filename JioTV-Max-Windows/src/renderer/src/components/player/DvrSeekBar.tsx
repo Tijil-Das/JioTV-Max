@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Radio } from 'lucide-react'
 import type { MediaSeekRange } from '@/hooks/useMediaPlayer'
 import { cn } from '@/lib/cn'
 import { formatBehindLive } from '@/lib/time'
@@ -14,6 +13,7 @@ interface DvrSeekBarProps {
   isLive: boolean
   onSeek: (time: number) => void
   onGoLive: () => void
+  scale?: number
 }
 
 /**
@@ -31,7 +31,8 @@ export function DvrSeekBar({
   isDelayed: isDelayedProp,
   isLive,
   onSeek,
-  onGoLive
+  onGoLive,
+  scale = 1
 }: DvrSeekBarProps): JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [dragValue, setDragValue] = useState(0)
@@ -61,7 +62,7 @@ export function DvrSeekBar({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="flex min-w-0 flex-1 items-center" style={{ gap: Math.round(12 * scale) }}>
       <input
         type="range"
         min={start}
@@ -84,10 +85,11 @@ export function DvrSeekBar({
           delayed ? `${formatBehindLive(behind)} behind live` : 'Live edge'
         }
         className={cn(
-          'dvr-range h-[4px] min-w-0 flex-1 cursor-pointer appearance-none rounded-pill transition-all',
+          'dvr-range min-w-0 flex-1 cursor-pointer appearance-none rounded-pill transition-all',
           disabled && 'cursor-default opacity-50'
         )}
         style={{
+          height: `${Math.max(3, Math.round(4 * scale))}px`,
           background: disabled
             ? 'rgba(255,255,255,0.12)'
             : `linear-gradient(to right, #E11D2E 0%, #E11D2E ${progress}%, rgba(255,255,255,0.18) ${progress}%, rgba(255,255,255,0.18) 100%)`
@@ -96,21 +98,39 @@ export function DvrSeekBar({
 
       {isLive ? (
         !delayed ? (
-          <LiveBadge />
+          <LiveBadge
+            style={{
+              height: `${Math.round(20 * scale)}px`,
+              paddingLeft: `${Math.round(6 * scale)}px`,
+              paddingRight: `${Math.round(6 * scale)}px`,
+              fontSize: `${(12 * scale).toFixed(1)}px`
+            }}
+          />
         ) : (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center" style={{ gap: Math.round(7 * scale) }}>
             <span
-              className="rounded-md border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-zinc-300"
+              className="inline-flex items-center justify-center rounded-md border border-white/10 bg-[#18181b]/90 font-mono font-medium tabular-nums text-zinc-300 shadow-sm backdrop-blur-md"
+              style={{
+                height: `${Math.round(31 * scale)}px`,
+                paddingLeft: `${Math.round(10 * scale)}px`,
+                paddingRight: `${Math.round(10 * scale)}px`,
+                fontSize: `${(12.5 * scale).toFixed(1)}px`
+              }}
               title={`${formatBehindLive(behind)} behind live`}
             >
-              -{formatBehindLive(behind)}
+              {formatBehindLive(behind)}
             </span>
             <button
               type="button"
               onClick={handleGoLive}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/[0.08] px-2.5 text-[11.5px] font-medium text-zinc-200 tracking-wide backdrop-blur-sm transition-all hover:bg-white/[0.16] hover:text-white hover:border-white/25 active:scale-95"
+              className="inline-flex items-center justify-center rounded-md border border-white/12 bg-[#222226]/90 font-semibold text-zinc-200 tracking-wide backdrop-blur-md shadow-sm transition-all hover:bg-[#2c2c32] hover:text-white hover:border-white/25 active:scale-95"
+              style={{
+                height: `${Math.round(31 * scale)}px`,
+                paddingLeft: `${Math.round(14 * scale)}px`,
+                paddingRight: `${Math.round(14 * scale)}px`,
+                fontSize: `${(13 * scale).toFixed(1)}px`
+              }}
             >
-              <Radio className="h-3 w-3 text-zinc-400" />
               Go Live
             </button>
           </div>

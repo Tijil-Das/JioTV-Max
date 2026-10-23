@@ -274,6 +274,19 @@ pnpm run pack:dir
 pnpm dist
 ```
 
+### Automated Releases & CI/CD
+
+Official releases with Windows setup installers (`.exe`), differential blockmaps (`.blockmap`), and auto-update manifests (`latest.yml`) are built and published automatically by GitHub Actions.
+
+For detailed maintainer instructions, see the [Release Workflow Guide](RELEASING.md).
+
+Quick command to trigger a new release:
+```bash
+cd JioTV-Max-Windows
+npm version patch   # or minor / major
+git push origin main --tags
+```
+
 ---
 
 ## Project Structure

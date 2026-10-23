@@ -1,64 +1,92 @@
 # JioTv Max — Release Workflow Guide
 
-This guide describes how to trigger and publish official releases for **JioTv Max**.
-
-Releases are built automatically by GitHub Actions on `windows-latest` using `electron-builder` and published directly to GitHub Releases.
+This document is the definitive guide on how to create, test, build, and publish releases for **JioTv Max**.
 
 ---
 
-## Quick 3-Step Release Process
+## 🚀 Quick Release in 3 Commands
 
-### 1. Ensure `main` is up to date and clean
+When you are ready to make a release from the `main` branch:
+
 ```bash
+# 1. Ensure you have the latest code
 git checkout main
 git pull origin main
-```
 
-### 2. Bump version in `package.json`
-The version in `JioTV-Max-Windows/package.json` is the single source of truth (SemVer). The Git tag must match `v<version>`.
-
-```bash
-# Inside JioTV-Max-Windows (or edit package.json directly):
+# 2. Bump the version (this updates package.json, commits, and creates a git tag)
 cd JioTV-Max-Windows
-npm version patch   # For bug fixes (e.g. 1.0.0 -> 1.0.1)
-# or: npm version minor  (e.g. 1.0.0 -> 1.1.0)
-# or: npm version major  (e.g. 1.0.0 -> 2.0.0)
+npm version patch   # Bug fix (e.g., 1.0.0 -> 1.0.1)
+# or: npm version minor  (e.g., 1.0.0 -> 1.1.0)
+# or: npm version major  (e.g., 1.0.0 -> 2.0.0)
 cd ..
+
+# 3. Push the commit and the tag to GitHub
+git push origin main --tags
 ```
 
-### 3. Push commit and tag to GitHub
-```bash
-git push origin main
-git push --tags
-```
-*(Or push a specific tag: `git push origin v1.0.1`)*
+*(To push only the specific release tag instead: `git push origin v1.0.1`)*
 
 ---
 
-## What Happens Next (Automated via GitHub Actions)
+## ⚙️ What Happens Automatically
 
-When a tag starting with `v*` (e.g., `v1.0.0`) is pushed, [.github/workflows/release.yml](.github/workflows/release.yml) runs:
+Pushing a `v*` tag triggers the GitHub Actions workflow at [.github/workflows/release.yml](.github/workflows/release.yml):
 
-1. **Environment Setup**: Installs Node 20 & pnpm 9, caching dependencies.
-2. **Tag Validation**: Ensures Git tag matches `"version"` in `JioTV-Max-Windows/package.json`.
+1. **Environment Setup**: Spawns a clean `windows-latest` runner, configures Node 20 & pnpm 9, and restores the pnpm store cache.
+2. **Version Check**: Validates that the git tag strictly matches `"version"` in `JioTV-Max-Windows/package.json`.
 3. **Quality Gates**: Runs full TypeScript typechecks and unit tests.
-4. **Binary & Asset Bundling**:
-   - Downloads/validates castLabs Widevine Electron.
-   - Bundles all renderer and main processes, embedding relative app icons from `build/`.
-   - Packages `JioTv-Max-<version>-setup.exe` via NSIS.
-5. **Update Metadata Generation**:
-   - Generates differential `.blockmap` file.
-   - Generates `latest.yml` manifest with sha512 checksums and file sizes.
-6. **Publishing**:
-   - Uploads `.exe`, `.blockmap`, and `latest.yml` to the GitHub Release.
+4. **castLabs Widevine Setup**: Downloads and verifies castLabs Electron runtime for secure Widevine DASH playback.
+5. **Compilation & Packaging**:
+   - Compiles Vite main, preload, and React renderer bundles.
+   - Embeds relative app icons from `build/` into the package `.asar`.
+   - Generates the NSIS installer: `JioTv-Max-<version>-setup.exe`.
+6. **Update Metadata Generation**:
+   - Calculates sha512 checksums and generates `latest.yml`.
+   - Generates the differential `.blockmap` file used by `electron-updater` for silent, low-bandwidth updates.
+7. **Publishing**:
+   - Uploads `.exe`, `.blockmap`, and `latest.yml` to GitHub Releases.
 
 ---
 
-## Important Rules & Best Practices
+## 📢 Publishing the Release on GitHub
 
-- **Never delete or overwrite assets on a published release**:
-  The auto-updater relies on exact sha512 hashes in `latest.yml`. Deleting or replacing `.blockmap` or `.exe` will break silent differential updates for users.
-- **Always keep icon and logo paths relative**:
-  Never hardcode drive letters (`C:\`, `T:\`). Window icons are loaded dynamically via `getAppIconPath()`, and channel logos are proxied via loopback relay or relative bundles.
-- **AppUserModelId**:
-  Always ensure `app.setAppUserModelId('tv.jiotvmax.app')` matches `"appId": "tv.jiotvmax.app"` in `package.json` so Windows taskbar shortcuts preserve the app icon.
+By default, `electron-builder` drafts releases so the maintainer can review release notes before pushing live:
+
+### Option A: Via GitHub Web Interface
+1. Go to your repository's [Releases page](https://github.com/Tijil-Das/JioTV-Max/releases).
+2. Open the newly created draft release.
+3. Review or edit the release notes.
+4. Click **Publish release**.
+
+### Option B: Via Terminal (Instant Publish)
+You can publish the latest draft release directly from terminal using Node:
+
+```bash
+node -e "fetch('https://api.github.com/repos/Tijil-Das/JioTV-Max/releases').then(r=>r.json()).then(releases=>{const draft=releases.find(r=>r.draft); if(draft){fetch(draft.url,{method:'PATCH',headers:{Authorization:'token ' + process.env.GH_TOKEN,'User-Agent':'node','Content-Type':'application/json'},body:JSON.stringify({draft:false})}).then(()=>console.log('Published!'));}})"
+```
+
+---
+
+## 🔗 Direct Download URLs for Users and the Website
+
+Once published, binaries can be downloaded directly from GitHub's CDN without redirecting to release pages:
+
+- **Latest Setup Installer**:
+  `https://github.com/Tijil-Das/JioTV-Max/releases/latest/download/JioTv-Max-1.0.0-setup.exe`
+- **Specific Version**:
+  `https://github.com/Tijil-Das/JioTV-Max/releases/download/v1.0.0/JioTv-Max-1.0.0-setup.exe`
+- **Auto-Update Manifest**:
+  `https://github.com/Tijil-Das/JioTV-Max/releases/latest/download/latest.yml`
+
+The website in `/Website` automatically detects the user's OS and streams the latest binary download directly via browser download managers.
+
+---
+
+## ⚠️ Important Rules for Maintainers
+
+1. **Never delete or overwrite assets on a published release**:
+   The auto-updater relies on exact sha512 hashes in `latest.yml`. Deleting or replacing `.blockmap` or `.exe` will break silent updates for existing users.
+2. **Always keep icon and logo paths relative**:
+   Never hardcode drive letters (`C:\`, `T:\`). Window icons are loaded dynamically via `getAppIconPath()`, and channel logos are proxied via loopback relay or relative bundles.
+3. **AppUserModelId**:
+   Always ensure `app.setAppUserModelId('tv.jiotvmax.app')` in `src/main/index.ts` matches `"appId": "tv.jiotvmax.app"` in `package.json` so Windows taskbar shortcuts preserve the app icon.

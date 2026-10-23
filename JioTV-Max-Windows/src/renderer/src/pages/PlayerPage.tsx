@@ -52,7 +52,6 @@ import { CastDialog } from '@/components/casting/CastDialog'
 import { CastingOverlay } from '@/components/casting/CastingOverlay'
 import { CastFallbackModal } from '@/components/casting/CastFallbackModal'
 import { useCastStore } from '@/components/casting/useCastStore'
-import { decryptedCastBridge } from '@/components/casting/DecryptedCastBridge'
 import type { CastMediaInput } from '@shared/cast-types'
 import appIcon from '@/assets/icons/app-icon-32.png'
 
@@ -237,8 +236,6 @@ export function PlayerPage(): JSX.Element {
   const isCasting = activeCastState.state === 'casting' || activeCastState.state === 'loading'
   const prevIsCastingRef = useRef(false)
 
-  const isDrmStream = Boolean(stream?.isDrm || stream?.type === 'dash')
-
   const castMedia: CastMediaInput | null = useMemo(() => {
     if (!stream || !channel) return null
     return {
@@ -246,30 +243,18 @@ export function PlayerPage(): JSX.Element {
       title: channel.name || 'Live Broadcast',
       imageUrl: channel.logoUrl,
       isLive: Boolean(stream.isLive),
-      contentType: isDrmStream
-        ? 'video/mp4'
-        : stream.type === 'hls'
-          ? 'application/vnd.apple.mpegurl'
-          : 'application/dash+xml',
-      headers: stream.headers,
-      isDecryptedRelay: isDrmStream
+      contentType: stream.type === 'hls' ? 'application/vnd.apple.mpegurl' : 'application/dash+xml',
+      headers: stream.headers
     }
-  }, [stream, channel, isDrmStream])
+  }, [stream, channel])
 
-  // Casting playback coordination:
-  // - If stream is DRM-protected, the app continues playing so Widevine decrypts frames,
-  //   and decryptedCastBridge feeds the unencrypted video/audio chunks directly to the TV.
-  // - If stream is clear HLS, the TV fetches it directly from the CDN via StreamServer proxy,
-  //   so we pause local playback to conserve network bandwidth.
+  // Pause local playback when casting begins; resume at live edge when stopped
   useEffect(() => {
     if (isCasting && !prevIsCastingRef.current) {
-      if (castMedia?.isDecryptedRelay && videoRef.current) {
-        void decryptedCastBridge.start(videoRef.current, activeCastState.token)
-      } else if (videoRef.current) {
+      if (videoRef.current) {
         videoRef.current.pause()
       }
     } else if (!isCasting && prevIsCastingRef.current) {
-      void decryptedCastBridge.stop(activeCastState.token)
       pushToast({
         title: activeCastState.device ? `Disconnected from ${activeCastState.device.name}` : 'Stopped casting',
         variant: 'info'
@@ -280,32 +265,12 @@ export function PlayerPage(): JSX.Element {
       videoRef.current?.play().catch(() => {})
     }
     prevIsCastingRef.current = isCasting
-  }, [
-    isCasting,
-    videoRef,
-    liveEdge,
-    stream?.isLive,
-    pushToast,
-    activeCastState.device,
-    castMedia?.isDecryptedRelay,
-    activeCastState.token
-  ])
-
-  // Stop bridge cleanly on component unmount
-  useEffect(() => {
-    return () => {
-      void decryptedCastBridge.stop()
-    }
-  }, [])
+  }, [isCasting, videoRef, liveEdge, stream?.isLive, pushToast, activeCastState.device])
 
   // If channel changes while actively casting, update the cast session on the same TV
   useEffect(() => {
     if (isCasting && castMedia && activeCastState.device) {
       void startCast(activeCastState.device.id, castMedia)
-      if (castMedia.isDecryptedRelay && videoRef.current) {
-        void decryptedCastBridge.stop()
-        void decryptedCastBridge.start(videoRef.current, activeCastState.token)
-      }
     }
   }, [channelId])
 

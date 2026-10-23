@@ -108,11 +108,6 @@ export function CastingOverlay({ media, onStop }: CastingOverlayProps): JSX.Elem
                   ? CAST_STRINGS.statusPlaying
                   : CAST_STRINGS.statusPaused}
             </span>
-            {media?.isDecryptedRelay || activeState.media?.isDecryptedRelay ? (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-                Decrypted Stream Relay
-              </span>
-            ) : null}
           </div>
         </div>
 

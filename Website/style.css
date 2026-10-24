@@ -684,10 +684,6 @@ a {
   gap: 20px;
 }
 
-.features-grid .card:last-child {
-  grid-column: 1 / -1;
-}
-
 .grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -874,9 +870,6 @@ a {
   .features-grid,
   .grid-3 {
     grid-template-columns: 1fr;
-  }
-  .features-grid .card:last-child {
-    grid-column: auto;
   }
   .footer-content {
     flex-direction: column;

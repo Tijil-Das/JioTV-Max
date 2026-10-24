@@ -251,12 +251,19 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   })
 
-  // ─── Simulated Windows Taskbar Live Clock ────────────────────────────────
+  // ─── Simulated Windows Taskbar Live Clock & Date ────────────────────────
   const clockEl = document.getElementById('taskbar-live-clock')
+  const dateEl = document.getElementById('taskbar-live-date')
   if (clockEl) {
     const updateLiveClock = () => {
       const now = new Date()
       clockEl.textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      if (dateEl) {
+        const d = String(now.getDate()).padStart(2, '0')
+        const m = String(now.getMonth() + 1).padStart(2, '0')
+        const y = now.getFullYear()
+        dateEl.textContent = `${d}-${m}-${y}`
+      }
     }
     updateLiveClock()
     setInterval(updateLiveClock, 10000)

@@ -341,7 +341,12 @@ a {
 }
 
 .showcase-tab.active {
-  background: var(--surface-3);
+  background: var(--red);
+  color: #FFFFFF;
+}
+
+.showcase-tab.active:hover {
+  background: var(--red-hover);
   color: #FFFFFF;
 }
 
@@ -420,65 +425,296 @@ a {
   justify-content: space-between;
 }
 
-/* Background working app */
+/* Background working VS Code app */
 .desktop-bg-app {
   position: absolute;
-  top: 24px;
-  left: 24px;
-  right: 180px;
-  bottom: 80px;
-  background: rgba(18, 18, 24, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  bottom: 54px;
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   overflow: hidden;
-  opacity: 0.5;
-  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75);
 }
 
-.desktop-app-titlebar {
-  height: 28px;
-  background: rgba(0, 0, 0, 0.3);
+/* VS Code Windows Titlebar */
+.vscode-titlebar {
+  height: 32px;
+  background: #181818;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  justify-content: space-between;
+  padding: 0 0 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
 }
 
-.desktop-app-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  display: inline-block;
+.vscode-title-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.desktop-app-dot.dot-red { background: #FF5F56; }
-.desktop-app-dot.dot-yellow { background: #FFBD2E; }
-.desktop-app-dot.dot-green { background: #27C93F; }
 
-.desktop-app-title {
+.vscode-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: #cccccc;
+}
+
+.vscode-menu span {
+  cursor: default;
+  transition: color 0.15s ease;
+}
+
+.vscode-menu span:hover {
+  color: #ffffff;
+}
+
+.vscode-title-center {
   font-size: 11px;
-  color: var(--text-3);
-  margin-left: 8px;
+  color: #999999;
+  font-family: var(--font-sans);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.vscode-window-controls {
+  display: flex;
+  height: 100%;
+}
+
+.win-btn {
+  width: 44px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #cccccc;
+  cursor: default;
+  transition: background 0.15s ease;
+}
+
+.win-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.win-btn.win-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+/* VS Code Workspace */
+.vscode-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Activity Bar */
+.vscode-activitybar {
+  width: 44px;
+  background: #181818;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+  gap: 14px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.act-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #858585;
+  cursor: default;
+  position: relative;
+}
+
+.act-icon.active {
+  color: #ffffff;
+}
+
+.act-icon.active::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #ffffff;
+}
+
+/* Main Editor Area */
+.vscode-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #1e1e1e;
+}
+
+.vscode-tabs-bar {
+  height: 32px;
+  background: #181818;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-left: 2px;
+}
+
+.vscode-tab {
+  height: 31px;
+  padding: 0 12px;
+  background: #181818;
+  color: #969696;
+  font-size: 11.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  user-select: none;
+}
+
+.vscode-tab.active {
+  background: #1e1e1e;
+  color: #ffffff;
+  border-top: 2px solid #0078D4;
+}
+
+.tab-ts-icon {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #3178C6;
+  background: rgba(49, 120, 198, 0.15);
+  padding: 1px 3px;
+  border-radius: 2px;
   font-family: monospace;
 }
 
-.desktop-app-body {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.tab-json-icon {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FBC02D;
+  font-family: monospace;
 }
 
-.mock-code-line {
-  height: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
+.tab-close {
+  margin-left: 4px;
+  font-size: 13px;
+  opacity: 0.6;
 }
-.mock-code-line.line-1 { width: 45%; }
-.mock-code-line.line-2 { width: 75%; }
-.mock-code-line.line-3 { width: 60%; }
-.mock-code-line.line-4 { width: 30%; }
-.mock-code-line.line-5 { width: 85%; }
+
+.vscode-breadcrumbs {
+  height: 22px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #858585;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-family: var(--font-sans);
+}
+
+.bc-sep {
+  opacity: 0.6;
+}
+
+.bc-active {
+  color: #cccccc;
+}
+
+.bc-fn {
+  color: #DCDCAA;
+}
+
+/* Code Area */
+.vscode-code-area {
+  flex: 1;
+  display: flex;
+  padding: 8px 0;
+  overflow: hidden;
+  font-family: Consolas, 'Cascadia Code', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.vscode-gutter {
+  width: 36px;
+  padding: 0 6px 0 10px;
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  color: #6e7681;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.vscode-code-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-right: 14px;
+  color: #d4d4d4;
+  white-space: pre;
+}
+
+/* Syntax Highlighting */
+.syn-kw { color: #569CD6; }
+.syn-cls { color: #4EC9B0; }
+.syn-str { color: #CE9178; }
+.syn-cm { color: #6A9955; font-style: italic; }
+.syn-fn { color: #DCDCAA; }
+.syn-param { color: #9CDCFE; }
+.syn-type { color: #4EC9B0; }
+.syn-var { color: #9CDCFE; }
+.syn-prop { color: #9CDCFE; }
+
+/* Status Bar */
+.vscode-statusbar {
+  height: 22px;
+  background: #007ACC;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 11px;
+  color: #ffffff;
+  user-select: none;
+}
+
+.sb-left,
+.sb-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.active-dot-blue {
+  background: #007ACC !important;
+}
 
 /* Floating Miniplayer in the corner */
 .desktop-miniplayer-floating {
@@ -904,17 +1140,31 @@ a {
   }
   .windows-desktop-frame {
     aspect-ratio: auto;
-    min-height: 320px;
+    min-height: 380px;
   }
   .desktop-bg-app {
-    right: 20px;
-    bottom: 50px;
-    opacity: 0.3;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 46px;
+  }
+  .vscode-menu,
+  .vscode-tab:not(.active),
+  .vscode-breadcrumbs,
+  .vscode-statusbar .sb-right {
+    display: none;
+  }
+  .vscode-code-area {
+    font-size: 10px;
+  }
+  .vscode-gutter {
+    width: 26px;
+    padding: 0 4px 0 6px;
   }
   .desktop-miniplayer-floating {
-    right: 12px;
-    bottom: 50px;
-    width: 250px;
+    right: 10px;
+    bottom: 48px;
+    width: 240px;
   }
   .windows-taskbar {
     height: 36px;

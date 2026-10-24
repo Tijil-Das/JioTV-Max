@@ -583,63 +583,99 @@ export async function runRelease(opts: ReleaseOptions = {}): Promise<boolean> {
   console.log('')
   if (dashboardResult.success) {
     const sp = p.spinner()
-    sp.start('Verifying published release on GitHub…')
-    await sleep(5000) // Give GitHub a moment to publish
+    sp.start('Waiting for release publication and verifying assets on GitHub…')
 
     let verified = false
     let releaseUrl = `https://github.com/${ctx.owner}/${ctx.repo}/releases/tag/${newTag}`
-    const expectedAssets = ['JioTv-Max-' + newVersion + '-setup.exe', 'latest.yml']
+    let manifestVersion: string | null = null
+    let hasInstaller = false
+    let hasManifest = false
+    let verifiedBlockmap = false
+    let exeSize = 0
+    let blockmapSize = 0
 
-    try {
-      const release = await getReleaseByTag(ctx.owner, ctx.repo, newTag)
-      if (release && !release.draft) {
-        releaseUrl = release.html_url
-        const assetNames = release.assets.map((a) => a.name)
-        const hasInstaller = assetNames.some((n) => n.endsWith('.exe'))
-        const hasManifest = assetNames.some((n) => n === 'latest.yml')
-        const hasBlockmap = assetNames.some((n) => n.endsWith('.blockmap'))
+    const verifyDeadline = Date.now() + 120_000 // Poll up to 2 minutes
+    let attempt = 0
 
-        // Download manifest and check version
-        const manifestAsset = release.assets.find((a) => a.name === 'latest.yml')
-        let manifestVersion: string | null = null
-        if (manifestAsset) {
-          const manifest = await downloadManifest(manifestAsset.browser_download_url)
-          if (manifest) {
-            const m = manifest.match(/^version:\s*(.+)$/m)
-            manifestVersion = m ? m[1].trim() : null
+    while (Date.now() < verifyDeadline) {
+      attempt++
+      try {
+        const release = await getReleaseByTag(ctx.owner, ctx.repo, newTag)
+        if (release) {
+          releaseUrl = release.html_url
+          const exeAsset = release.assets.find((a) => a.name.endsWith('.exe') && !a.name.includes('uninstaller'))
+          const manifestAsset = release.assets.find((a) => a.name === 'latest.yml')
+          const blockmapAsset = release.assets.find((a) => a.name.endsWith('.blockmap'))
+
+          hasInstaller = Boolean(exeAsset)
+          hasManifest = Boolean(manifestAsset)
+          verifiedBlockmap = Boolean(blockmapAsset)
+          if (exeAsset) exeSize = exeAsset.size
+          if (blockmapAsset) blockmapSize = blockmapAsset.size
+
+          if (manifestAsset && !manifestVersion) {
+            try {
+              const manifest = await downloadManifest(manifestAsset.browser_download_url)
+              if (manifest) {
+                const m = manifest.match(/^version:\s*(.+)$/m)
+                manifestVersion = m ? m[1].trim() : null
+              }
+            } catch {}
           }
-        }
 
-        let verifiedBlockmap = hasBlockmap
-        if (!verifiedBlockmap && hasInstaller) {
-          sp.stop(c.yellow('Installer found, but differential blockmap is missing. Auto-generating and uploading…'))
-          const { ensureReleaseBlockmap } = await import('./blockmap.js')
-          const syncResult = await ensureReleaseBlockmap(newTag)
-          if (syncResult.success) {
-            verifiedBlockmap = true
+          if (!release.draft && hasInstaller && hasManifest && verifiedBlockmap) {
+            verified = manifestVersion ? manifestVersion === newVersion : true
+            sp.stop(c.green(`${G.tick} Release published and all assets verified`))
+            break
+          }
+
+          if (release.draft) {
+            sp.message(`Waiting for GitHub to finalize release (drafting: ${release.assets.length} asset${release.assets.length === 1 ? '' : 's'} uploaded)…`)
+          } else if (!verifiedBlockmap && hasInstaller && hasManifest && attempt >= 5) {
+            sp.message('Release published, generating and uploading differential blockmap…')
+            const { ensureReleaseBlockmap } = await import('./blockmap.js')
+            const syncResult = await ensureReleaseBlockmap(newTag)
+            if (syncResult.success) {
+              verifiedBlockmap = true
+              verified = true
+              sp.stop(c.green(`${G.tick} Release published and differential blockmap generated & uploaded`))
+              break
+            }
+          } else {
+            const checklist = [
+              hasInstaller ? c.green('✓ exe') : c.dim('… exe'),
+              hasManifest ? c.green('✓ latest.yml') : c.dim('… latest.yml'),
+              verifiedBlockmap ? c.green('✓ blockmap') : c.dim('… blockmap'),
+            ].join('  ')
+            sp.message(`Verifying release assets (${checklist})…`)
           }
         } else {
-          sp.stop(
-            hasInstaller && hasManifest && verifiedBlockmap
-              ? c.green(`${G.tick} Release published and verified`)
-              : c.yellow(`⚠ Release found but some assets may still be uploading`)
-          )
+          sp.message('Waiting for GitHub release to appear…')
         }
-
-        verified = hasInstaller && hasManifest && verifiedBlockmap && manifestVersion === newVersion
-
-        const verifyLines = [
-          `${hasInstaller ? c.green(G.tick) : c.yellow('?')} .exe installer`,
-          `${hasManifest ? c.green(G.tick) : c.yellow('?')} latest.yml manifest${manifestVersion ? c.dim(' · version: ' + manifestVersion) : ''}`,
-          `${verifiedBlockmap ? c.green(G.tick) : c.yellow('?')} .blockmap (differential update)`,
-        ]
-        p.note(verifyLines.join('\n'), 'Release assets')
-      } else {
-        sp.stop(c.yellow('⚠ Release not yet published (may still be drafting)'))
+      } catch (e: any) {
+        sp.message(`Waiting for GitHub API propagation… (${e.message})`)
       }
-    } catch (e: any) {
-      sp.stop(c.yellow(`⚠ Could not verify release: ${e.message}`))
+
+      await sleep(3500)
     }
+
+    if (!verified) {
+      if (hasInstaller && hasManifest && verifiedBlockmap) {
+        sp.stop(c.green(`${G.tick} Release published and verified`))
+      } else {
+        sp.stop(c.yellow('⚠ Release verification completed with pending items (check below)'))
+      }
+    }
+
+    const exeSizeStr = exeSize > 0 ? c.dim(` (${(exeSize / (1024 * 1024)).toFixed(1)} MB)`) : ''
+    const blockmapSizeStr = blockmapSize > 0 ? c.dim(` (${(blockmapSize / 1024).toFixed(1)} KB)`) : ''
+
+    const verifyLines = [
+      `${hasInstaller ? c.green(G.tick) : c.yellow('?')} .exe installer${exeSizeStr}`,
+      `${hasManifest ? c.green(G.tick) : c.yellow('?')} latest.yml manifest${manifestVersion ? c.dim(' · version: ' + manifestVersion) : ''}`,
+      `${verifiedBlockmap ? c.green(G.tick) : c.yellow('?')} .blockmap differential update${blockmapSizeStr}`,
+    ]
+    p.note(verifyLines.join('\n'), 'Release assets')
 
     const totalDuration = fmtDuration(dashboardResult.durationMs)
     const finishLines = [

@@ -195,7 +195,18 @@ export async function getReleaseByTag(
       `${apiBase(owner, repo)}/releases/tags/${encodeURIComponent(tag)}`
     )
   } catch {
-    return null
+    // GitHub API returns 404 for draft releases or during tag propagation.
+    // Fall back to checking recent releases list so draft/publishing releases can still be tracked.
+    try {
+      const releases = await ghFetch<GhRelease[]>(
+        `${apiBase(owner, repo)}/releases?per_page=20`,
+        { conditional: false }
+      )
+      const match = releases.find((r) => r.tag_name === tag)
+      return match || null
+    } catch {
+      return null
+    }
   }
 }
 

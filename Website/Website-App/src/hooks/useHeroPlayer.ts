@@ -1,0 +1,597 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Hls, { Events as HlsEvents, ErrorTypes } from 'hls.js'
+// @ts-ignore - shaka-player ambient
+import shaka from 'shaka-player'
+import type { StreamInfo } from '@shared/types'
+import { applyHeroLevelCaps, createHeroHls } from '@/services/streamProbe'
+import { getServerTime } from '@/lib/serverClock'
+
+// Polyfill browser features and suppress internal log overhead for Shaka Player
+if (typeof window !== 'undefined' && shaka) {
+  if (shaka.polyfill) shaka.polyfill.installAll()
+  if (shaka.log) shaka.log.setLevel(shaka.log.Level.NONE)
+}
+
+/**
+ * Addendum 3 §8 · two A/B video slots for the live hero.
+ *
+ * Supports both HLS (hls.js) and MPEG-DASH / Widevine DRM (shaka-player)
+ * with muted live autoplay.
+ */
+
+interface UseHeroPlayerOptions {
+  stream: StreamInfo | null
+  channelId: string | null
+  enabled: boolean
+  paused: boolean
+  onFailure: (channelId: string) => void
+}
+
+interface SlotState {
+  hls: Hls | null
+  shaka: shaka.Player | null
+  url: string | null
+  channelId: string | null
+  frames: number
+  firstFrame: boolean
+  lastFrameAt: number
+  stalledSince: number
+  recoveryAttempted: boolean
+  revealTimer: number | null
+  listeners: AbortController
+  pausedAt: number
+}
+
+function emptySlot(): SlotState {
+  return {
+    hls: null,
+    shaka: null,
+    url: null,
+    channelId: null,
+    frames: 0,
+    firstFrame: false,
+    lastFrameAt: 0,
+    stalledSince: 0,
+    recoveryAttempted: false,
+    revealTimer: null,
+    listeners: new AbortController(),
+    pausedAt: 0
+  }
+}
+
+export function useHeroPlayer({
+  stream,
+  channelId,
+  enabled,
+  paused,
+  onFailure
+}: UseHeroPlayerOptions): {
+  videoRefs: [React.RefObject<HTMLVideoElement>, React.RefObject<HTMLVideoElement>]
+  opacity: [number, number]
+  destroyAll: () => void
+} {
+  const videoARef = useRef<HTMLVideoElement>(null)
+  const videoBRef = useRef<HTMLVideoElement>(null)
+  // Stable tuple: the load effect depends on the callback identities below.
+  const videoRefs = useMemo<
+    [React.RefObject<HTMLVideoElement>, React.RefObject<HTMLVideoElement>]
+  >(() => [videoARef, videoBRef], [])
+  const slotsRef = useRef<[SlotState, SlotState]>([emptySlot(), emptySlot()])
+  const activeSlotRef = useRef(0)
+  const everPlayedRef = useRef(false)
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
+  const [opacity, setOpacity] = useState<[number, number]>([0, 0])
+  const onFailureRef = useRef(onFailure)
+  onFailureRef.current = onFailure
+
+  const destroySlot = useCallback((index: number): void => {
+    const slot = slotsRef.current[index]
+    slot.listeners.abort()
+    if (slot.revealTimer !== null) window.clearTimeout(slot.revealTimer)
+    if (slot.shaka) {
+      try {
+        void slot.shaka.destroy()
+      } catch {
+        // already destroyed
+      }
+    }
+    if (slot.hls) {
+      try {
+        slot.hls.destroy()
+      } catch {
+        // already destroyed
+      }
+    }
+    slotsRef.current[index] = emptySlot()
+    const video = videoRefs[index].current
+    if (video) {
+      video.removeAttribute('src')
+      try {
+        video.load()
+      } catch {
+        // ignore
+      }
+    }
+    const other = index === 0 ? 1 : 0
+    if (
+      index === activeSlotRef.current &&
+      slotsRef.current[other].hls === null &&
+      slotsRef.current[other].shaka === null
+    ) {
+      setOpacity([0, 0])
+    }
+  }, [videoRefs])
+
+  const destroyAll = useCallback((): void => {
+    destroySlot(0)
+    destroySlot(1)
+    activeSlotRef.current = 0
+    everPlayedRef.current = false
+    setOpacity([0, 0])
+  }, [destroySlot])
+
+  const getLiveEdge = useCallback((index: number): number | null => {
+    const slot = slotsRef.current[index]
+    const video = videoRefs[index].current
+    if (!video) return null
+
+    // 1. Shaka Player seek range
+    if (slot.shaka) {
+      try {
+        const range = slot.shaka.seekRange()
+        if (range && Number.isFinite(range.end) && range.end > 0) {
+          return range.end
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. HLS.js live sync position
+    if (slot.hls) {
+      const position = slot.hls.liveSyncPosition
+      if (typeof position === 'number' && Number.isFinite(position) && position > 0) {
+        return position
+      }
+    }
+
+    // 3. Fallback: seekable buffer end
+    try {
+      if (video.seekable && video.seekable.length > 0) {
+        const end = video.seekable.end(video.seekable.length - 1)
+        if (Number.isFinite(end) && end > 0) {
+          return end
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null
+  }, [videoRefs])
+
+  const seekLive = useCallback((index: number): void => {
+    const slot = slotsRef.current[index]
+    const video = videoRefs[index].current
+    if (!video) return
+
+    // 1. Shaka Player (DASH / Widevine)
+    if (slot.shaka) {
+      try {
+        slot.shaka.goToLive()
+        return
+      } catch {
+        try {
+          const range = slot.shaka.seekRange()
+          if (range && Number.isFinite(range.end) && range.end > 0) {
+            video.currentTime = Math.max(0, range.end - 1.0)
+            return
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Central clock sync for demo HLS stream
+    try {
+      const dur = video.duration || 1606.94
+      if (dur > 0) {
+        video.currentTime = getServerTime(dur)
+        return
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. HLS.js
+    if (slot.hls) {
+      const position = slot.hls.liveSyncPosition
+      if (typeof position === 'number' && Number.isFinite(position) && position > 0) {
+        try {
+          video.currentTime = position
+          return
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 3. Fallback: seek to end of seekable range
+    try {
+      if (video.seekable && video.seekable.length > 0) {
+        const end = video.seekable.end(video.seekable.length - 1)
+        if (Number.isFinite(end) && end > 0) {
+          video.currentTime = Math.max(0, end - 1.0)
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [videoRefs])
+
+  const playSlot = useCallback((index: number): void => {
+    const video = videoRefs[index].current
+    if (!video) return
+    void video.play().catch(() => {
+      // Autoplay policy violation: leave the slot paused; the watchdog retries.
+    })
+  }, [videoRefs])
+
+  const loadSlot = useCallback(
+    (index: number, incoming: StreamInfo, incomingChannelId: string): void => {
+      const video = videoRefs[index].current
+      if (!video) return
+      destroySlot(index)
+      const slot = slotsRef.current[index]
+      slot.url = incoming.url
+      slot.channelId = incomingChannelId
+      video.muted = true
+
+      const trackFrame = (): void => {
+        // Ignore callbacks from a slot that was torn down mid-flight.
+        if (slotsRef.current[index] !== slot) return
+        slot.frames += 1
+        slot.lastFrameAt = performance.now()
+        slot.stalledSince = 0
+        if (!slot.firstFrame) {
+          slot.firstFrame = true
+          const outgoing = index === 0 ? 1 : 0
+          activeSlotRef.current = index
+          setOpacity(index === 0 ? [1, 0] : [0, 1])
+          everPlayedRef.current = true
+          destroySlot(outgoing)
+        }
+        if (video.requestVideoFrameCallback) {
+          video.requestVideoFrameCallback(() => trackFrame())
+        }
+      }
+
+      // Multiple event listeners guarantee the slot is revealed immediately upon first media arrival
+      video.addEventListener('playing', () => {
+        trackFrame()
+        if (slotsRef.current[index] === slot) {
+          slot.pausedAt = 0
+        }
+      }, { signal: slot.listeners.signal })
+      video.addEventListener('timeupdate', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('loadeddata', () => trackFrame(), { signal: slot.listeners.signal })
+      video.addEventListener('canplay', () => trackFrame(), { signal: slot.listeners.signal })
+
+      video.addEventListener('pause', () => {
+        if (slotsRef.current[index] !== slot) return
+        slot.pausedAt = Date.now()
+      }, { signal: slot.listeners.signal })
+
+      video.addEventListener('waiting', () => {
+        if (slotsRef.current[index] !== slot) return
+        slot.stalledSince = performance.now()
+      }, { signal: slot.listeners.signal })
+
+      const isDash = incoming.type === 'dash' || /\.mpd(?:[?#]|$)/i.test(incoming.url)
+
+      if (isDash && typeof shaka !== 'undefined' && shaka.Player?.isBrowserSupported?.()) {
+        const player = new shaka.Player()
+        slot.shaka = player
+
+        void (async () => {
+          try {
+            await player.attach(video)
+            video.muted = true
+
+            const licenseUrl =
+              incoming.drm?.licenseUrl ||
+              (incoming.url ? new URL('/license', incoming.url).href : '')
+
+            const networking = player.getNetworkingEngine()
+            if (networking) {
+              networking.registerRequestFilter(
+                (type: unknown, request: { headers: Record<string, string> }) => {
+                  if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+                    request.headers['Origin'] = 'https://www.jiotv.com'
+                    request.headers['Referer'] = 'https://www.jiotv.com/'
+                    request.headers['User-Agent'] =
+                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    if (incoming.drm?.headers) {
+                      Object.assign(request.headers, incoming.drm.headers)
+                    }
+                  }
+                }
+              )
+            }
+
+            const clockSyncUri = (() => {
+              try {
+                const u = new URL(incoming.url)
+                return `${u.protocol}//${u.host}/dashtime`
+              } catch {
+                return ''
+              }
+            })()
+
+            let workingRobustness: string | null = null
+            if (incoming.isDrm) {
+              const robustnessLevels = ['SW_SECURE_CRYPTO', 'SW_SECURE_DECODE', '']
+              for (const level of robustnessLevels) {
+                try {
+                  const config: MediaKeySystemConfiguration[] = [
+                    {
+                      initDataTypes: ['cenc'],
+                      audioCapabilities: [
+                        { contentType: 'audio/mp4;codecs="mp4a.40.2"', robustness: level }
+                      ],
+                      videoCapabilities: [
+                        { contentType: 'video/mp4;codecs="avc1.64001F"', robustness: level }
+                      ]
+                    }
+                  ]
+                  await navigator.requestMediaKeySystemAccess('com.widevine.alpha', config)
+                  workingRobustness = level
+                  break
+                } catch {
+                  // try next level
+                }
+              }
+            }
+
+            player.configure({
+              drm: {
+                servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {},
+                advanced: {
+                  'com.widevine.alpha': {
+                    videoRobustness: workingRobustness ? [workingRobustness] : [],
+                    audioRobustness: workingRobustness ? [workingRobustness] : []
+                  }
+                }
+              },
+              manifest: {
+                dash: {
+                  ignoreMinBufferTime: true,
+                  autoCorrectDrift: true,
+                  clockSyncUri
+                }
+              },
+              abr: {
+                enabled: true,
+                restrictions: { maxHeight: 720 }
+              },
+              streaming: {
+                bufferingGoal: incoming.isDrm ? 6 : 12,
+                bufferBehind: incoming.isDrm ? 2 : 5
+              }
+            })
+
+            player.addEventListener('error', (event: unknown) => {
+              // console.warn('[useHeroPlayer] Shaka error event:', event)
+              if (slotsRef.current[index] !== slot) return
+              destroySlot(index)
+            })
+
+            await player.load(incoming.url, null, 'application/dash+xml')
+            if (slotsRef.current[index] !== slot) return
+            video.muted = true
+            if (!pausedRef.current) playSlot(index)
+            trackFrame()
+          } catch (err) {
+            // console.warn('[useHeroPlayer] Shaka stream load failed:', err)
+            if (slotsRef.current[index] !== slot) return
+            destroySlot(index)
+          }
+        })()
+      } else {
+        if (window.location.protocol === 'file:') {
+          const directUrl = incoming.url.replace(/\.m3u8(?:[?#]|$)/i, '.mp4').replace('playlist.mp4', 'stream.mp4')
+          video.src = directUrl
+          video.muted = true
+          video.loop = true
+          video.addEventListener('loadedmetadata', () => {
+            try {
+              const dur = video.duration || 1606.94
+              video.currentTime = getServerTime(dur)
+            } catch {}
+            if (!pausedRef.current) playSlot(index)
+            trackFrame()
+          }, { signal: slot.listeners.signal })
+
+          video.addEventListener('ended', () => {
+            try {
+              const dur = video.duration || 1606.94
+              video.currentTime = getServerTime(dur)
+              if (!pausedRef.current) void video.play().catch(() => undefined)
+            } catch {}
+          }, { signal: slot.listeners.signal })
+          void video.play().catch(() => undefined)
+          return
+        }
+
+        const hls = createHeroHls()
+        slot.hls = hls
+
+        hls.on(HlsEvents.MANIFEST_PARSED, () => {
+          applyHeroLevelCaps(hls)
+          if (!pausedRef.current) playSlot(index)
+          trackFrame()
+        })
+        hls.on(HlsEvents.LEVEL_LOADED, () => {
+          if (video.currentTime === 0) seekLive(index)
+          trackFrame()
+        })
+        hls.on(HlsEvents.ERROR, (_event, data) => {
+          if (!data.fatal) return
+          if (slotsRef.current[index] !== slot) return
+          if (data.type === ErrorTypes.MEDIA_ERROR && !slot.recoveryAttempted) {
+            slot.recoveryAttempted = true
+            try {
+              hls.recoverMediaError()
+              return
+            } catch {
+              // fall through to failure
+            }
+          }
+          // console.warn('[useHeroPlayer] HLS fatal error:', data)
+          destroySlot(index)
+        })
+        hls.on(HlsEvents.FRAG_BUFFERED, () => {
+          slot.stalledSince = 0
+          trackFrame()
+        })
+
+        hls.loadSource(incoming.url)
+        hls.attachMedia(video)
+        if (video.requestVideoFrameCallback) {
+          video.requestVideoFrameCallback(() => trackFrame())
+        }
+      }
+    },
+    [destroySlot, playSlot, seekLive, videoRefs]
+  )
+
+  const resumePlayback = useCallback(
+    (index: number): void => {
+      const slot = slotsRef.current[index]
+      const video = videoRefs[index].current
+      if (!video) return
+
+      const pausedAt = slot.pausedAt
+      const pausedDurationSec = pausedAt > 0 ? (Date.now() - pausedAt) / 1000 : 0
+      const liveEdge = getLiveEdge(index)
+      const behindSec =
+        liveEdge !== null && Number.isFinite(video.currentTime)
+          ? Math.max(0, liveEdge - video.currentTime)
+          : 0
+
+      // If paused for more than 60s, reload slot to avoid stale CDN tokens and restart live cleanly
+      if (pausedDurationSec >= 60 && stream && channelId) {
+        slot.pausedAt = 0
+        loadSlot(index, stream, channelId)
+        return
+      }
+
+      // If 15s or more behind the live stream, auto play the live stream instead of expired content
+      if (pausedDurationSec >= 15 || behindSec >= 15) {
+        seekLive(index)
+      }
+
+      slot.pausedAt = 0
+      playSlot(index)
+    },
+    [channelId, getLiveEdge, loadSlot, playSlot, seekLive, stream, videoRefs]
+  )
+
+  // Load/switch streams.
+  useEffect(() => {
+    if (!enabled || !stream || !channelId) {
+      destroyAll()
+      return
+    }
+
+    const currentSlot = slotsRef.current[activeSlotRef.current]
+    if (
+      currentSlot.channelId === channelId &&
+      currentSlot.url === stream.url &&
+      (currentSlot.hls || currentSlot.shaka)
+    ) {
+      return
+    }
+
+    const existingOther = slotsRef.current.findIndex(
+      (slot) => slot.url === stream.url && (slot.hls || slot.shaka)
+    )
+    if (existingOther >= 0) {
+      // Already buffered in the other slot: crossfade back without a new stream.
+      const outgoing = existingOther === 0 ? 1 : 0
+      activeSlotRef.current = existingOther
+      setOpacity(existingOther === 0 ? [1, 0] : [0, 1])
+      const timer = window.setTimeout(() => destroySlot(outgoing), 400)
+      return () => window.clearTimeout(timer)
+    }
+
+    // Seamless A/B transition: load new stream in the alternate slot without killing
+    // the currently playing stream upfront. When incoming renders its first frame,
+    // trackFrame() will set activeSlotRef, crossfade opacity, and clean up outgoing.
+    const incoming = everPlayedRef.current ? (activeSlotRef.current === 0 ? 1 : 0) : activeSlotRef.current
+    loadSlot(incoming, stream, channelId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream?.url, channelId, enabled, destroyAll, loadSlot, destroySlot])
+
+  // Pause/resume without tearing the stream down.
+  useEffect(() => {
+    if (paused) {
+      const now = Date.now()
+      for (let i = 0; i < 2; i++) {
+        slotsRef.current[i].pausedAt = now
+        videoRefs[i].current?.pause()
+      }
+    } else if (enabled) {
+      const index = activeSlotRef.current
+      resumePlayback(index)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused, enabled, resumePlayback])
+
+  // Runtime watchdog: stall recovery (non-destructive)
+  useEffect(() => {
+    if (!enabled) return
+    const timer = window.setInterval(() => {
+      if (document.hidden || paused) return
+      const index = activeSlotRef.current
+      const slot = slotsRef.current[index]
+      const video = videoRefs[index].current
+      if ((!slot.hls && !slot.shaka) || !video || !channelId) return
+      const now = performance.now()
+      if (slot.stalledSince > 0 && now - slot.stalledSince > 8000) {
+        destroySlot(index)
+        return
+      }
+      if (slot.firstFrame && slot.lastFrameAt > 0 && now - slot.lastFrameAt > 10000) {
+        destroySlot(index)
+      }
+    }, 1000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, paused, channelId, destroySlot])
+
+  // Lifecycle: stop everything when the window is hidden or the route leaves.
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        const now = Date.now()
+        for (let i = 0; i < 2; i++) {
+          slotsRef.current[i].pausedAt = now
+          videoRefs[i].current?.pause()
+        }
+      } else if (enabled && !paused) {
+        const index = activeSlotRef.current
+        resumePlayback(index)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, paused, resumePlayback])
+
+  useEffect(() => () => destroyAll(), [destroyAll])
+
+  return { videoRefs, opacity, destroyAll }
+}

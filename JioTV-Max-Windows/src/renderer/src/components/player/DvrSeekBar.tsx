@@ -107,14 +107,12 @@ export function DvrSeekBar({
             }}
           />
         ) : (
-          <div className="flex shrink-0 items-center" style={{ gap: Math.round(7 * scale) }}>
+          <div className="flex shrink-0 items-center" style={{ gap: Math.round(9 * scale) }}>
             <span
-              className="inline-flex items-center justify-center rounded-md border border-white/10 bg-[#18181b]/90 font-mono font-medium tabular-nums text-zinc-300 shadow-sm backdrop-blur-md"
+              className="inline-flex items-center font-mono font-medium tabular-nums text-zinc-400 select-none"
               style={{
-                height: `${Math.round(31 * scale)}px`,
-                paddingLeft: `${Math.round(10 * scale)}px`,
-                paddingRight: `${Math.round(10 * scale)}px`,
-                fontSize: `${(12.5 * scale).toFixed(1)}px`
+                fontSize: `${(13 * scale).toFixed(1)}px`,
+                letterSpacing: '-0.02em'
               }}
               title={`${formatBehindLive(behind)} behind live`}
             >
@@ -123,12 +121,12 @@ export function DvrSeekBar({
             <button
               type="button"
               onClick={handleGoLive}
-              className="inline-flex items-center justify-center rounded-md border border-white/12 bg-[#222226]/90 font-semibold text-zinc-200 tracking-wide backdrop-blur-md shadow-sm transition-all hover:bg-[#2c2c32] hover:text-white hover:border-white/25 active:scale-95"
+              className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#25252a]/95 hover:bg-[#303037] text-white font-semibold tracking-wide backdrop-blur-md shadow-md shadow-black/40 transition-all duration-150 hover:border-white/30 hover:shadow-lg active:scale-95 cursor-pointer"
               style={{
-                height: `${Math.round(31 * scale)}px`,
-                paddingLeft: `${Math.round(14 * scale)}px`,
-                paddingRight: `${Math.round(14 * scale)}px`,
-                fontSize: `${(13 * scale).toFixed(1)}px`
+                height: `${Math.round(35 * scale)}px`,
+                paddingLeft: `${Math.round(16 * scale)}px`,
+                paddingRight: `${Math.round(16 * scale)}px`,
+                fontSize: `${(13.5 * scale).toFixed(1)}px`
               }}
             >
               Go Live

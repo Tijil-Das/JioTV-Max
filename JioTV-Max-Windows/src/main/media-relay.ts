@@ -407,6 +407,13 @@ export class MediaRelay {
       return new Date()
     }
     const elapsed = Math.max(0, Date.now() - this.cdnPublishFetchedAt)
+    // If publishTime was recorded more than 30s ago, CDN time extrapolation
+    // becomes inaccurate across pause/sleep. Return current system time.
+    if (elapsed > 30_000) {
+      this.cdnPublishTime = null
+      this.cdnPublishFetchedAt = 0
+      return new Date()
+    }
     return new Date(this.cdnPublishTime.getTime() + elapsed)
   }
 
@@ -586,6 +593,10 @@ export class MediaRelay {
     if (!this._port) throw new Error('Media relay is not running')
     const id = randomUUID()
     this.lastActiveSessionId = id
+    // Clear stale publish time on fresh session registration so /dashtime
+    // does not extrapolate from a past paused session.
+    this.cdnPublishTime = null
+    this.cdnPublishFetchedAt = 0
     this.sessions.set(id, {
       id,
       channelId: input.channelId,

@@ -1,0 +1,2027 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Hls, { ErrorDetails, ErrorTypes, Events as HlsEvents } from 'hls.js'
+// @ts-ignore - shaka-player 4.14 compiled.d.ts is ambient namespace without module export
+import shaka from 'shaka-player'
+import type { StreamInfo } from '@shared/types'
+import type { QualityPreference } from '@/store/useSettingsStore'
+import { checkAndHandleAuthError } from '@/lib/authErrorHandler'
+import { getServerTime } from '@/lib/serverClock'
+
+// Polyfill browser features and suppress internal log overhead for Shaka Player
+if (typeof window !== 'undefined' && shaka) {
+  if (shaka.polyfill) shaka.polyfill.installAll()
+  if (shaka.log) shaka.log.setLevel(shaka.log.Level.NONE)
+}
+
+export interface EngineLevel {
+  index: number
+  height: number
+  bitrate: number
+  label: string
+}
+
+/** Seekable window advertised by Shaka/HLS, in presentation seconds. */
+export interface MediaSeekRange {
+  start: number
+  end: number
+}
+
+export interface UseMediaPlayerOptions {
+  stream: StreamInfo | null
+  /** Height requested by the user. 1080 by default per product spec. */
+  initialQuality?: QualityPreference
+  onError?: (message: string) => void
+  /**
+   * Called before each automatic reconnect attempt.
+   * If the callback returns a new StreamInfo the engine will load that URL
+   * instead of the existing one — use this to re-fetch a signed stream URL
+   * so a stale CDN token never causes an infinite reconnect loop.
+   */
+  onReconnect?: () => Promise<StreamInfo | null>
+  /**
+   * Fired when a rewind lands outside Jio's time-shift window. The engine
+   * automatically jumps back to live; use this for the user-facing toast.
+   */
+  onDvrGap?: () => void
+}
+
+// Backward compatibility alias
+export type UseHlsPlayerOptions = UseMediaPlayerOptions
+
+export interface UseMediaPlayerResult {
+  videoRef: React.RefObject<HTMLVideoElement>
+  levels: EngineLevel[]
+  activeLevel: number | 'auto'
+  activeHeight: number
+  setLevel: (level: number | 'auto') => void
+  buffering: boolean
+  reconnecting: boolean
+  error: string | null
+  retry: () => void
+  ready: boolean
+  engine: 'hls' | 'shaka' | 'native' | null
+  /** Current DVR window; null until the engine has parsed a manifest. */
+  seekRange: MediaSeekRange | null
+  /** Jump to (a hair behind) the live edge. */
+  goLive: () => void
+  /** Seek within the DVR window, clamped to the current seek range. */
+  seekTo: (time: number) => void
+}
+
+// Backward compatibility alias
+export type UseHlsPlayerResult = UseMediaPlayerResult
+
+function friendlyMediaError(detail?: string): string {
+  if (detail && /drm|widevine|eme|key system|license/i.test(detail)) {
+    return 'This channel uses Widevine DRM and Chromium could not open a compatible content decryption module. Use a Widevine-enabled Electron build to watch this channel.'
+  }
+  return detail || 'The stream could not be played.'
+}
+
+/**
+ * Custom Shaka ABR Manager that strictly enforces top audio fidelity.
+ * Standard SimpleAbrManager evaluates total bandwidth and will aggressively switch to
+ * variants with lower audio bitrates (e.g., 64kbps audio at 1080p) during network adjustments.
+ *
+ * AudioLockedAbrManager filters the variant pool before SimpleAbrManager can consider them,
+ * permanently locking out inferior audio representations while allowing smooth video adaptation
+ * (1080p -> 720p -> 480p) that always retains the highest available audio stream.
+ */
+class AudioLockedAbrManager extends (shaka.abr?.SimpleAbrManager || class {}) {
+  private filterHighQualityAudioVariants(variants: any[]): any[] {
+    if (!variants || variants.length === 0) return variants
+
+    // Group variants by language and channel count
+    const maxBwByLang = new Map<string, number>()
+    for (const v of variants) {
+      const lang = v.language || (v.audio && v.audio.language) || 'default'
+      const channels = (v.audio && v.audio.channelsCount) || v.channelsCount || 2
+      const key = `${lang}:${channels}`
+      const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+      maxBwByLang.set(key, Math.max(maxBwByLang.get(key) || 0, bw))
+    }
+
+    // Also track max audio bandwidth per language/channels/height group
+    const maxBwByGroup = new Map<string, number>()
+    for (const v of variants) {
+      const lang = v.language || (v.audio && v.audio.language) || 'default'
+      const channels = (v.audio && v.audio.channelsCount) || v.channelsCount || 2
+      const height = v.video?.height || v.height || 0
+      const key = `${lang}:${channels}:${height}`
+      const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+      maxBwByGroup.set(key, Math.max(maxBwByGroup.get(key) || 0, bw))
+    }
+
+    const globalMax = Math.max(
+      ...variants.map((v) => (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0),
+      0
+    )
+
+    const allowed = variants.filter((v) => {
+      const lang = v.language || (v.audio && v.audio.language) || 'default'
+      const channels = (v.audio && v.audio.channelsCount) || v.channelsCount || 2
+      const height = v.video?.height || v.height || 0
+      const groupKey = `${lang}:${channels}:${height}`
+      const langKey = `${lang}:${channels}`
+
+      // Strictly lock to the top audio representation for this language/channel configuration,
+      // fallback to height-specific max if top audio is unavailable for this height.
+      const topLangBw = maxBwByLang.get(langKey) || globalMax
+      const heightMaxBw = maxBwByGroup.get(groupKey) || topLangBw
+      const maxBw = heightMaxBw >= topLangBw * 0.85 ? heightMaxBw : topLangBw
+      if (maxBw > 0) {
+        const audioBw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+        if (audioBw > 0) {
+          return audioBw >= maxBw * 0.85
+        }
+        return true
+      }
+      return true
+    })
+
+    if (allowed.length > 0) {
+      const allowedSet = new Set(allowed)
+      for (const v of variants) {
+        if (!allowedSet.has(v)) {
+          v.allowedByApplication = false
+        }
+      }
+      return allowed
+    }
+    return variants
+  }
+
+  // @ts-ignore
+  override setVariants(variants: any[]) {
+    const filtered = this.filterHighQualityAudioVariants(variants)
+    // @ts-ignore
+    super.setVariants(filtered)
+  }
+}
+
+/**
+ * Picks the optimal variant track prioritizing:
+ * 1. Target height if specified, or highest available video resolution (1080p -> 720p)
+ * 2. Maximum audio fidelity first (highest audioBandwidth) — never downgrade audio!
+ * 3. Highest video / total bandwidth
+ */
+function pickBestVariantTrack<T extends { height?: number; audioBandwidth?: number; bandwidth?: number; id?: number }>(
+  tracks: T[],
+  targetHeight?: number
+): T | null {
+  if (!tracks || tracks.length === 0) return null
+
+  // 1. Determine the maximum audio bandwidth available across all tracks to anchor audio fidelity
+  const maxAudioBw = Math.max(...tracks.map((t) => t.audioBandwidth || 0), 0)
+
+  // 2. Filter tracks matching the target height (if specified) or all with positive height
+  const byHeightPool = targetHeight
+    ? tracks.filter((t) => t.height === targetHeight)
+    : tracks.filter((t) => (t.height ?? 0) > 0)
+
+  const pool = byHeightPool.length > 0 ? byHeightPool : tracks
+
+  // 3. Sort so highest video quality and highest audio fidelity win
+  return (
+    [...pool].sort((a, b) => {
+      // If target height was not specified, prioritize highest video resolution first
+      if (!targetHeight) {
+        const aHeight = a.height || 0
+        const bHeight = b.height || 0
+        if (bHeight !== aHeight) return bHeight - aHeight
+      }
+
+      // Max audio fidelity takes precedence — never downgrade audio!
+      const aAudio = a.audioBandwidth || 0
+      const bAudio = b.audioBandwidth || 0
+      if (maxAudioBw > 0) {
+        const aTopAudio = aAudio >= maxAudioBw * 0.85
+        const bTopAudio = bAudio >= maxAudioBw * 0.85
+        if (aTopAudio !== bTopAudio) return bTopAudio ? 1 : -1
+      }
+      if (bAudio !== aAudio) return bAudio - aAudio
+
+      // Video height if target height was specified
+      const aHeight = a.height || 0
+      const bHeight = b.height || 0
+      if (bHeight !== aHeight) return bHeight - aHeight
+
+      // Video / total bandwidth
+      return (b.bandwidth || 0) - (a.bandwidth || 0)
+    })[0] ?? null
+  )
+}
+
+interface FormattedShakaError {
+  message: string
+  isFatalNetworkOrDrm: boolean
+  isNetwork: boolean
+  code: number
+  httpStatus: number
+}
+
+function formatShakaError(error: unknown): FormattedShakaError {
+  if (!error || typeof error !== 'object') {
+    return {
+      message: 'The stream could not be played.',
+      isFatalNetworkOrDrm: false,
+      isNetwork: false,
+      code: 0,
+      httpStatus: 0
+    }
+  }
+  const err = error as { category?: number; code?: number; message?: string; data?: unknown[]; detail?: unknown }
+  const target = (err.detail && typeof err.detail === 'object' ? err.detail : err) as {
+    category?: number
+    code?: number
+    message?: string
+    data?: unknown[]
+  }
+
+  const category = Number(target.category ?? 0)
+  const code = Number(target.code ?? 0)
+
+  // Shaka error categories: 1: NETWORK, 6: DRM
+  const isNetwork = category === 1 || category === (shaka?.util?.Error?.Category?.NETWORK ?? 1)
+  const isDrm = category === 6 || category === (shaka?.util?.Error?.Category?.DRM ?? 6)
+  const isFatalNetworkOrDrm = isNetwork || isDrm
+
+  // BAD_HTTP_STATUS (1001) / HTTP_ERROR (1002) carry the status in `data`.
+  let httpStatus = 0
+  if (Array.isArray(target.data)) {
+    for (const item of target.data) {
+      if (typeof item === 'number' && item >= 400 && item <= 599) {
+        httpStatus = item
+        break
+      }
+    }
+  }
+
+  let categoryName = ''
+  if (isNetwork) categoryName = 'Network'
+  else if (isDrm) categoryName = 'Widevine DRM'
+  else if (category === 3) categoryName = 'Media'
+  else if (category === 4) categoryName = 'Manifest'
+  else if (category === 5) categoryName = 'Streaming'
+
+  let desc = String(target.message || '')
+  if (!httpStatus) {
+    const statusMatch = desc.match(/\b(4\d{2}|5\d{2})\b/)
+    if (statusMatch) httpStatus = Number(statusMatch[1])
+  }
+  if (code && !desc.includes(String(code))) {
+    desc = desc ? `${desc} (Error ${code}${categoryName ? ', ' + categoryName : ''})` : `Error ${code} (${categoryName || 'Playback'})`
+  }
+
+  if (isDrm || /drm|widevine|eme|key system|license/i.test(desc)) {
+    return {
+      message: `Widevine DRM error: ${desc || 'Could not decrypt stream or obtain license.'}`,
+      isFatalNetworkOrDrm: true,
+      isNetwork,
+      code,
+      httpStatus
+    }
+  }
+
+  if (isNetwork || /network|fetch|timeout|cors|403|404|connect/i.test(desc)) {
+    return {
+      message: `Network error: ${desc || 'Failed to reach stream segment or server.'}`,
+      isFatalNetworkOrDrm: true,
+      isNetwork: true,
+      code,
+      httpStatus
+    }
+  }
+
+  return {
+    message: desc || friendlyMediaError(desc),
+    isFatalNetworkOrDrm,
+    isNetwork,
+    code,
+    httpStatus
+  }
+}
+
+/**
+ * Universal media playback hook for HLS (hls.js) and MPEG-DASH / Widevine DRM (shaka-player).
+ *
+ * It manages the video element lifecycle, manifests, DRM licensing requests, and
+ * live adaptive bitrate tracks.
+ */
+export function useMediaPlayer({
+  stream,
+  initialQuality = 1080,
+  onError,
+  onReconnect,
+  onDvrGap
+}: UseMediaPlayerOptions): UseMediaPlayerResult {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  const shakaRef = useRef<shaka.Player | null>(null)
+  const desiredRef = useRef<QualityPreference>(initialQuality)
+  const levelsRef = useRef<EngineLevel[]>([])
+  const [levels, setLevels] = useState<EngineLevel[]>([])
+  const [activeLevel, setActiveLevel] = useState<number | 'auto'>(
+    initialQuality === 'auto' ? 'auto' : 0
+  )
+  const [activeHeight, setActiveHeight] = useState<number>(0)
+  const [buffering, setBuffering] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [ready, setReady] = useState(false)
+  const [engine, setEngine] = useState<'hls' | 'shaka' | 'native' | null>(null)
+  const [seekRange, setSeekRange] = useState<MediaSeekRange | null>(null)
+  const attemptRef = useRef(0)
+  const autoAttemptsRef = useRef(0)
+  const manualAttemptsRef = useRef(0)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bufferingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pausedAtRef = useRef<number | null>(null)
+  const wasAtLiveWhenPausedRef = useRef(true)
+  const refreshingOnResumeRef = useRef(false)
+  const seekRangeRef = useRef<MediaSeekRange | null>(null)
+  const autoRecoveryTimerRef = useRef<number | null>(null)
+
+  // Stable ref so fail() can call the latest onReconnect without being a dep.
+  const onReconnectRef = useRef(onReconnect)
+  useEffect(() => {
+    onReconnectRef.current = onReconnect
+  }, [onReconnect])
+
+  const onDvrGapRef = useRef(onDvrGap)
+  useEffect(() => {
+    onDvrGapRef.current = onDvrGap
+  }, [onDvrGap])
+
+  // Mutable ref-backed stream so onReconnect can swap it without restarting the effect.
+  const pendingStreamRef = useRef<StreamInfo | null>(null)
+  const currentStreamRef = useRef<StreamInfo | null>(stream)
+  const workingRobustnessRef = useRef<string>('')
+
+  /**
+   * Reads the DVR window from Shaka when available, and falls back to the
+   * media element's seekable range (hls.js and native HLS both populate it).
+   */
+  const getLiveSeekRange = useCallback((): MediaSeekRange | null => {
+    const player = shakaRef.current
+    if (player) {
+      try {
+        const range = player.seekRange()
+        if (
+          range &&
+          Number.isFinite(range.start) &&
+          Number.isFinite(range.end) &&
+          range.end > range.start
+        ) {
+          return { start: Math.max(0, range.start), end: range.end }
+        }
+      } catch {
+        // The player can be between unload and destroy during a channel zap.
+      }
+    }
+
+    const video = videoRef.current
+    if (!video) return null
+    // Master central server clock for simulated live stream
+    const dur = video.duration && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1606.94
+    const liveEdge = getServerTime(dur)
+    return { start: 0, end: Math.max(0.1, liveEdge) }
+  }, [])
+
+  const syncSeekRange = useCallback(() => {
+    const next = getLiveSeekRange()
+    const previous = seekRangeRef.current
+    if (!next) {
+      if (previous) {
+        seekRangeRef.current = null
+        setSeekRange(null)
+      }
+      return
+    }
+    if (
+      !previous ||
+      Math.abs(previous.start - next.start) > 0.25 ||
+      Math.abs(previous.end - next.end) > 0.25
+    ) {
+      seekRangeRef.current = next
+      setSeekRange(next)
+    }
+  }, [getLiveSeekRange])
+
+  /** Snap to the live edge, staying safely at the live broadcast. */
+  const goLive = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const player = shakaRef.current
+    if (player && typeof player.goToLive === 'function') {
+      try {
+        player.goToLive()
+
+        // Ensure active track stays locked to top audio fidelity
+        const currentTracks = player.getVariantTracks()
+        const active = currentTracks.find((t: { active?: boolean }) => t.active)
+        if (active) {
+          const maxAudio = Math.max(
+            ...currentTracks.map((t: { audioBandwidth?: number }) => t.audioBandwidth || 0),
+            0
+          )
+          if (maxAudio > 0 && (active.audioBandwidth || 0) < maxAudio * 0.85) {
+            const bestSibling = pickBestVariantTrack(currentTracks, active.height)
+            if (bestSibling && bestSibling.id !== active.id) {
+              player.selectVariantTrack(bestSibling, false)
+            }
+          }
+        }
+        try {
+          const v = video.volume
+          const m = video.muted
+          video.volume = v
+          video.muted = m
+        } catch {
+          // ignore
+        }
+
+        if (video.paused) {
+          void video.play().catch(() => undefined)
+        }
+        syncSeekRange()
+        return
+      } catch {
+        // Fall through to manual server clock
+      }
+    }
+
+    try {
+      const dur = video.duration && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1606.94
+      video.currentTime = getServerTime(dur)
+      if (video.paused) {
+        void video.play().catch(() => undefined)
+      }
+      syncSeekRange()
+      return
+    } catch {
+      // ignore
+    }
+
+    syncSeekRange()
+  }, [syncSeekRange])
+
+  /** Seek inside the DVR window; never allow a jump past the live edge. */
+  const seekTo = useCallback(
+    (time: number) => {
+      const video = videoRef.current
+      if (!video || !Number.isFinite(time)) return
+      const range = getLiveSeekRange()
+      let target = time
+      if (range) {
+        target = Math.min(Math.max(time, range.start), Math.max(range.start, range.end - 0.25))
+      }
+      try {
+        video.currentTime = Math.max(0, target)
+      } catch {
+        // The media element may not have metadata yet.
+      }
+      syncSeekRange()
+    },
+    [getLiveSeekRange, syncSeekRange]
+  )
+
+  const fail = useCallback(
+    (message: string, retryable = true) => {
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current)
+        retryTimer.current = null
+      }
+      if (checkAndHandleAuthError(message)) {
+        setReconnecting(false)
+        setError(message)
+        onError?.(message)
+        return
+      }
+      if (retryable && autoAttemptsRef.current < 3) {
+        autoAttemptsRef.current += 1
+        setReconnecting(true)
+        setError(null)
+        const delay = Math.min(8000, 900 * 2 ** (autoAttemptsRef.current - 1))
+        retryTimer.current = setTimeout(() => {
+          const cb = onReconnectRef.current
+          if (cb) {
+            cb()
+              .then((fresh) => {
+                if (fresh) pendingStreamRef.current = fresh
+              })
+              .catch(() => undefined)
+              .finally(() => setReloadKey((key) => key + 1))
+          } else {
+            setReloadKey((key) => key + 1)
+          }
+        }, delay)
+      } else {
+        setReconnecting(false)
+        setError(message)
+        onError?.(message)
+      }
+    },
+    [onError]
+  )
+
+  const retry = useCallback(() => {
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current)
+      retryTimer.current = null
+    }
+    if (manualAttemptsRef.current >= 3) {
+      const msg = 'Maximum retry attempts reached (3/3). Could not load this channel.'
+      // console.warn('[useMediaPlayer]', msg)
+      setError(msg)
+      setReconnecting(false)
+      onError?.(msg)
+      return
+    }
+    manualAttemptsRef.current += 1
+    // console.log(`[useMediaPlayer] Manual retry attempt ${manualAttemptsRef.current}/3`)
+    autoAttemptsRef.current = 0
+    attemptRef.current += 1
+    setError(null)
+    setReconnecting(true)
+    const cb = onReconnectRef.current
+    if (cb) {
+      cb()
+        .then((fresh) => {
+          if (fresh) pendingStreamRef.current = fresh
+        })
+        .catch(() => undefined)
+        .finally(() => setReloadKey((key) => key + 1))
+    } else {
+      setReloadKey((key) => key + 1)
+    }
+  }, [onError])
+
+  // Reset the retry budget whenever the channel changes.
+  useEffect(() => {
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current)
+      retryTimer.current = null
+    }
+    manualAttemptsRef.current = 0
+    autoAttemptsRef.current = 0
+    setError(null)
+    setReconnecting(false)
+    setReady(false)
+    setLevels([])
+    setSeekRange(null)
+    seekRangeRef.current = null
+    pausedAtRef.current = null
+    wasAtLiveWhenPausedRef.current = true
+    levelsRef.current = []
+    desiredRef.current = initialQuality
+    // Only run on the channel identity, not on quality changes or token regenerations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream?.channelId])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    // Use a fresh signed URL if onReconnect provided one, then clear the slot.
+    const activeStream = pendingStreamRef.current ?? stream
+    pendingStreamRef.current = null
+
+    let disposed = false
+    let localAttempts = attemptRef.current
+    setBuffering(false)
+    setError(null)
+
+    const clearBuffering = () => {
+      if (bufferingTimer.current) clearTimeout(bufferingTimer.current)
+      bufferingTimer.current = null
+      setBuffering(false)
+    }
+    const showBufferingSoon = () => {
+      if (bufferingTimer.current) clearTimeout(bufferingTimer.current)
+      bufferingTimer.current = setTimeout(() => {
+        if (!disposed && (video.paused || video.readyState < 3)) {
+          setBuffering(true)
+        }
+      }, 400)
+    }
+
+    const applyInitialHeight = (available: EngineLevel[], select: (index: number | 'auto') => void) => {
+      const desired = desiredRef.current
+      if (desired === 'auto' || available.length === 0) {
+        setActiveLevel('auto')
+        select('auto')
+        return
+      }
+      if (typeof desired === 'number') {
+        const sorted = [...available].sort((a, b) => b.height - a.height)
+        const exact = sorted.find((l) => l.height === desired)
+        const fallback = sorted.find((l) => l.height <= desired) ?? sorted[0]
+        const chosen = exact ?? fallback
+        if (chosen) {
+          select(chosen.index)
+        } else {
+          setActiveLevel('auto')
+          select('auto')
+        }
+      }
+    }
+
+    // Active video frame presentation watchdog state:
+    let lastFramePresentedAt = performance.now()
+    let lastMediaTime = video.currentTime
+    let freezeConsecutiveCount = 0
+    let rVfcId: number | null = null
+
+    type VideoWithCallback = HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number
+      cancelVideoFrameCallback?: (id: number) => void
+    }
+    const videoWithCallback = video as VideoWithCallback
+
+    const onVideoFramePresented = () => {
+      lastFramePresentedAt = performance.now()
+      freezeConsecutiveCount = 0
+      if (!disposed && typeof videoWithCallback.requestVideoFrameCallback === 'function') {
+        rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
+      }
+    }
+
+    const resetWatchdog = () => {
+      lastFramePresentedAt = performance.now()
+      lastMediaTime = video.currentTime
+      freezeConsecutiveCount = 0
+      if (!disposed && typeof videoWithCallback.requestVideoFrameCallback === 'function') {
+        rVfcId = videoWithCallback.requestVideoFrameCallback(onVideoFramePresented)
+      }
+    }
+
+    /**
+     * Failsafe for long pauses: Jio tokens can expire while the video element
+     * is paused. Reload the freshly signed relay URL, then seek back to the
+     * exact position the viewer paused at with full DRM robustness and audio pipeline re-bind.
+     */
+    const reloadAfterLongPause = async (fresh: StreamInfo, resumeAt: number | null): Promise<void> => {
+      if (disposed) return
+      currentStreamRef.current = fresh
+
+      const player = shakaRef.current
+      if (player) {
+        const licenseUrl =
+          fresh.drm?.licenseUrl || (fresh.url ? new URL('/license', fresh.url).href : '')
+        const workingRobustness = workingRobustnessRef.current
+
+        const drmConfig: Record<string, unknown> = {
+          servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {},
+          advanced: {
+            'com.widevine.alpha': {
+              videoRobustness: workingRobustness ? [workingRobustness] : [],
+              audioRobustness: workingRobustness ? [workingRobustness] : []
+            }
+          },
+          logLicenseExchange: true
+        }
+
+        player.configure({
+          abrFactory: () => new AudioLockedAbrManager(),
+          drm: drmConfig,
+          manifest: {
+            defaultPresentationDelay: 3.5,
+            dash: {
+              ignoreMinBufferTime: true,
+              ignoreSuggestedPresentationDelay: true,
+              autoCorrectDrift: true,
+              clockSyncUri: (() => {
+                try {
+                  const u = new URL(fresh.url)
+                  return `${u.protocol}//${u.host}/dashtime`
+                } catch {
+                  return ''
+                }
+              })()
+            }
+          },
+          preferredAudioChannelCount: 2,
+          streaming: {
+            useNativeHlsForFairPlay: false,
+            lowLatencyMode: false,
+            inaccurateManifestTolerance: 0,
+            bufferBehind: fresh.isDrm ? 15 : 20,
+            bufferingGoal: fresh.isDrm ? 30 : 45,
+            rebufferingGoal: 3,
+            stallEnabled: true,
+            stallThreshold: 4,
+            stallSkip: 0.1,
+            safeSeekEndOffset: 3.5,
+            retryParameters: {
+              maxAttempts: 2,
+              baseDelay: 500,
+              backoffFactor: 2,
+              timeout: 30_000
+            }
+          }
+        })
+
+        resetWatchdog()
+        await player.load(fresh.url, resumeAt ?? undefined, 'application/dash+xml')
+        if (disposed) return
+
+        if (resumeAt === null) {
+          try {
+            player.goToLive()
+          } catch {
+            // ignore
+          }
+        }
+
+        // Apply root audio lock on manifest variants
+        try {
+          const rawManifest = (player as any).manifest_
+          if (rawManifest && Array.isArray(rawManifest.variants)) {
+            const maxAudio = Math.max(
+              ...rawManifest.variants.map((v: any) => (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0),
+              0
+            )
+            if (maxAudio > 0) {
+              for (const v of rawManifest.variants) {
+                const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+                if (bw > 0 && bw < maxAudio * 0.85) {
+                  v.allowedByApplication = false
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Re-populate and select optimal variant tracks
+        const tracks = player.getVariantTracks()
+        const byHeight = new Map<number, EngineLevel>()
+        for (const track of tracks) {
+          if (!track.height) continue
+          const existing = byHeight.get(track.height)
+          if (!existing) {
+            byHeight.set(track.height, {
+              index: 0,
+              height: track.height,
+              bitrate: track.bandwidth,
+              label: `${track.height}p`
+            })
+          } else if (track.bandwidth > existing.bitrate) {
+            existing.bitrate = track.bandwidth
+          }
+        }
+
+        const mapped: EngineLevel[] = [...byHeight.values()]
+          .sort((a, b) => b.height - a.height)
+          .map((level, index) => ({ ...level, index }))
+
+        levelsRef.current = mapped
+        setLevels(mapped)
+
+        applyInitialHeight(mapped, (index) => {
+          if (index === 'auto') {
+            player.configure({
+              abrFactory: () => new AudioLockedAbrManager(),
+              preferredAudioChannelCount: 2,
+              abr: {
+                enabled: true,
+                defaultBandwidthEstimate: 30_000_000,
+                useNetworkInformation: false,
+                switchInterval: 1,
+                bandwidthDowngradeTarget: 0.85,
+                bandwidthUpgradeTarget: 0.85
+              }
+            })
+            const best = pickBestVariantTrack(tracks)
+            if (best) {
+              player.selectVariantTrack(best, false)
+              if (best.height) setActiveHeight(best.height)
+            }
+            setActiveLevel('auto')
+            return
+          }
+          player.configure({
+            abrFactory: () => new AudioLockedAbrManager(),
+            preferredAudioChannelCount: 2,
+            abr: { enabled: false }
+          })
+          const target = mapped[index]
+          if (!target) return
+          const best = pickBestVariantTrack(tracks, target.height)
+          if (best) {
+            player.selectVariantTrack(best, true)
+            if (best.height) setActiveHeight(best.height)
+            setActiveLevel(index)
+          }
+        })
+
+        // Ensure active track stays locked to top audio fidelity
+        const reloadedTracks = player.getVariantTracks()
+        const activeTrack = reloadedTracks.find((t: { active?: boolean }) => t.active)
+        if (activeTrack) {
+          const maxAudio = Math.max(
+            ...reloadedTracks.map((t: { audioBandwidth?: number }) => t.audioBandwidth || 0),
+            0
+          )
+          if (maxAudio > 0 && (activeTrack.audioBandwidth || 0) < maxAudio * 0.85) {
+            const bestSibling = pickBestVariantTrack(reloadedTracks, activeTrack.height)
+            if (bestSibling && bestSibling.id !== activeTrack.id) {
+              player.selectVariantTrack(bestSibling, false)
+            }
+          }
+        }
+
+        // Force HTMLMediaElement audio sink re-attachment
+        try {
+          const v = video.volume
+          const m = video.muted
+          video.volume = v
+          video.muted = m
+        } catch {
+          // ignore
+        }
+
+        resetWatchdog()
+        syncSeekRange()
+        setReady(true)
+        clearBuffering()
+        void video.play().catch((err: unknown) => {
+          // console.warn('[useMediaPlayer] play() after pause-reload rejected:', err)
+        })
+        return
+      }
+
+      const hls = hlsRef.current
+      if (hls) {
+        hls.once(HlsEvents.MANIFEST_PARSED, () => {
+          if (disposed) return
+          if (resumeAt !== null) {
+            try {
+              video.currentTime = resumeAt
+            } catch {
+              // The new playlist may no longer contain the old position.
+            }
+          } else if (typeof hls.liveSyncPosition === 'number' && hls.liveSyncPosition > 0) {
+            try {
+              video.currentTime = hls.liveSyncPosition
+            } catch {}
+          }
+          resetWatchdog()
+          void video.play().catch(() => undefined)
+        })
+        hls.loadSource(fresh.url)
+        hls.startLoad()
+        return
+      }
+
+      // Native HLS.
+      const onMetadata = (): void => {
+        if (disposed) return
+        if (resumeAt !== null) {
+          try {
+            video.currentTime = resumeAt
+          } catch {
+            // Ignore invalid positions on a refreshed playlist.
+          }
+        } else {
+          goLive()
+        }
+        resetWatchdog()
+        void video.play().catch(() => undefined)
+      }
+      video.addEventListener('loadedmetadata', onMetadata, { once: true })
+      video.src = fresh.url
+      video.load()
+    }
+
+    let stallCountInAuto = 0
+    let lastStallAt = 0
+
+    const onPlaying = () => {
+      // console.log('[useMediaPlayer] Video event: playing')
+      clearBuffering()
+      setReady(true)
+      resetWatchdog()
+      if (desiredRef.current === 'auto' && stallCountInAuto >= 2 && shakaRef.current) {
+        if (autoRecoveryTimerRef.current) window.clearTimeout(autoRecoveryTimerRef.current)
+        autoRecoveryTimerRef.current = window.setTimeout(() => {
+          if (!disposed && desiredRef.current === 'auto' && shakaRef.current) {
+            const p = shakaRef.current
+            const currentTracks = p.getVariantTracks()
+            const best = pickBestVariantTrack(currentTracks)
+            if (best) {
+              // console.log('[useMediaPlayer] Auto mode: network stabilized, restoring to highest resolution (1080p)')
+              p.selectVariantTrack(best, false)
+              if (best.height) setActiveHeight(best.height)
+              stallCountInAuto = 0
+            }
+          }
+        }, 40_000)
+      }
+    }
+
+    const onPlay = () => {
+      const pausedAt = pausedAtRef.current
+      pausedAtRef.current = null
+      resetWatchdog()
+
+      // Ensure audio volume and muted state are re-asserted on resume
+      try {
+        const v = video.volume
+        const m = video.muted
+        video.volume = v
+        video.muted = m
+      } catch {
+        // ignore
+      }
+
+      if (!pausedAt || refreshingOnResumeRef.current || disposed) return
+
+      const pausedFor = Date.now() - pausedAt
+      const isLiveStream = activeStream?.isLive !== false
+
+      // Check if the paused position has fallen completely outside the live DVR availability window
+      const range = getLiveSeekRange()
+      const isPastDvrWindow = Boolean(range && range.start > 0 && video.currentTime < range.start + 2)
+
+      // Auto-catch-up to live clock only activates on long pauses:
+      // - Paused for >= 70 seconds (70_000ms) on a live broadcast
+      // - OR when the paused timestamp has fallen outside the server's timeshift DVR buffer window.
+      // For short/medium pauses (e.g. 20s, 30s, 50s, 60s, even after "Go Live" appeared at 20s):
+      // ALWAYS resume right from the paused point!
+      const shouldCatchUpToLive = isLiveStream && (pausedFor >= 70_000 || isPastDvrWindow)
+
+      // Proactively re-resolve signed URL tokens on long pauses (>= 70 seconds on live, >= 5 minutes on VOD)
+      // where the CDN tokens or session state may have expired.
+      const shouldReconnect = pausedFor >= (isLiveStream ? 70_000 : 300_000)
+      if (shouldReconnect) {
+        const reconnect = onReconnectRef.current
+        if (reconnect) {
+          refreshingOnResumeRef.current = true
+          setReconnecting(true)
+          showBufferingSoon()
+          try {
+            video.pause()
+          } catch {
+            // ignore
+          }
+          void reconnect()
+            .then((fresh) => {
+              if (disposed || !fresh) return
+              return reloadAfterLongPause(fresh, shouldCatchUpToLive ? null : video.currentTime)
+            })
+            .catch(() => {
+              if (shouldCatchUpToLive) {
+                goLive()
+              } else {
+                void video.play().catch(() => undefined)
+              }
+            })
+            .finally(() => {
+              refreshingOnResumeRef.current = false
+              if (!disposed) setReconnecting(false)
+            })
+          return
+        }
+      }
+
+      if (shouldCatchUpToLive) {
+        goLive()
+      }
+    }
+    const onWaiting = () => {
+      // console.log('[useMediaPlayer] Video event: waiting')
+      if (video.paused || video.readyState < 3) {
+        showBufferingSoon()
+      }
+      if (desiredRef.current === 'auto' && shakaRef.current) {
+        const now = performance.now()
+        if (now - lastStallAt < 12_000) {
+          stallCountInAuto++
+        } else {
+          stallCountInAuto = 1
+        }
+        lastStallAt = now
+
+        // If repeated stalls occur within 12s on a weak connection, step down video to 720p while preserving uncompressed audio
+        if (stallCountInAuto >= 2) {
+          const p = shakaRef.current
+          const currentTracks = p.getVariantTracks()
+          const active = currentTracks.find((t: { active?: boolean }) => t.active)
+          const currentHeight = active?.height || 1080
+          if (currentHeight > 720) {
+            // console.warn('[useMediaPlayer] Auto mode: repeated stalls detected, stepping down to 720p without degrading audio')
+            const fallback = pickBestVariantTrack(currentTracks, 720)
+            if (fallback) {
+              p.selectVariantTrack(fallback, false)
+              if (fallback.height) setActiveHeight(fallback.height)
+            }
+          }
+        }
+      }
+    }
+    const onStalled = () => {
+      // console.log('[useMediaPlayer] Video event: stalled')
+      if (video.paused || video.readyState < 3) {
+        showBufferingSoon()
+      }
+    }
+    const onTimeUpdate = () => {
+      if (!video.paused && video.readyState >= 3) {
+        clearBuffering()
+      }
+    }
+    const onCanPlay = () => {
+      // console.log('[useMediaPlayer] Video event: canplay')
+      clearBuffering()
+      setReady(true)
+    }
+    const onLoadedData = () => {
+      // console.log('[useMediaPlayer] Video event: loadeddata')
+      clearBuffering()
+      setReady(true)
+    }
+    const onPause = () => {
+      // console.log('[useMediaPlayer] Video event: pause')
+      pausedAtRef.current = Date.now()
+      const range = getLiveSeekRange()
+      // If within 8s of the live edge (or range is not yet determined), viewer was at live edge
+      wasAtLiveWhenPausedRef.current = range ? (range.end - video.currentTime <= 8) : true
+      clearBuffering()
+    }
+    const onNativeError = () => {
+      // console.error('[useMediaPlayer] Video event: native error', video.error)
+      if (!stream) return
+      fail('The video could not be decoded. Try another quality or channel.', false)
+    }
+
+    // Ensure micro-catchup speed adjustments sound natural without pitch distortion
+    video.preservesPitch = true
+
+    const onResize = () => {
+      if (video.videoHeight > 0) setActiveHeight(video.videoHeight)
+    }
+    video.addEventListener('resize', onResize)
+    video.addEventListener('playing', onPlaying)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('waiting', onWaiting)
+    video.addEventListener('stalled', onStalled)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('loadeddata', onLoadedData)
+    video.addEventListener('loadedmetadata', syncSeekRange)
+    video.addEventListener('loadedmetadata', onResize)
+    video.addEventListener('durationchange', syncSeekRange)
+    video.addEventListener('progress', syncSeekRange)
+    video.addEventListener('seeked', syncSeekRange)
+    video.addEventListener('pause', onPause)
+    video.addEventListener('error', onNativeError)
+
+    // Shaka updates `seekRange()` as new live segments arrive; poll while the
+    // timer runs so the DVR bar keeps up even without media events.
+    const seekRangeTimer = window.setInterval(syncSeekRange, 1000)
+    syncSeekRange()
+
+    const onWatchdogVisibility = () => {
+      // Whenever visibility changes (minimized, backgrounded, or restored),
+      // reset watchdog timestamp and counter to prevent false freeze detection.
+      resetWatchdog()
+    }
+    document.addEventListener('visibilitychange', onWatchdogVisibility)
+
+    const videoFreezeWatchdogTimer = window.setInterval(() => {
+      if (disposed) return
+
+      // Crucial: When the app is minimized, occluded, or backgrounded, Chromium intentionally
+      // pauses requestVideoFrameCallback and stops presenting video frames to save GPU/power.
+      // Audio and streaming continue smoothly. We MUST NOT treat this normal background behavior
+      // as a frozen video graphics pipeline, which would otherwise trigger continuous destructive
+      // seeks, retryStreaming(), and goLive() stalls in the background!
+      if (document.hidden || document.visibilityState === 'hidden') {
+        lastFramePresentedAt = performance.now()
+        freezeConsecutiveCount = 0
+        lastMediaTime = video.currentTime
+        return
+      }
+
+      const currentMediaTime = video.currentTime
+      const timeAdvanced = currentMediaTime - lastMediaTime
+      lastMediaTime = currentMediaTime
+
+      // Only evaluate when the video is expected to be playing and visible
+      if (!video.paused && !video.ended && video.readyState >= 2) {
+        // Timeline is moving (audio playback clock is advancing)
+        if (timeAdvanced > 0.2) {
+          const timeSinceFrame = performance.now() - lastFramePresentedAt
+          // If no video frame has been presented for more than 3 seconds while visible
+          if (timeSinceFrame > 3000) {
+            freezeConsecutiveCount++
+
+            if (freezeConsecutiveCount === 1) {
+              // Level 1: Micro-seek nudge to kick Chromium decoder out of the stalled decode state
+              try {
+                video.currentTime = video.currentTime + 0.02
+              } catch (e) {
+                // ignore
+              }
+            } else if (freezeConsecutiveCount === 2) {
+              // Level 2: Engine-level recovery
+              if (hlsRef.current) {
+                try {
+                  hlsRef.current.recoverMediaError()
+                } catch (e) {
+                  // ignore
+                }
+              } else if (shakaRef.current) {
+                try {
+                  void shakaRef.current.retryStreaming()
+                } catch (e) {
+                  // ignore
+                }
+              }
+            } else if (freezeConsecutiveCount >= 3) {
+              // Level 3: Jump forward to live edge
+              goLive()
+              freezeConsecutiveCount = 0
+            }
+            lastFramePresentedAt = performance.now()
+          }
+        }
+      }
+    }, 1000)
+
+    const setupHls = () => {
+      const media = video
+      if (!activeStream) return
+      setEngine('hls')
+
+      if (window.location.protocol === 'file:') {
+        setEngine('native')
+        const directUrl = activeStream.url.replace(/\.m3u8(?:[?#]|$)/i, '.mp4').replace('playlist.mp4', 'stream.mp4')
+        media.src = directUrl
+        media.loop = false
+
+        const syncToLive = () => {
+          try {
+            const dur = media.duration && Number.isFinite(media.duration) && media.duration > 0 ? media.duration : 1606.94
+            media.currentTime = getServerTime(dur)
+          } catch {}
+        }
+
+        media.addEventListener('loadedmetadata', () => {
+          syncToLive()
+          setReady(true)
+          clearBuffering()
+          resetWatchdog()
+          void media.play().catch(() => undefined)
+        }, { once: true })
+
+        media.addEventListener('ended', () => {
+          syncToLive()
+          void media.play().catch(() => undefined)
+        })
+
+        const onTimeUpdate = () => {
+          const dur = media.duration && Number.isFinite(media.duration) && media.duration > 0 ? media.duration : 1606.94
+          if (media.currentTime >= dur - 0.35) {
+            syncToLive()
+            void media.play().catch(() => undefined)
+          }
+        }
+        media.addEventListener('timeupdate', onTimeUpdate)
+
+        void media.play().catch(() => undefined)
+        return
+      }
+
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          // Keep an ample forward and back buffer so background/off-screen timer
+          // throttling does not exhaust the buffer.
+          backBufferLength: 90,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.8,
+          highBufferWatchdogPeriod: 3,
+          nudgeOffset: 0.15,
+          nudgeMaxRetry: 10,
+          maxStarvationDelay: 4,
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 15,
+          liveDurationInfinity: true,
+          capLevelToPlayerSize: false,
+          minAutoBitrate: 1_800_000,
+          abrEwmaDefaultEstimate: 50_000_000,
+          abrEwmaDefaultEstimateMax: 80_000_000,
+          abrBandWidthFactor: 0.85,
+          abrBandWidthUpFactor: 0.85,
+          abrMaxWithRealBitrate: true
+        })
+        hlsRef.current = hls
+        let mediaRecoveryAttempts = 0
+
+        // Helper to select the highest quality audio track available in the stream
+        const selectBestAudioTrack = () => {
+          const audioTracks = hls.audioTracks
+          if (!audioTracks || audioTracks.length === 0) return
+          let bestAudioIdx = 0
+          let highestScore = -1
+
+          audioTracks.forEach((t, idx) => {
+            const name = (t.name || '').toLowerCase()
+            const isExcluded = /description|commentary|\bad\b/i.test(name)
+            if (isExcluded) return
+
+            let score = 0
+            // 1. Explicit bitrate (in bps)
+            if (t.bitrate && t.bitrate > 0) {
+              score += t.bitrate
+            }
+
+            // 2. Name / label bitrate hints (e.g. 192k, 128k vs 64k)
+            const matchKbps = name.match(/(\d+)\s*k(?:bps)?/)
+            if (matchKbps) {
+              score += parseInt(matchKbps[1], 10) * 1000
+            } else if (/high|hq|dolby|5\.1|surround/i.test(name)) {
+              score += 150_000
+            } else if (/low|lq/i.test(name)) {
+              score -= 50_000
+            }
+
+            // 3. Audio codec preference (AAC-LC > HE-AAC, Dolby > AAC)
+            const codec = (t.audioCodec || '').toLowerCase()
+            if (/ec-3|ac-3|eac3/.test(codec)) {
+              score += 200_000
+            } else if (/mp4a\.40\.2/.test(codec)) {
+              score += 128_000
+            } else if (/mp4a\.40\.5/.test(codec)) {
+              score += 64_000 // HE-AAC is lower bitrate
+            }
+
+            if (score > highestScore) {
+              highestScore = score
+              bestAudioIdx = idx
+            }
+          })
+
+          if (hls.audioTrack !== bestAudioIdx) {
+            hls.audioTrack = bestAudioIdx
+          }
+        }
+
+        hls.on(HlsEvents.MANIFEST_LOADING, () => {
+          // console.log('[useMediaPlayer] HlsEvent: MANIFEST_LOADING')
+        })
+        hls.on(HlsEvents.MANIFEST_LOADED, (_event, data) => {
+          // console.log(`[useMediaPlayer] HlsEvent: MANIFEST_LOADED (${data.levels?.length ?? 0} levels)`)
+        })
+        hls.on(HlsEvents.AUDIO_TRACKS_UPDATED, () => {
+          if (disposed) return
+          selectBestAudioTrack()
+        })
+        hls.on(HlsEvents.AUDIO_TRACK_SWITCHED, () => {
+          if (disposed) return
+          selectBestAudioTrack()
+        })
+        hls.on(HlsEvents.MANIFEST_PARSED, () => {
+          if (disposed) return
+          selectBestAudioTrack()
+          const mapped: EngineLevel[] = hls.levels.map((level, index) => ({
+            index,
+            height: level.height ?? 0,
+            bitrate: level.bitrate ?? 0,
+            label: level.height ? `${level.height}p` : level.name || `Level ${index + 1}`
+          }))
+          // console.log('[useMediaPlayer] HlsEvent: MANIFEST_PARSED - hls.levels:', mapped)
+          levelsRef.current = mapped
+          setLevels(mapped)
+          setReady(true)
+          syncSeekRange()
+
+          const heights = mapped.map((l) => l.height || 0).filter((h) => h > 0)
+          const maxHeight = heights.length > 0 ? Math.max(...heights) : 0
+          const targetFloor = maxHeight >= 720 ? 720 : maxHeight
+          const eligibleFloors = mapped.filter((l) => (l.height || 0) >= targetFloor && (l.bitrate || 0) > 0)
+          if (eligibleFloors.length > 0) {
+            const minBitrate = Math.min(...eligibleFloors.map((l) => l.bitrate))
+            hls.config.minAutoBitrate = minBitrate
+          }
+
+          // Sort mapped levels to find highest resolution & bitrate variant
+          const sortedBest = [...mapped].sort((a, b) => (b.height || 0) - (a.height || 0) || b.bitrate - a.bitrate)
+          const topLevel = sortedBest[0]
+
+          const desired = desiredRef.current
+          if (desired === 'auto') {
+            hls.autoLevelCapping = -1
+            if (topLevel) {
+              hls.startLevel = topLevel.index
+              hls.nextLevel = topLevel.index
+              if (topLevel.height) setActiveHeight(topLevel.height)
+            }
+            // CRITICAL: currentLevel MUST be -1 so Hls.js keeps auto ABR enabled!
+            hls.currentLevel = -1
+            setActiveLevel('auto')
+          } else if (typeof desired === 'number') {
+            const exact = mapped.find((l) => l.height === desired)
+            const fallback = sortedBest.find((l) => l.height <= desired) ?? topLevel
+            const chosen = exact ?? fallback
+            if (chosen) {
+              hls.currentLevel = chosen.index
+              if (chosen.height) setActiveHeight(chosen.height)
+              setActiveLevel(chosen.index)
+            } else {
+              hls.currentLevel = -1
+              setActiveLevel('auto')
+            }
+          }
+          try {
+            const dur = media.duration && Number.isFinite(media.duration) && media.duration > 0 ? media.duration : 1606.94
+            media.currentTime = getServerTime(dur)
+          } catch {}
+          void media.play().catch((err: unknown) => {
+            // console.warn('[useMediaPlayer] Autoplay play() rejected in MANIFEST_PARSED:', err)
+            clearBuffering()
+          })
+        })
+
+        media.addEventListener('ended', () => {
+          try {
+            const dur = media.duration && Number.isFinite(media.duration) && media.duration > 0 ? media.duration : 1606.94
+            media.currentTime = getServerTime(dur)
+            void media.play().catch(() => undefined)
+          } catch {}
+        })
+
+        hls.on(HlsEvents.FRAG_BUFFERED, () => {
+          mediaRecoveryAttempts = 0
+        })
+
+        hls.on(HlsEvents.LEVEL_SWITCHING, (_event, data) => {
+          if (disposed) return
+          const levels = hls.levels || []
+          const maxHeight = Math.max(...levels.map((l) => l.height || 0), 0)
+          const targetFloor = maxHeight >= 720 ? 720 : maxHeight
+          const eligibleIdxs = levels
+            .map((l, idx) => ({ height: l.height || 0, idx }))
+            .filter((l) => l.height >= targetFloor)
+          if (eligibleIdxs.length > 0) {
+            const minAllowedIdx = eligibleIdxs.reduce((min, curr) => (curr.idx < min.idx ? curr : min)).idx
+            if (hls.autoLevelEnabled && data.level < minAllowedIdx) {
+              // Guard auto quality from dropping below 720p
+              hls.nextLevel = minAllowedIdx
+            }
+          }
+        })
+
+        hls.on(HlsEvents.LEVEL_SWITCHED, (_event, data) => {
+          if (disposed) return
+          selectBestAudioTrack()
+          // If the user's intent is auto, activeLevel MUST STAY 'auto' so it never hides itself!
+          if (desiredRef.current === 'auto' || hls.autoLevelEnabled) {
+            setActiveLevel('auto')
+          } else {
+            setActiveLevel(data.level)
+          }
+          const levelObj = hls.levels[data.level]
+          if (levelObj?.height) setActiveHeight(levelObj.height)
+        })
+
+        hls.on(HlsEvents.ERROR, (_event, data) => {
+          // console.warn(
+            // '[useMediaPlayer] Hls error:',
+            // data.type,
+            // data.details,
+            // 'fatal:',
+            // data.fatal,
+            // data.response?.code,
+            // data.response?.text
+          // )
+          if (data.details === ErrorDetails.BUFFER_STALLED_ERROR) {
+            // console.warn('[useMediaPlayer] Non-fatal buffer stalled error; nudging video...')
+            if (media && !media.paused) {
+              media.currentTime += 0.05
+            }
+          }
+          if (disposed || !data.fatal) return
+          const httpStatus = data.response?.code ?? 0
+          if (
+            checkAndHandleAuthError(httpStatus) ||
+            checkAndHandleAuthError(data.response?.text) ||
+            checkAndHandleAuthError(data.details)
+          ) {
+            fail('Your streaming session has expired. Please sign in again.', false)
+            return
+          }
+          if (data.type === ErrorTypes.NETWORK_ERROR) {
+            // A vanished fragment that is behind the live edge means the
+            // broadcaster's time-shift window rolled over. Jump forward
+            // instead of retrying a segment that no longer exists.
+            const httpStatus = data.response?.code ?? 0
+            const range = getLiveSeekRange()
+            const behind = range ? range.end - media.currentTime : 0
+            if ((httpStatus === 404 || httpStatus === 410) && behind > 3) {
+              // console.warn('[useMediaPlayer] DVR segment expired; jumping to live')
+              onDvrGapRef.current?.()
+              goLive()
+              return
+            }
+            if (localAttempts < 1) {
+              localAttempts += 1
+              // console.log('[useMediaPlayer] Fatal network error: attempting hls.startLoad()')
+              showBufferingSoon()
+              hls.startLoad()
+              return
+            }
+            fail('The live stream could not be reached. Reconnecting…', true)
+          } else if (data.type === ErrorTypes.MEDIA_ERROR) {
+            if (mediaRecoveryAttempts < 3) {
+              mediaRecoveryAttempts += 1
+              // console.log(`[useMediaPlayer] Fatal media error: attempting hls.recoverMediaError() (attempt ${mediaRecoveryAttempts}/3)`)
+              hls.recoverMediaError()
+              return
+            }
+            fail(
+              data.details === ErrorDetails.BUFFER_APPEND_ERROR
+                ? 'The stream buffer could not be decoded. Reconnecting…'
+                : 'Playback stopped unexpectedly. Reconnecting…',
+              true
+            )
+          } else {
+            fail(friendlyMediaError(data.details), true)
+          }
+        })
+
+        hls.attachMedia(media)
+        hls.loadSource(activeStream.url)
+      } else if (media.canPlayType('application/vnd.apple.mpegurl')) {
+        // console.log('[useMediaPlayer] Native HLS supported, loading:', activeStream.url)
+        setEngine('native')
+        media.src = activeStream.url
+        setReady(true)
+        void media.play().catch((err: unknown) => {
+          // console.warn('[useMediaPlayer] Native play() rejected:', err)
+          clearBuffering()
+        })
+      } else {
+        // console.error('[useMediaPlayer] HLS playback is not supported on this system')
+        fail('HLS playback is not supported on this system.', false)
+      }
+    }
+
+    const setupShaka = async () => {
+      if (!activeStream) return
+      setEngine('shaka')
+      // console.log('[useMediaPlayer] Setting up Shaka Player for URL:', activeStream.url)
+
+      try {
+        if (!shaka.Player.isBrowserSupported()) {
+          // console.error('[useMediaPlayer] MPEG-DASH / DRM is not supported by browser/engine')
+          fail('This system does not support MPEG-DASH playback.', false)
+          return
+        }
+
+        // Shaka 4.14: initialize Player without a mediaElement, then attach separately.
+        // Passing video directly to the constructor is deprecated and removed in v5.
+        const player = new shaka.Player()
+        await player.attach(video)
+        shakaRef.current = player
+
+        // Configure Widevine DRM — robustness levels are filled in after the CDM probe below.
+        const licenseUrl =
+          activeStream.drm?.licenseUrl ||
+          (activeStream.url ? new URL('/license', activeStream.url).href : '')
+
+
+        // Attach custom license headers (Origin, Referer, User-Agent, Authorization, ssotoken, channelId, srno)
+        const networking = player.getNetworkingEngine()
+        if (networking) {
+          networking.registerRequestFilter((type: unknown, request: { headers: Record<string, string> }) => {
+            if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+              request.headers['Origin'] = 'https://www.jiotv.com'
+              request.headers['Referer'] = 'https://www.jiotv.com/'
+              request.headers['User-Agent'] =
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              const drmHeaders = currentStreamRef.current?.drm?.headers
+              if (drmHeaders) {
+                Object.assign(request.headers, drmHeaders)
+              }
+            }
+          })
+
+          // Response filter: count 403s on segments to detect expired HDNEA tokens.
+          // After MAX_403_FAILURES consecutive failures, throw a Shaka error so
+          // the error handler can surface a meaningful message and trigger reconnect.
+          // Mirrors jiotv_go's player_drm.html response filter.
+          let segmentFail403Count = 0
+          const MAX_403_FAILURES = 2
+          networking.registerResponseFilter((type: unknown, response: { status: number }) => {
+            if (type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
+              if (response.status === 403) {
+                segmentFail403Count++
+                // console.warn('[useMediaPlayer] Segment 403 error, count:', segmentFail403Count)
+                if (segmentFail403Count > MAX_403_FAILURES) {
+                  throw new shaka.util.Error(
+                    shaka.util.Error.Severity.CRITICAL,
+                    shaka.util.Error.Category.NETWORK,
+                    shaka.util.Error.Code.HTTP_ERROR,
+                    'Too many 403 errors on segments — token may have expired'
+                  )
+                }
+              }
+            }
+          })
+
+          // Reset 403 counter on successful playback
+          video.addEventListener('playing', () => { segmentFail403Count = 0 }, { once: false })
+        }
+
+
+
+        player.addEventListener('error', (event: unknown) => {
+          if (disposed) return
+          // Log full Shaka error structure so category/code are visible in both DevTools and
+          // the main process console-message mirror.
+          const rawErr = (event as { detail?: unknown }).detail ?? event
+          // console.warn('[useMediaPlayer] Shaka error event (raw):', JSON.stringify(rawErr))
+          const formatted = formatShakaError(event)
+
+          // Rewinding past timeShiftBufferDepth makes the CDN answer 404/410
+          // for a segment Shaka still expected. Jump to live instead of
+          // surfacing a fatal playback error.
+          if (formatted.isNetwork) {
+            const range = getLiveSeekRange()
+            const behind = range ? range.end - video.currentTime : 0
+            if (
+              (formatted.httpStatus === 404 || formatted.httpStatus === 410) &&
+              behind > 3
+            ) {
+              // console.warn('[useMediaPlayer] Shaka DVR segment no longer available; jumping to live')
+              onDvrGapRef.current?.()
+              goLive()
+              return
+            }
+          }
+
+          if (
+            checkAndHandleAuthError(formatted.httpStatus) ||
+            checkAndHandleAuthError(formatted.message) ||
+            checkAndHandleAuthError(error)
+          ) {
+            fail(formatted.message, false)
+            return
+          }
+
+          // If Shaka Player throws a NETWORK (1) or DRM (6) error, do not automatically retry
+          fail(formatted.message, !formatted.isFatalNetworkOrDrm)
+        })
+
+        player.addEventListener('buffering', (event: unknown) => {
+          if (disposed) return
+          const isBuffering = Boolean((event as { buffering?: boolean }).buffering)
+          if (isBuffering) {
+            showBufferingSoon()
+          } else {
+            clearBuffering()
+          }
+        })
+
+
+
+        // Probe Widevine CDM — try robustness levels from strict → permissive.
+        // Whichever succeeds is then fed into the Shaka DRM config so the key
+        // system negotiation uses a configuration Chromium's CDM actually accepts.
+        let workingRobustness = ''
+        if (activeStream.isDrm) {
+          const robustnessLevels = ['SW_SECURE_CRYPTO', 'SW_SECURE_DECODE', '']
+          let cdmAvailable = false
+
+          for (const robustness of robustnessLevels) {
+            try {
+              await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [
+                {
+                  initDataTypes: ['cenc'],
+                  videoCapabilities: [
+                    { contentType: 'video/mp4; codecs="avc1.42E01E"', robustness }
+                  ],
+                  audioCapabilities: [
+                    { contentType: 'audio/mp4; codecs="mp4a.40.2"', robustness },
+                    { contentType: 'audio/mp4; codecs="mp4a.40.5"', robustness }
+                  ]
+                }
+              ])
+              workingRobustness = robustness
+              cdmAvailable = true
+              // console.log(`[useMediaPlayer] Widevine CDM probe: AVAILABLE (robustness="${robustness}") ✓`)
+              break
+            } catch {
+              // console.log(`[useMediaPlayer] Widevine CDM probe: robustness="${robustness}" rejected, trying next…`)
+            }
+          }
+
+          if (!cdmAvailable) {
+            // console.error('[useMediaPlayer] Widevine CDM probe: ALL levels FAILED. CDM not loaded.')
+            fail(
+              'Widevine CDM could not be initialised. ' +
+                'If Google Chrome is installed, restart the app — it loads Widevine from Chrome automatically. ' +
+                'If this persists, switch to @castlabs/electron-releases for guaranteed Widevine support.',
+              false
+            )
+            return
+          }
+        }
+
+        workingRobustnessRef.current = workingRobustness
+
+        // Build DRM config using the robustness level the CDM accepted.
+        const drmConfig: Record<string, unknown> = {
+          servers: licenseUrl ? { 'com.widevine.alpha': licenseUrl } : {},
+          advanced: {
+            'com.widevine.alpha': {
+              // Shaka 4.14: robustness must be string[], not plain string.
+              videoRobustness: workingRobustness ? [workingRobustness] : [],
+              audioRobustness: workingRobustness ? [workingRobustness] : []
+            }
+          },
+          // Debug: print raw Widevine challenge + response as base64.
+          // Disable once DRM is confirmed working.
+          logLicenseExchange: true
+        }
+
+        player.configure({
+          abrFactory: () => new AudioLockedAbrManager(),
+          drm: drmConfig,
+          manifest: {
+            defaultPresentationDelay: 3.5,
+            dash: {
+              // Shaka advertises and honours the MPD's timeShiftBufferDepth
+              // window, which is what makes DVR scrubbing possible.
+              ignoreMinBufferTime: true,
+              ignoreSuggestedPresentationDelay: true,
+              autoCorrectDrift: true,
+              // JioTV live MPDs have no UTCTiming element; point Shaka at the
+              // relay's server clock so live-edge is computed from server time
+              // instead of the client clock. A skewed client clock makes Shaka
+              // fetch far more segments than needed while hunting for live edge.
+              // Mirrors jiotv_go's clockSyncUri: "/dashtime".
+              clockSyncUri: (() => { try { const u = new URL(activeStream.url); return `${u.protocol}//${u.host}/dashtime` } catch { return '' } })()
+            }
+          },
+          preferredAudioChannelCount: 2,
+          abr: {
+            enabled: false
+          },
+          streaming: {
+            useNativeHlsForFairPlay: false,
+            lowLatencyMode: false,
+            // Precise DVR seeking: don't tolerate manifest timing drift.
+            inaccurateManifestTolerance: 0,
+            // Keep a generous forward buffer so background/minimized execution does not exhaust segments
+            bufferBehind: activeStream.isDrm ? 15 : 20,
+            bufferingGoal: activeStream.isDrm ? 30 : 45,
+            rebufferingGoal: 3,
+            stallEnabled: true,
+            stallThreshold: 4,
+            stallSkip: 0.1,
+            // Leave a 3.5-second guard at the absolute live edge.
+            safeSeekEndOffset: 3.5,
+            // Cap retries: each failed segment would otherwise multiply into
+            // several requests with long backoff — turns a few expired HDNEA
+            // tokens into hundreds of slow segment requests.
+            // Mirrors jiotv_go: maxAttempts: 2, backoffFactor: 2, timeout: 30000
+            retryParameters: {
+              maxAttempts: 2,
+              baseDelay: 500,
+              backoffFactor: 2,
+              timeout: 30_000
+            }
+          }
+        })
+
+        // Adaptation event handler with audio fidelity lock:
+        // If Shaka adapts to a variant with lower audio fidelity, instantly re-lock to top audio sibling track!
+        player.addEventListener('adaptation', () => {
+          if (disposed) return
+          const allTracks = player.getVariantTracks()
+          const active = allTracks.find((t: { active?: boolean }) => t.active)
+          if (!active) return
+
+          // Audio fidelity check: ensure active track is not using an inferior audio track
+          const maxAudio = Math.max(
+            ...allTracks.map((t: { audioBandwidth?: number }) => t.audioBandwidth || 0),
+            0
+          )
+          const activeAudio = active.audioBandwidth || 0
+          if (maxAudio > 0 && activeAudio < maxAudio * 0.85) {
+            const bestSibling = pickBestVariantTrack(allTracks, active.height)
+            if (bestSibling && bestSibling.id !== active.id) {
+              player.selectVariantTrack(bestSibling, false)
+            }
+          }
+
+          if (active.height) {
+            setActiveHeight(active.height)
+            if (desiredRef.current === 'auto') {
+              setActiveLevel('auto')
+            }
+          }
+        })
+
+        // console.log('[useMediaPlayer] Loading DASH stream:', activeStream.url)
+
+        await player.load(activeStream.url, null, 'application/dash+xml')
+        if (disposed) return
+
+        // console.log('[useMediaPlayer] Shaka stream loaded successfully')
+        setReady(true)
+        clearBuffering()
+        syncSeekRange()
+
+        // Root Audio Lock: Mark any variants with lower audio bandwidth as disallowed
+        try {
+          const rawManifest = (player as any).manifest_
+          if (rawManifest && Array.isArray(rawManifest.variants)) {
+            const maxAudio = Math.max(
+              ...rawManifest.variants.map((v: any) => (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0),
+              0
+            )
+            if (maxAudio > 0) {
+              for (const v of rawManifest.variants) {
+                const bw = (v.audio && v.audio.bandwidth) || v.audioBandwidth || 0
+                if (bw > 0 && bw < maxAudio * 0.85) {
+                  v.allowedByApplication = false
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Populate quality selector using player.getVariantTracks()
+        const tracks = player.getVariantTracks()
+        // console.log(`[useMediaPlayer] Shaka loaded with ${tracks.length} variant tracks`)
+
+        const byHeight = new Map<number, EngineLevel>()
+        for (const track of tracks) {
+          if (!track.height) continue
+          const existing = byHeight.get(track.height)
+          if (!existing) {
+            byHeight.set(track.height, {
+              index: 0,
+              height: track.height,
+              bitrate: track.bandwidth,
+              label: `${track.height}p`
+            })
+          } else if (track.bandwidth > existing.bitrate) {
+            existing.bitrate = track.bandwidth
+          }
+        }
+
+        const mapped: EngineLevel[] = [...byHeight.values()]
+          .sort((a, b) => b.height - a.height)
+          .map((level, index) => ({ ...level, index }))
+
+        levelsRef.current = mapped
+        setLevels(mapped)
+
+        applyInitialHeight(mapped, (index) => {
+          if (index === 'auto') {
+            player.configure({
+              abrFactory: () => new AudioLockedAbrManager(),
+              preferredAudioChannelCount: 2,
+              abr: {
+                enabled: true,
+                defaultBandwidthEstimate: 30_000_000,
+                useNetworkInformation: false,
+                switchInterval: 1,
+                bandwidthDowngradeTarget: 0.85,
+                bandwidthUpgradeTarget: 0.85
+              }
+            })
+            const best = pickBestVariantTrack(tracks)
+            if (best) {
+              player.selectVariantTrack(best, false)
+              if (best.height) setActiveHeight(best.height)
+            }
+            setActiveLevel('auto')
+            return
+          }
+          player.configure({
+            abrFactory: () => new AudioLockedAbrManager(),
+            preferredAudioChannelCount: 2,
+            abr: { enabled: false }
+          })
+          const target = mapped[index]
+          if (!target) return
+          const best = pickBestVariantTrack(tracks, target.height)
+          if (best) {
+            player.selectVariantTrack(best, true)
+            if (best.height) setActiveHeight(best.height)
+            setActiveLevel(index)
+          }
+        })
+
+        void video.play().catch((err: unknown) => {
+          // console.warn('[useMediaPlayer] Shaka play() rejected:', err)
+          clearBuffering()
+        })
+      } catch (cause) {
+        if (disposed) return
+        // Shaka errors are objects — stringify so the full category/code/data is visible in logs.
+        try {
+          // console.error('[useMediaPlayer] Shaka setup failed:', JSON.stringify(cause))
+        } catch {
+          // console.error('[useMediaPlayer] Shaka setup failed (non-serializable):', cause)
+        }
+        const { message, isFatalNetworkOrDrm, httpStatus } = formatShakaError(cause)
+        if (
+          checkAndHandleAuthError(httpStatus) ||
+          checkAndHandleAuthError(message) ||
+          checkAndHandleAuthError(cause)
+        ) {
+          fail(message, false)
+          return
+        }
+        fail(message, !isFatalNetworkOrDrm)
+      }
+    }
+
+    if (!activeStream) {
+      video.pause()
+      video.removeAttribute('src')
+      setEngine(null)
+      setBuffering(false)
+      setReady(false)
+      setSeekRange(null)
+      seekRangeRef.current = null
+      return () => {
+        window.clearInterval(seekRangeTimer)
+        window.clearInterval(videoFreezeWatchdogTimer)
+        document.removeEventListener('visibilitychange', onWatchdogVisibility)
+        if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
+          videoWithCallback.cancelVideoFrameCallback(rVfcId)
+        }
+        video.removeEventListener('playing', onPlaying)
+        video.removeEventListener('play', onPlay)
+        video.removeEventListener('waiting', onWaiting)
+        video.removeEventListener('stalled', onStalled)
+        video.removeEventListener('timeupdate', onTimeUpdate)
+        video.removeEventListener('canplay', onCanPlay)
+        video.removeEventListener('loadeddata', onLoadedData)
+        video.removeEventListener('loadedmetadata', syncSeekRange)
+        video.removeEventListener('durationchange', syncSeekRange)
+        video.removeEventListener('progress', syncSeekRange)
+        video.removeEventListener('seeked', syncSeekRange)
+        video.removeEventListener('pause', onPause)
+        video.removeEventListener('error', onNativeError)
+      }
+    }
+
+    // Detect stream type: MPEG-DASH / Widevine or HLS
+    const isDash = activeStream.type === 'dash' || /\.mpd(?:[?#]|$)/i.test(activeStream.url)
+    if (isDash) {
+      void setupShaka()
+    } else {
+      setupHls()
+    }
+
+    return () => {
+      disposed = true
+      clearBuffering()
+      window.clearInterval(seekRangeTimer)
+      window.clearInterval(videoFreezeWatchdogTimer)
+      document.removeEventListener('visibilitychange', onWatchdogVisibility)
+      if (rVfcId !== null && typeof videoWithCallback.cancelVideoFrameCallback === 'function') {
+        videoWithCallback.cancelVideoFrameCallback(rVfcId)
+      }
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+      if (autoRecoveryTimerRef.current) window.clearTimeout(autoRecoveryTimerRef.current)
+      video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('waiting', onWaiting)
+      video.removeEventListener('stalled', onStalled)
+      video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('loadeddata', onLoadedData)
+      video.removeEventListener('loadedmetadata', syncSeekRange)
+      video.removeEventListener('durationchange', syncSeekRange)
+      video.removeEventListener('progress', syncSeekRange)
+      video.removeEventListener('seeked', syncSeekRange)
+      video.removeEventListener('pause', onPause)
+      video.removeEventListener('error', onNativeError)
+      hlsRef.current?.destroy()
+      hlsRef.current = null
+      if (shakaRef.current) {
+        const player = shakaRef.current
+        shakaRef.current = null
+        void player.destroy().catch(() => undefined)
+      }
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+    }
+  }, [stream, reloadKey, fail])
+
+  const setLevel = useCallback((level: number | 'auto') => {
+    desiredRef.current = level === 'auto' ? 'auto' : levelsRef.current[level]?.height ?? 0
+    if (!hlsRef.current && !shakaRef.current) return
+
+    if (hlsRef.current) {
+      const hls = hlsRef.current
+      if (level === 'auto') {
+        const levels = hls.levels || []
+        const topLevelIdx = levels.reduce(
+          (prev, curr, idx) =>
+            (curr.height || 0) > (levels[prev]?.height || 0) ||
+            (curr.bitrate || 0) > (levels[prev]?.bitrate || 0)
+              ? idx
+              : prev,
+          0
+        )
+        hls.autoLevelCapping = -1
+        hls.startLevel = topLevelIdx
+        hls.nextLevel = topLevelIdx
+        hls.currentLevel = -1
+        if (levels[topLevelIdx]?.height) {
+          setActiveHeight(levels[topLevelIdx].height)
+        }
+        setActiveLevel('auto')
+      } else {
+        hls.currentLevel = level
+        if (hls.levels[level]?.height) {
+          setActiveHeight(hls.levels[level].height)
+        }
+        setActiveLevel(level)
+      }
+      return
+    }
+
+    const player = shakaRef.current
+    if (!player) return
+    const tracks = player.getVariantTracks()
+
+    if (level === 'auto') {
+      player.configure({
+        abrFactory: () => new AudioLockedAbrManager(),
+        preferredAudioChannelCount: 2,
+        abr: {
+          enabled: true,
+          defaultBandwidthEstimate: 30_000_000,
+          useNetworkInformation: false,
+          switchInterval: 1,
+          bandwidthDowngradeTarget: 0.85,
+          bandwidthUpgradeTarget: 0.85
+        }
+      })
+      const best = pickBestVariantTrack(tracks)
+      if (best) {
+        player.selectVariantTrack(best, false)
+        if (best.height) setActiveHeight(best.height)
+      }
+      setActiveLevel('auto')
+      return
+    }
+
+    player.configure({
+      abrFactory: () => new AudioLockedAbrManager(),
+      preferredAudioChannelCount: 2,
+      abr: { enabled: false }
+    })
+    const target = levelsRef.current[level]
+    if (!target) return
+    const best = pickBestVariantTrack(tracks, target.height)
+    if (best) {
+      player.selectVariantTrack(best, true)
+      if (best.height) setActiveHeight(best.height)
+    }
+    setActiveLevel(level)
+  }, [])
+
+  return {
+    videoRef,
+    levels,
+    activeLevel,
+    activeHeight,
+    setLevel,
+    buffering,
+    reconnecting,
+    error,
+    retry,
+    ready,
+    engine,
+    seekRange,
+    goLive,
+    seekTo
+  }
+}
+
+// Backward compatibility export
+export const useHlsPlayer = useMediaPlayer

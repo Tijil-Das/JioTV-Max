@@ -222,88 +222,604 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3500)
   }
 
-  // ─── App Preview Showcase Tabs (Auto-switches every 5s until user clicks) ──
-  const showcaseTabs = document.querySelectorAll('.showcase-tab')
-  const showcasePanels = document.querySelectorAll('.showcase-panel')
-  let currentTabIndex = 0
-  let autoSwitchTimer = null
-  let userInteracted = false
+  // ─── Central Master Server Clock ────────────────────────────────────────
+  const SESSION_START_KEY = '__jiotv_server_session_start__'
+  function getMasterSessionStart() {
+    let start = null
+    try {
+      const stored = sessionStorage.getItem(SESSION_START_KEY)
+      if (stored) {
+        const parsed = Number(stored)
+        if (!isNaN(parsed) && parsed > 0) start = parsed
+      }
+    } catch {}
+    if (!start) {
+      start = Date.now()
+      try {
+        sessionStorage.setItem(SESSION_START_KEY, String(start))
+      } catch {}
+    }
+    window.__JIOTV_SERVER_START__ = start
+    return start
+  }
+  const sessionStartTime = getMasterSessionStart()
 
-  function activateTab(index) {
+  function getServerTime(duration = 1606.94) {
+    const elapsed = Math.max(0, (Date.now() - sessionStartTime) / 1000)
+    return elapsed % duration
+  }
+
+  // ─── Production App Showcase Tabs & Routing ─────────────────────────────
+  const showcaseTabs = document.querySelectorAll('.showcase-tab')
+  const appFrame = document.getElementById('app-embed-frame')
+  const appView = document.getElementById('showcase-app-view')
+  const miniView = document.getElementById('showcase-miniplayer-view')
+  const miniVideo = document.getElementById('miniplayer-floating-video')
+  const showcaseCaption = document.getElementById('showcase-caption')
+
+  const tabCaptions = {
+    'tab-app': '<strong>Production Windows Client:</strong> Experience the actual JioTv Max desktop application live in your browser — complete with real-time EPG, seamless channel switching, and synchronized HLS streaming.',
+    'tab-miniplayer': '<strong>Picture-in-Picture Miniplayer:</strong> Distraction-free, draggable always-on-top window over your real desktop workflow. Grab and drag anywhere over the workspace.',
+    'tab-player': '<strong>1080p Live Streamer:</strong> Full-bleed GPU-accelerated video stage with live rolling DVR timeshift timeline and multi-track audio.',
+    'tab-catalogue': '<strong>Channel Catalogue:</strong> 1,000+ national and regional channels organized by category shelves, language filters, and resolution tiers.'
+  }
+
+  let currentTabIndex = 0
+
+  function activateTab(index, updateRoute = true) {
     if (!showcaseTabs.length || index < 0 || index >= showcaseTabs.length) return
     const tab = showcaseTabs[index]
-    const targetId = tab.getAttribute('data-target')
-    if (!targetId) return
+    const route = tab.getAttribute('data-route') || '#/'
+    const tabId = tab.id
 
     showcaseTabs.forEach((t) => {
       t.classList.remove('active')
       t.setAttribute('aria-selected', 'false')
     })
-    showcasePanels.forEach((p) => {
-      p.classList.remove('active')
-      p.hidden = true
-    })
-
     tab.classList.add('active')
     tab.setAttribute('aria-selected', 'true')
 
-    const targetPanel = document.getElementById(targetId)
-    if (targetPanel) {
-      targetPanel.classList.add('active')
-      targetPanel.hidden = false
-    }
-  }
-
-  function startAutoSwitch() {
-    if (userInteracted || showcaseTabs.length <= 1) return
-    stopAutoSwitch()
-    autoSwitchTimer = setInterval(() => {
-      if (userInteracted) {
-        stopAutoSwitch()
-        return
+    if (tabId === 'tab-miniplayer') {
+      if (appView) appView.style.display = 'none'
+      if (miniView) miniView.style.display = 'flex'
+      const miniFrame = document.getElementById('miniplayer-embed-frame')
+      if (miniFrame) {
+        const miniRoute = tab.getAttribute('data-route') || '#/watch/ch-specimen-1?mini=true'
+        miniFrame.src = 'app/index.html' + miniRoute
       }
-      currentTabIndex = (currentTabIndex + 1) % showcaseTabs.length
-      activateTab(currentTabIndex)
-    }, 5000)
-  }
+    } else {
+      if (miniView) miniView.style.display = 'none'
+      const miniFrame = document.getElementById('miniplayer-embed-frame')
+      if (miniFrame) {
+        miniFrame.src = 'about:blank'
+      }
+      if (appView) {
+        appView.style.display = 'block'
+        if (tabId === 'tab-player') {
+          appView.classList.add('is-player')
+        } else {
+          appView.classList.remove('is-player')
+        }
+      }
+      if (appFrame && updateRoute) {
+        try {
+          if (appFrame.contentWindow && appFrame.contentWindow.location.pathname.includes('index.html')) {
+            appFrame.contentWindow.location.hash = route
+          } else {
+            appFrame.src = 'app/index.html' + route
+          }
+        } catch {
+          appFrame.src = 'app/index.html' + route
+        }
+      }
 
-  function stopAutoSwitch() {
-    if (autoSwitchTimer) {
-      clearInterval(autoSwitchTimer)
-      autoSwitchTimer = null
+      if (tabId === 'tab-catalogue' && appFrame && appFrame.contentWindow) {
+        setTimeout(() => {
+          try {
+            appFrame.contentWindow.postMessage({ type: 'JIOTV_SCROLL_TO_CATALOGUE' }, '*')
+          } catch {}
+        }, 100)
+      } else if (tabId === 'tab-app' && appFrame && appFrame.contentWindow) {
+        setTimeout(() => {
+          try {
+            appFrame.contentWindow.postMessage({ type: 'JIOTV_SCROLL_TO_TOP' }, '*')
+          } catch {}
+        }, 100)
+      }
+    }
+
+    if (showcaseCaption && tabCaptions[tabId]) {
+      showcaseCaption.innerHTML = tabCaptions[tabId]
     }
   }
 
   showcaseTabs.forEach((tab, index) => {
     tab.addEventListener('click', () => {
-      // User manually clicked a tab - permanently stop auto-switching
-      userInteracted = true
-      stopAutoSwitch()
       currentTabIndex = index
-      activateTab(index)
+      activateTab(index, true)
     })
   })
 
-  // Start 5-second rotation on initial load
-  startAutoSwitch()
+  // Listen for navigation, aspect ratio, and scroll messages from embedded app iframe
+  window.addEventListener('message', (event) => {
+    if (!event.data) return
 
-  // ─── Simulated Windows Taskbar Live Clock & Date ────────────────────────
-  const clockEl = document.getElementById('taskbar-live-clock')
-  const dateEl = document.getElementById('taskbar-live-date')
-  if (clockEl) {
-    const updateLiveClock = () => {
-      const now = new Date()
-      clockEl.textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-      if (dateEl) {
-        const d = String(now.getDate()).padStart(2, '0')
-        const m = String(now.getMonth() + 1).padStart(2, '0')
-        const y = now.getFullYear()
-        dateEl.textContent = `${d}-${m}-${y}`
+    // 1. Synchronize Tab Highlights from app navigation
+    if (event.data.type === 'JIOTV_ACTIVE_ROUTE') {
+      const tabId = event.data.tab
+      // Ignore background miniplayer notifications if miniView is hidden
+      if (tabId === 'tab-miniplayer' && miniView && miniView.style.display === 'none') {
+        return
+      }
+      const targetTab = document.getElementById(tabId)
+      if (targetTab) {
+        showcaseTabs.forEach((t) => {
+          t.classList.remove('active')
+          t.setAttribute('aria-selected', 'false')
+        })
+        targetTab.classList.add('active')
+        targetTab.setAttribute('aria-selected', 'true')
+
+        if (tabId === 'tab-player') {
+          if (appView) appView.classList.add('is-player')
+        } else {
+          if (appView) appView.classList.remove('is-player')
+        }
+
+        if (showcaseCaption && tabCaptions[tabId]) {
+          showcaseCaption.innerHTML = tabCaptions[tabId]
+        }
       }
     }
-    updateLiveClock()
-    setInterval(updateLiveClock, 10000)
+
+    // 2. Switch tab requested by app (e.g. miniplayer toggle)
+    if (event.data.type === 'JIOTV_SWITCH_TAB') {
+      const tabId = event.data.tab
+      const targetTab = document.getElementById(tabId)
+      if (targetTab) {
+        if (event.data.channelId && tabId === 'tab-miniplayer') {
+          targetTab.setAttribute('data-route', `#/watch/${event.data.channelId}?mini=true`)
+        } else if (event.data.channelId && tabId === 'tab-player') {
+          targetTab.setAttribute('data-route', `#/watch/${event.data.channelId}`)
+        }
+        targetTab.click()
+      }
+    }
+
+    // 2b. Draggable miniplayer movement forwarded from miniplayer iframe
+    if (event.data.type === 'JIOTV_MINIPLAYER_DRAG_START') {
+      isFloatingDragging = true
+      initFloatingMiniPos()
+    } else if (event.data.type === 'JIOTV_MINIPLAYER_MOVE' && miniPlayerEl && desktopFrame) {
+      if (floatingMiniX === null || floatingMiniY === null) {
+        initFloatingMiniPos()
+      }
+      const rawDx = typeof event.data.dx === 'number' ? event.data.dx : 0
+      const rawDy = typeof event.data.dy === 'number' ? event.data.dy : 0
+      const dpr = event.data.dpr || window.devicePixelRatio || 1
+      const dx = rawDx / dpr
+      const dy = rawDy / dpr
+
+      const frameRect = desktopFrame.getBoundingClientRect()
+      const miniRect = miniPlayerEl.getBoundingClientRect()
+      const maxLeft = Math.max(0, frameRect.width - miniRect.width)
+      const maxTop = Math.max(0, frameRect.height - miniRect.height - 46)
+
+      floatingMiniX = Math.max(0, Math.min(floatingMiniX + dx, maxLeft))
+      floatingMiniY = Math.max(0, Math.min(floatingMiniY + dy, maxTop))
+
+      miniPlayerEl.style.transition = 'none'
+      miniPlayerEl.style.left = `${Math.round(floatingMiniX)}px`
+      miniPlayerEl.style.top = `${Math.round(floatingMiniY)}px`
+      miniPlayerEl.style.right = 'auto'
+      miniPlayerEl.style.bottom = 'auto'
+    } else if (event.data.type === 'JIOTV_MINIPLAYER_DRAG_END') {
+      isFloatingDragging = false
+    }
+
+    // 3. Dynamic Player Aspect Ratio according to video dimensions
+    if (event.data.type === 'JIOTV_PLAYER_ASPECT') {
+      const aspect =
+        event.data.aspect ||
+        (event.data.width && event.data.height
+          ? `${event.data.width} / ${event.data.height}`
+          : '16 / 9')
+      if (appView) {
+        appView.style.setProperty('--player-aspect', aspect)
+        if (appView.classList.contains('is-player')) {
+          appView.style.aspectRatio = aspect
+        }
+      }
+    }
+
+    // 4. Scroll chaining from web app to website
+    if (event.data.type === 'JIOTV_PARENT_SCROLL' && typeof event.data.deltaY === 'number') {
+      window.scrollBy({
+        top: event.data.deltaY,
+        behavior: 'auto'
+      })
+    }
+
+    // 5. Direct download trigger from web-app iframe
+    if (event.data.type === 'JIOTV_TRIGGER_DOWNLOAD') {
+      showToast(`Downloading JioTv Max ${latestVersion}`)
+      void (async () => {
+        const targetUrl = latestDownloadUrl || (await resolveLatestRelease())
+        triggerDirectDownload(targetUrl, latestFilename)
+      })()
+    }
+  })
+
+  // ─── Draggable Miniplayer over VS Code Window ──────────────────────────
+  const miniPlayerEl = document.getElementById('floating-miniplayer')
+  const desktopFrame = document.getElementById('showcase-miniplayer-view')
+  let floatingMiniX = null
+  let floatingMiniY = null
+  let isFloatingDragging = false
+
+  function initFloatingMiniPos() {
+    if (!miniPlayerEl || !desktopFrame) return
+    const frameRect = desktopFrame.getBoundingClientRect()
+    const miniRect = miniPlayerEl.getBoundingClientRect()
+    floatingMiniX = miniRect.left - frameRect.left
+    floatingMiniY = miniRect.top - frameRect.top
   }
+
+  // ─── Interactive Simulated VS Code Editor ─────────────────────────────────
+  const vsCodeTabs = document.querySelectorAll('.vscode-tab')
+  const vsCodeTitle = document.getElementById('vscode-title-text')
+  const vsCodeBreadcrumbs = document.getElementById('vscode-breadcrumbs')
+  const vsCodeInput = document.getElementById('vscode-input')
+  const vsCodeHighlight = document.getElementById('vscode-highlight')
+  const vsCodeGutter = document.getElementById('vscode-gutter')
+  const vsCodeLnCol = document.getElementById('vscode-ln-col')
+  const vsCodeLangMode = document.getElementById('vscode-lang-mode')
+
+  const vsCodeFiles = {
+    'media-relay.ts': {
+      path: 'src/main/media-relay.ts',
+      breadcrumbs: [
+        '<span>src</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span>main</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-active">media-relay.ts</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-fn">MediaRelay</span>'
+      ].join(' '),
+      lang: 'ts',
+      mode: 'TypeScript',
+      code: `import { createServer, type Server } from 'node:http'
+import { randomUUID } from 'node:crypto'
+import { PLAYER_UA, withHdneaCookie } from './jio-headers'
+
+/**
+ * Loopback media relay for JioTV desktop playback.
+ * Routes authenticated manifests, segments, and Widevine license
+ * endpoints through an ephemeral loopback interface at 127.0.0.1.
+ */
+export interface RelaySession {
+  id: string
+  channelId: string
+  manifestUrl: string
+  licenseUrl?: string
+  headers: Record<string, string>
+  quality: 'auto' | 'high' | 'medium' | 'low'
+  generation: number
+}
+
+export class MediaRelay {
+  private server: Server | null = null
+  private sessions = new Map<string, RelaySession>()
+
+  async start(): Promise<number> {
+    this.server = createServer((req, res) => this.handleRequest(req, res))
+    return new Promise((resolve) => {
+      this.server!.listen(0, '127.0.0.1', () => {
+        resolve((this.server!.address() as any).port)
+      })
+    })
+  }
+
+  registerSession(session: Omit<RelaySession, 'id' | 'generation'>): string {
+    const id = randomUUID()
+    this.sessions.set(id, { ...session, id, generation: 1 })
+    return id
+  }
+}`
+    },
+    'SnapController.ts': {
+      path: 'src/main/snap-overlay/SnapController.ts',
+      breadcrumbs: [
+        '<span>src</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span>main</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span>snap-overlay</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-active">SnapController.ts</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-fn">SnapController</span>'
+      ].join(' '),
+      lang: 'ts',
+      mode: 'TypeScript',
+      code: `import { BrowserWindow, ipcMain } from 'electron'
+import type { SnapBounds, SnapButtonState } from '@shared/types'
+import { isWindows11OrNewerBuild } from './geometry'
+import { loadSnapAddon, type SnapOverlayAddon } from './addonLoader'
+
+/**
+ * Windows 11 Native Snap Layout Overlay Controller.
+ * Embeds a child HWND over the maximize button to intercept WM_NCHITTEST
+ * and render Microsoft Windows 11 snap layouts natively.
+ */
+export class SnapController {
+  private static controllers = new Map<number, SnapController>()
+  private readonly win: BrowserWindow
+  private readonly addon: SnapOverlayAddon | null = null
+  private childHwnd: bigint | null = null
+  private isMiniPlayer = false
+
+  constructor(win: BrowserWindow) {
+    this.win = win
+    if (!isWindows11OrNewerBuild()) return
+    this.addon = loadSnapAddon()
+  }
+
+  public setMiniPlayerMode(isMini: boolean): void {
+    this.isMiniPlayer = isMini
+    if (isMini && this.childHwnd && this.addon) {
+      this.addon.updateRect(this.childHwnd, -1000, -1000, 0, 0)
+    }
+  }
+}`
+    },
+    'stream-probe.ts': {
+      path: 'src/main/stream-probe.ts',
+      breadcrumbs: [
+        '<span>src</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span>main</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-active">stream-probe.ts</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-fn">probeStream</span>'
+      ].join(' '),
+      lang: 'ts',
+      mode: 'TypeScript',
+      code: `import { net } from 'electron'
+import type { StreamProbeStage1 } from '@shared/types'
+import { isMasterPlaylist, isMediaPlaylist } from './probe-utils'
+
+/**
+ * Stage-1 stream verification.
+ * Fetches HLS (#EXTM3U) or DASH (<MPD) manifests, follows master playlists
+ * to variant media playlists, verifies DRM flags, and probes the first segment.
+ */
+export async function probeStream(url: string, signal: AbortSignal): Promise<StreamProbeStage1> {
+  const response = await net.fetch(url, {
+    signal,
+    headers: {
+      Accept: 'application/x-mpegURL,application/dash+xml,*/*',
+      'User-Agent': 'JioTV-Max-Desktop/2.4.0 (Windows NT 10.0; Win64; x64)'
+    }
+  })
+
+  if (!response.ok) {
+    return { ok: false, reason: \`HTTP \${response.status} returned by CDN.\` }
+  }
+
+  const manifest = await response.text()
+  const isHls = manifest.trimStart().startsWith('#EXTM3U')
+
+  return {
+    ok: true,
+    format: isHls ? 'hls' : 'dash',
+    hasDrm: manifest.includes('KEYFORMAT="com.widevine"'),
+    variantsCount: manifest.split('#EXT-X-STREAM-INF').length - 1
+  }
+}`
+    },
+    'jio-service.ts': {
+      path: 'src/main/jio-service.ts',
+      breadcrumbs: [
+        '<span>src</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span>main</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-active">jio-service.ts</span>',
+        '<span class="bc-sep">&rsaquo;</span>',
+        '<span class="bc-fn">JioService</span>'
+      ].join(' '),
+      lang: 'ts',
+      mode: 'TypeScript',
+      code: `import { app } from 'electron'
+import type { AuthSession, Channel, StreamInfo } from '@shared/types'
+import { API_UA, buildPlaybackHeaders } from './jio-headers'
+
+const API = {
+  loginSendOtp: 'https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/send',
+  loginVerifyOtp: 'https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/verify',
+  channelsAuthed: 'https://jiotv.data.cdn.jio.com/apis/v3.1/getMobileChannelList/get',
+  playback: 'https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl?langId=6'
+}
+
+/** Authenticated JioTV API client with OTP flow and playback ticket signing */
+export class JioService {
+  private session: AuthSession | null = null
+
+  async sendOtp(mobileNumber: string): Promise<boolean> {
+    const res = await fetch(API.loginSendOtp, {
+      method: 'POST',
+      headers: { 'User-Agent': API_UA, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: mobileNumber })
+    })
+    return res.ok
+  }
+
+  async getPlaybackUrl(channelId: string): Promise<string> {
+    const headers = buildPlaybackHeaders(this.session?.ssoToken)
+    const res = await fetch(\`\${API.playback}&channelId=\${channelId}\`, { headers })
+    const data = await res.json()
+    return data.result
+  }
+}`
+    }
+  }
+
+  let activeFileName = 'media-relay.ts'
+
+  function highlightCode(code, lang) {
+    const escaped = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+    if (lang === 'json') {
+      return escaped.replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        function (match) {
+          let cls = 'syn-num'
+          if (/^"/.test(match)) {
+            cls = /:$/.test(match) ? 'syn-prop' : 'syn-str'
+          } else if (/true|false/.test(match)) {
+            cls = 'syn-kw'
+          }
+          return '<span class="' + cls + '">' + match + '</span>'
+        }
+      )
+    }
+
+    const tokens = []
+    let text = escaped
+
+    text = text.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, (m) => {
+      tokens.push('<span class="syn-cm">' + m + '</span>')
+      return `__TOKEN_${tokens.length - 1}__`
+    })
+
+    text = text.replace(/("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`)/g, (m) => {
+      tokens.push('<span class="syn-str">' + m + '</span>')
+      return `__TOKEN_${tokens.length - 1}__`
+    })
+
+    text = text.replace(
+      /\b(import|export|from|class|interface|async|await|function|return|const|let|var|type|new|if|else|throw|try|catch|private|public|protected|readonly)\b/g,
+      '<span class="syn-kw">$1</span>'
+    )
+
+    text = text.replace(
+      /\b(string|number|boolean|any|void|null|undefined|Record|Promise|Server|Map|RelaySession|BrowserWindow|Channel|StreamInfo|App|Error)\b/g,
+      '<span class="syn-type">$1</span>'
+    )
+
+    text = text.replace(/\b(\d+)\b/g, '<span class="syn-num">$1</span>')
+
+    text = text.replace(/__TOKEN_(\d+)__/g, (_, idx) => tokens[Number(idx)])
+
+    return text
+  }
+
+  function renderEditor() {
+    if (!vsCodeInput || !vsCodeHighlight || !vsCodeGutter) return
+    const file = vsCodeFiles[activeFileName]
+    if (!file) return
+
+    const code = vsCodeInput.value
+    file.code = code
+
+    const lines = code.split('\n')
+    vsCodeGutter.innerHTML = lines.map((_, i) => `<span>${i + 1}</span>`).join('')
+    vsCodeHighlight.innerHTML = highlightCode(code, file.lang) + '\n'
+  }
+
+  function switchVsCodeFile(fileName) {
+    if (!vsCodeFiles[fileName]) return
+    if (vsCodeInput) {
+      vsCodeFiles[activeFileName].code = vsCodeInput.value
+    }
+    activeFileName = fileName
+    const file = vsCodeFiles[fileName]
+
+    vsCodeTabs.forEach((tab) => {
+      if (tab.getAttribute('data-file') === fileName) {
+        tab.classList.add('active')
+      } else {
+        tab.classList.remove('active')
+      }
+    })
+
+    if (vsCodeTitle) {
+      vsCodeTitle.textContent = `${fileName} — JioTV-Max-Windows — Visual Studio Code`
+    }
+    if (vsCodeBreadcrumbs) {
+      vsCodeBreadcrumbs.innerHTML = file.breadcrumbs
+    }
+    if (vsCodeLangMode) {
+      vsCodeLangMode.textContent = file.mode
+    }
+    if (vsCodeInput) {
+      vsCodeInput.value = file.code
+      renderEditor()
+      updateCursorPosition()
+    }
+  }
+
+  function updateCursorPosition() {
+    if (!vsCodeInput || !vsCodeLnCol) return
+    const textBefore = vsCodeInput.value.substring(0, vsCodeInput.selectionStart)
+    const lines = textBefore.split('\n')
+    const ln = lines.length
+    const col = lines[lines.length - 1].length + 1
+    vsCodeLnCol.textContent = `Ln ${ln}, Col ${col}`
+  }
+
+  if (vsCodeInput) {
+    vsCodeInput.value = vsCodeFiles[activeFileName].code
+    renderEditor()
+
+    vsCodeInput.addEventListener('input', () => {
+      renderEditor()
+      updateCursorPosition()
+    })
+
+    vsCodeInput.addEventListener('scroll', () => {
+      if (vsCodeHighlight) {
+        vsCodeHighlight.scrollTop = vsCodeInput.scrollTop
+        vsCodeHighlight.scrollLeft = vsCodeInput.scrollLeft
+      }
+      if (vsCodeGutter) {
+        vsCodeGutter.scrollTop = vsCodeInput.scrollTop
+      }
+    })
+
+    vsCodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const start = vsCodeInput.selectionStart
+        const end = vsCodeInput.selectionEnd
+        const val = vsCodeInput.value
+        vsCodeInput.value = val.substring(0, start) + '  ' + val.substring(end)
+        vsCodeInput.selectionStart = vsCodeInput.selectionEnd = start + 2
+        renderEditor()
+        updateCursorPosition()
+      }
+    })
+
+    ;['keyup', 'click', 'focus', 'select'].forEach((evt) => {
+      vsCodeInput.addEventListener(evt, updateCursorPosition)
+    })
+  }
+
+  vsCodeTabs.forEach((tab) => {
+    tab.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const fileName = tab.getAttribute('data-file')
+      if (fileName) {
+        switchVsCodeFile(fileName)
+      }
+    })
+  })
 
   // ─── "Show Why?" Technical Deep Dive Modal ──────────────────────────────
   const whyModal = document.getElementById('why-modal')
@@ -353,3 +869,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })
 })
+

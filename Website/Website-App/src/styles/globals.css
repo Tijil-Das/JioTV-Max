@@ -1,0 +1,425 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Design System: "Black Screening Room / Single Red Light"
+   bg: #000000 | accent: #E11D2E | text: neutral grays
+   ------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: dark;
+  --titlebar-height: 36px;
+  --sidebar-width:   72px;
+  --safe-bottom:     24px;
+  /* Horizontal gutter shared by page headers, rows and the hero. */
+  --gutter:          48px;
+  /* Addendum 4 §4 channel tile width */
+  --tile:            clamp(144px, 11.6vw, 176px);
+
+  /* Color tokens — use these in inline styles when Tailwind utilities aren't enough */
+  --bg:              #000000;
+  --surface-1:       #0A0A0B;
+  --surface-2:       #111113;
+  --surface-3:       #18181B;
+  --hairline:        rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+
+  --text-1: #F4F4F5;
+  --text-2: #A1A1A6;
+  /* Legibility: 5.6:1 on #0E0E10. Placeholders/disabled only, 13px+. */
+  --text-3: #8A8A91;
+
+  --red:       #E11D2E;
+  --red-hover: #EF3340;
+  --red-press: #B8121F;
+  --red-tint:  rgba(225, 29, 46, 0.12);
+  --red-line:  rgba(225, 29, 46, 0.55);
+
+  /* Channel plates (Addendum 3 §3): never lighter than #151518 at rest/hover. */
+  --plate-rest:         #0E0E10;
+  --plate-hover:        #151518;
+  --plate-border:       rgba(255, 255, 255, 0.07);
+
+  /* Glass recipe — used only for player overlay, popovers, and scrolled top bar */
+  --glass-bg:     rgba(10, 10, 11, 0.72);
+  --glass-blur:   blur(28px) saturate(140%);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --gutter: 16px;
+    --tile: clamp(120px, 32vw, 148px);
+    --sidebar-width: 0px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  :root {
+    --gutter: 24px;
+    --tile: clamp(132px, 16vw, 160px);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text-1);
+  font-family: 'Inter Variable', Inter, 'Segoe UI', sans-serif;
+  /* tabular numerals for times and channel numbers */
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Pure black root — no colored washes, no gradients on the chrome */
+#root {
+  background: var(--bg);
+}
+
+/* Removed: film grain, colored radial washes, gradient backgrounds */
+
+::selection {
+  color: #fff;
+  background: var(--red-tint);
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+button,
+a,
+input,
+select,
+[role='button'] {
+  -webkit-app-region: no-drag;
+}
+
+button:focus,
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+
+:focus-visible {
+  outline: none;
+}
+
+/* -------------------------------------------------------------------------
+   Glass — used in exactly three places:
+   player overlay, floating menus/popovers, top bar when scrolled
+   ------------------------------------------------------------------------- */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -12px rgba(0, 0, 0, 0.9);
+}
+
+/* -------------------------------------------------------------------------
+   Drag regions
+   ------------------------------------------------------------------------- */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* -------------------------------------------------------------------------
+   Scrollbars — minimal, neutral
+   ------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#app-scroll::-webkit-scrollbar-track {
+  margin-top: 36px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Soft edge mask for horizontal rows */
+.row-mask {
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+
+@media (max-width: 640px) {
+  .row-mask {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .row-mask {
+    mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Shimmer skeleton — neutral, no color
+   ------------------------------------------------------------------------- */
+.shimmer-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Shimmering plate (1.4s, opacity only) with no placeholder logo shape */
+.shimmer-plate {
+  animation: shimmerOpacity 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmerOpacity {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+/* -------------------------------------------------------------------------
+   LIVE dot — white dot that pulses; only its container is red
+   ------------------------------------------------------------------------- */
+.live-dot {
+  position: relative;
+  display: inline-flex;
+  height: 5px;
+  width: 5px;
+  border-radius: 999px;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #fff;
+  animation: livePulse 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* Player: hide cursor when idle */
+.player-idle {
+  cursor: none;
+}
+
+/* Suppress native video controls */
+video::-webkit-media-controls {
+  display: none !important;
+}
+
+/* -------------------------------------------------------------------------
+   DVR seek bar — neutral track, red fill, white thumb
+   ------------------------------------------------------------------------- */
+.dvr-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.dvr-range:hover::-webkit-slider-runnable-track {
+  height: 5px;
+}
+
+.dvr-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: none;
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dvr-range:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+  margin-top: -3.5px;
+}
+
+.dvr-range:disabled::-webkit-slider-thumb {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* -------------------------------------------------------------------------
+   Miniplayer volume slider — dynamic track fill, red circular thumb
+   ------------------------------------------------------------------------- */
+.mini-volume-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.mini-volume-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--track-bg, rgba(255, 255, 255, 0.25));
+}
+
+.mini-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 9999px;
+  background: #E11D2E;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.mini-volume-range:hover::-webkit-slider-thumb,
+.mini-volume-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+  background: #EF3340;
+}
+
+.mini-volume-range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--track-bg, rgba(255, 255, 255, 0.25));
+}
+
+.mini-volume-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: none;
+  background: #E11D2E;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+
+/* Hero auto-advance progress bar */
+.hero-progress {
+  transform-origin: left center;
+  animation: heroProgress 8s linear forwards;
+}
+
+.hero-progress-paused {
+  animation-play-state: paused;
+}
+
+/* -------------------------------------------------------------------------
+   Keyframes
+   ------------------------------------------------------------------------- */
+@keyframes heroProgress {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes livePulse {
+  0%   { transform: scale(1);   opacity: 0.9; }
+  70%  { transform: scale(2.5); opacity: 0; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@keyframes shake {
+  0%,  100% { transform: translateX(0); }
+  20%        { transform: translateX(-5px); }
+  40%        { transform: translateX(5px); }
+  60%        { transform: translateX(-3px); }
+  80%        { transform: translateX(3px); }
+}
+
+/* fade-up page entry — 12px, 280ms */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeUp 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-shake {
+  animation: shake 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* -------------------------------------------------------------------------
+   Accessibility
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .hero-progress {
+    animation: none;
+    transform: scaleX(1);
+  }
+}

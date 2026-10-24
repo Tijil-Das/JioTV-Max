@@ -41,7 +41,7 @@ async function run() {
     'electron-builder',
     '--win',
     target,
-    `--config.electronDist=${castlabsDir}`,
+    `--config.electronDist="${castlabsDir}"`,
     ...extraArgs
   ]
 

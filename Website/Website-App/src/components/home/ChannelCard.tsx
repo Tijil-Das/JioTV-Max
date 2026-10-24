@@ -1,14 +1,12 @@
 import { memo, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Heart } from 'lucide-react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
 import { getNowNext, getProgress } from '@/lib/time'
 import { initials } from '@/lib/color'
 import { useNow } from '@/hooks/useNow'
-import { useChannelStore } from '@/store/useChannelStore'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 
 interface ChannelCardProps {
@@ -40,9 +38,6 @@ export const ChannelCard = memo(function ChannelCard({
   const navigate = useNavigate()
   const now = useNow()
   const reduceMotion = useReducedMotion()
-  const favorites = useChannelStore((state) => state.favorites)
-  const toggleFavorite = useChannelStore((state) => state.toggleFavorite)
-  const isFavorite = favorites.includes(channel.id)
 
   const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
   const progress = current ? getProgress(current, now) : 0
@@ -109,25 +104,6 @@ export const ChannelCard = memo(function ChannelCard({
             className="absolute inset-0 z-10 cursor-pointer rounded-[16px] focus:outline-none"
             aria-label={ariaLabel}
           />
-
-          {/* Favorite button */}
-          <button
-            type="button"
-            onClick={() => toggleFavorite(channel.id)}
-            className="absolute right-2 top-2 z-30 flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red-line)] hover:bg-white/10"
-            aria-label={isFavorite ? `Remove ${channel.name} from My List` : `Add ${channel.name} to My List`}
-            aria-pressed={isFavorite}
-          >
-            <Heart
-              className={cn(
-                'h-4 w-4',
-                isFavorite
-                  ? 'fill-[var(--red)] text-[var(--red)]'
-                  : 'text-white'
-              )}
-              strokeWidth={2}
-            />
-          </button>
         </div>
       </motion.div>
 

@@ -311,7 +311,16 @@ export default function App(): JSX.Element {
       } else if (tabId === 'tab-player') {
         navigate('/watch/ch-specimen-1')
       } else if (tabId === 'tab-miniplayer') {
-        navigate('/watch/ch-specimen-1?mini=true')
+        // Stop live player and mute any videos in main frame to prevent double audio with miniplayer
+        document.querySelectorAll('video').forEach((v) => {
+          try {
+            v.pause()
+            v.muted = true
+          } catch {}
+        })
+        if (location.pathname.startsWith('/watch')) {
+          navigate('/')
+        }
       }
     }
 

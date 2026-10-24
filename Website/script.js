@@ -287,6 +287,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tabId === 'tab-miniplayer') {
       if (appView) appView.style.display = 'none'
       if (miniView) miniView.style.display = 'flex'
+
+      // Instantly pause and stop any playback in the main app frame
+      if (appFrame && appFrame.contentWindow) {
+        try {
+          appFrame.contentWindow.postMessage({
+            type: 'JIOTV_NAVIGATE',
+            tabId: 'tab-miniplayer'
+          }, '*')
+          const appDoc = appFrame.contentDocument || appFrame.contentWindow.document
+          if (appDoc) {
+            appDoc.querySelectorAll('video').forEach((v) => {
+              v.pause()
+              v.muted = true
+            })
+          }
+        } catch {}
+      }
+
       const miniFrame = document.getElementById('miniplayer-embed-frame')
       if (miniFrame) {
         const miniRoute = tab.getAttribute('data-route') || '#/watch/ch-specimen-1?mini=true'

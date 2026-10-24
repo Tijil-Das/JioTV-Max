@@ -106,12 +106,7 @@ export const useChannelStore = create<ChannelState>()(
         set((state) => ({ epg: { ...state.epg, [channel.id]: programs } }))
       },
 
-      toggleFavorite: (channelId) =>
-        set((state) => ({
-          favorites: state.favorites.includes(channelId)
-            ? state.favorites.filter((id) => id !== channelId)
-            : [channelId, ...state.favorites]
-        })),
+      toggleFavorite: () => {},
 
       clearFavorites: () => set({ favorites: [] }),
 

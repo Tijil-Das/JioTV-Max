@@ -222,34 +222,110 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3500)
   }
 
-  // ─── App Preview Showcase Tabs ──────────────────────────────────────────
-  const showcaseTabs = document.querySelectorAll('.showcase-tab')
-  const showcasePanels = document.querySelectorAll('.showcase-panel')
+  // ─── App Preview Showcase Tabs & Auto-Rotation ───────────────────────────
+  const showcaseTabs = Array.from(document.querySelectorAll('.showcase-tab'))
+  const showcasePanels = Array.from(document.querySelectorAll('.showcase-panel'))
+  const showcaseSection = document.getElementById('preview')
 
-  showcaseTabs.forEach((tab) => {
+  let currentTabIndex = 0
+  let autoRotateTimer = null
+  const ROTATE_INTERVAL_MS = 5000
+  let isShowcaseHovered = false
+  let isShowcaseVisible = true
+
+  function activateTab(index) {
+    if (index < 0 || index >= showcaseTabs.length) return
+    currentTabIndex = index
+
+    const activeTab = showcaseTabs[currentTabIndex]
+    const targetId = activeTab.getAttribute('data-target')
+    if (!targetId) return
+
+    showcaseTabs.forEach((t) => {
+      t.classList.remove('active')
+      t.setAttribute('aria-selected', 'false')
+    })
+    showcasePanels.forEach((p) => {
+      p.classList.remove('active')
+      p.hidden = true
+    })
+
+    // Force animation restart on active tab progress bar
+    void activeTab.offsetWidth
+    activeTab.classList.add('active')
+    activeTab.setAttribute('aria-selected', 'true')
+
+    const targetPanel = document.getElementById(targetId)
+    if (targetPanel) {
+      targetPanel.classList.add('active')
+      targetPanel.hidden = false
+    }
+  }
+
+  function startAutoRotation() {
+    stopAutoRotation()
+    autoRotateTimer = setInterval(() => {
+      if (isShowcaseHovered || !isShowcaseVisible) return
+      const nextIndex = (currentTabIndex + 1) % showcaseTabs.length
+      activateTab(nextIndex)
+    }, ROTATE_INTERVAL_MS)
+  }
+
+  function stopAutoRotation() {
+    if (autoRotateTimer) {
+      clearInterval(autoRotateTimer)
+      autoRotateTimer = null
+    }
+  }
+
+  function resetAutoRotation() {
+    stopAutoRotation()
+    startAutoRotation()
+  }
+
+  showcaseTabs.forEach((tab, index) => {
     tab.addEventListener('click', () => {
-      const targetId = tab.getAttribute('data-target')
-      if (!targetId) return
-
-      showcaseTabs.forEach((t) => {
-        t.classList.remove('active')
-        t.setAttribute('aria-selected', 'false')
-      })
-      showcasePanels.forEach((p) => {
-        p.classList.remove('active')
-        p.hidden = true
-      })
-
-      tab.classList.add('active')
-      tab.setAttribute('aria-selected', 'true')
-
-      const targetPanel = document.getElementById(targetId)
-      if (targetPanel) {
-        targetPanel.classList.add('active')
-        targetPanel.hidden = false
-      }
+      activateTab(index)
+      resetAutoRotation()
     })
   })
+
+  if (showcaseSection) {
+    showcaseSection.addEventListener('mouseenter', () => {
+      isShowcaseHovered = true
+      showcaseSection.classList.add('is-paused')
+    })
+
+    showcaseSection.addEventListener('mouseleave', () => {
+      isShowcaseHovered = false
+      showcaseSection.classList.remove('is-paused')
+    })
+
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            isShowcaseVisible = entry.isIntersecting
+          })
+        },
+        { threshold: 0.2 }
+      )
+      observer.observe(showcaseSection)
+    }
+  }
+
+  startAutoRotation()
+
+  // ─── Simulated Windows Taskbar Live Clock ────────────────────────────────
+  const clockEl = document.getElementById('taskbar-live-clock')
+  if (clockEl) {
+    const updateLiveClock = () => {
+      const now = new Date()
+      clockEl.textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    }
+    updateLiveClock()
+    setInterval(updateLiveClock, 10000)
+  }
 
   // ─── "Show Why?" Technical Deep Dive Modal ──────────────────────────────
   const whyModal = document.getElementById('why-modal')

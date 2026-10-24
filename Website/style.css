@@ -323,6 +323,8 @@ a {
 }
 
 .showcase-tab {
+  position: relative;
+  overflow: hidden;
   background: transparent;
   border: none;
   color: var(--text-2);
@@ -332,7 +334,7 @@ a {
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
 }
 
@@ -345,8 +347,30 @@ a {
   color: #FFFFFF;
 }
 
+.showcase-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2.5px;
+  background: var(--red);
+  transform-origin: left;
+  animation: tabProgress 5s linear forwards;
+}
+
+.section-showcase.is-paused .showcase-tab.active::after {
+  animation-play-state: paused;
+}
+
+@keyframes tabProgress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 .showcase-viewport {
-  max-width: 1040px;
+  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -356,12 +380,18 @@ a {
 
 .showcase-panel.active {
   display: block;
-  animation: showcaseFade 0.2s ease;
+  animation: showcaseFade 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes showcaseFade {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .showcase-window {
@@ -371,28 +401,250 @@ a {
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
   line-height: 0;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Original Native Sizes */
+#panel-app .showcase-window {
+  max-width: 1099px;
+}
+
+#panel-player .showcase-window {
+  max-width: 1088px;
+}
+
+#panel-catalogue .showcase-window {
+  max-width: 1365px;
 }
 
 .showcase-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ─── Simulated Windows Desktop Canvas for Miniplayer ─────────────────── */
+.windows-desktop-frame {
+  position: relative;
+  width: 100%;
+  max-width: 1088px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 10;
+  min-height: 480px;
+  background: radial-gradient(ellipse at 50% 30%, #151d30 0%, #0c101a 55%, #05070c 100%);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Background working app */
+.desktop-bg-app {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 180px;
+  bottom: 80px;
+  background: rgba(18, 18, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.desktop-app-titlebar {
+  height: 28px;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.desktop-app-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.desktop-app-dot.dot-red { background: #FF5F56; }
+.desktop-app-dot.dot-yellow { background: #FFBD2E; }
+.desktop-app-dot.dot-green { background: #27C93F; }
+
+.desktop-app-title {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 8px;
+  font-family: monospace;
+}
+
+.desktop-app-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mock-code-line {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+.mock-code-line.line-1 { width: 45%; }
+.mock-code-line.line-2 { width: 75%; }
+.mock-code-line.line-3 { width: 60%; }
+.mock-code-line.line-4 { width: 30%; }
+.mock-code-line.line-5 { width: 85%; }
+
+/* Floating Miniplayer in the corner */
+.desktop-miniplayer-floating {
+  position: absolute;
+  right: 28px;
+  bottom: 64px;
+  width: 380px;
+  max-width: calc(100% - 40px);
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  z-index: 10;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.desktop-miniplayer-floating:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.miniplayer-pip-header {
+  height: 24px;
+  background: rgba(18, 18, 22, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 10.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.pip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22C55E;
+  display: inline-block;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+  animation: pipPulse 2s infinite ease-in-out;
+}
+
+@keyframes pipPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.pip-res {
+  color: var(--text-3);
+  font-size: 10px;
+  font-family: monospace;
+}
+
+.desktop-miniplayer-img {
   width: 100%;
   height: auto;
   display: block;
 }
 
-.showcase-window-mini {
+/* Windows Taskbar */
+.windows-taskbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  background: rgba(14, 16, 22, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 5;
+}
+
+.taskbar-left,
+.taskbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.taskbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.taskbar-icon {
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 54px 24px;
-  min-height: 400px;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.03) 0%, transparent 70%), var(--surface-1);
+  border-radius: 4px;
+  transition: background 0.15s ease;
+  cursor: default;
+  position: relative;
 }
 
-.showcase-img-mini {
-  max-width: 440px;
-  width: 100%;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 1px var(--hairline-strong);
+.taskbar-icon:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.taskbar-icon.active-app {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.active-dot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 2.5px;
+  background: var(--red);
+  border-radius: 2px;
+}
+
+.taskbar-search-mock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-right: 4px;
 }
 
 .showcase-caption {
@@ -673,9 +925,31 @@ a {
     font-size: 12.5px;
     text-align: center;
   }
-  .showcase-window-mini {
-    min-height: 220px;
-    padding: 24px 16px;
+  .windows-desktop-frame {
+    aspect-ratio: auto;
+    min-height: 320px;
+  }
+  .desktop-bg-app {
+    right: 20px;
+    bottom: 50px;
+    opacity: 0.3;
+  }
+  .desktop-miniplayer-floating {
+    right: 12px;
+    bottom: 50px;
+    width: 250px;
+  }
+  .windows-taskbar {
+    height: 36px;
+    padding: 0 10px;
+  }
+  .taskbar-left,
+  .taskbar-search-mock {
+    display: none;
+  }
+  .taskbar-icon {
+    width: 26px;
+    height: 26px;
   }
   .showcase-caption {
     font-size: 13px;
@@ -747,6 +1021,11 @@ a {
   .showcase-tab {
     font-size: 11.5px;
     padding: 7px 4px;
+  }
+  .desktop-miniplayer-floating {
+    width: 210px;
+    right: 8px;
+    bottom: 44px;
   }
 }
 

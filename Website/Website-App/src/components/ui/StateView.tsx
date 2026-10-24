@@ -17,7 +17,7 @@ export function PageTransition({
       initial="hidden"
       animate="visible"
       exit="exit"
-      className={cn('min-h-full', className)}
+      className={cn('min-h-full flex-1 flex flex-col', className)}
     >
       {children}
     </motion.div>

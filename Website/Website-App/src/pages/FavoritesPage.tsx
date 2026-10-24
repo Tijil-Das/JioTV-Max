@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart } from 'lucide-react'
+import { cn } from '@/lib/cn'
 import { useChannelStore } from '@/store/useChannelStore'
 import { PageTransition, StateView } from '@/components/ui/StateView'
 import { ChannelCard } from '@/components/home/ChannelCard'
@@ -19,7 +20,7 @@ export function FavoritesPage(): JSX.Element {
   )
 
   return (
-    <PageTransition>
+    <PageTransition className="flex-1 flex flex-col min-h-[calc(100vh-100px)]">
       <div className="px-4 sm:px-8 pb-4 sm:pb-6 pt-[76px] sm:pt-[92px]">
         <div className="flex items-center gap-3.5 sm:gap-4">
           <span className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl border border-live/25 bg-live/10 text-live">
@@ -36,7 +37,7 @@ export function FavoritesPage(): JSX.Element {
         </div>
       </div>
 
-      <div className="px-4 sm:px-8 pb-10">
+      <div className={cn('px-4 sm:px-8 pb-16', favoriteChannels.length === 0 ? 'flex-1 flex flex-col items-center justify-center min-h-[380px]' : '')}>
         {favoriteChannels.length === 0 ? (
           <StateView
             title="Install the JioTV Max app to explore more."

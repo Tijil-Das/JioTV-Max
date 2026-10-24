@@ -60,14 +60,14 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
         ref={mainRef}
         id="app-scroll"
         className={cn(
-          'relative min-w-0 flex-1',
+          'relative min-w-0 flex-1 flex flex-col',
           isPlayer ? 'overflow-hidden bg-black' : 'overflow-y-auto overscroll-auto'
         )}
       >
         {!isPlayer ? (
           <>
             <TopBar />
-            <div className="relative pb-[58px] sm:pb-0">{children}</div>
+            <div className="relative flex-1 flex flex-col min-h-0 pb-[58px] sm:pb-0">{children}</div>
             <MobileNavBar />
           </>
         ) : (

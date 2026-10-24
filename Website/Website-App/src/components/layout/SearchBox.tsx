@@ -98,7 +98,7 @@ export function SearchBox(): JSX.Element {
   return (
     <div
       ref={containerRef}
-      className="relative no-drag w-full max-w-[min(380px,calc(100vw-24px))] sm:focus-within:max-w-[500px] transition-[max-width] duration-[200ms]"
+      className="relative no-drag w-full max-w-[min(380px,calc(100vw-24px))] sm:w-[380px] sm:max-w-none sm:focus-within:w-[500px] transition-[width,max-width] duration-[200ms]"
     >
       <div
         className={cn(

@@ -44,7 +44,7 @@ export function FavoritesPage(): JSX.Element {
             onAction={downloadLatestApp}
           />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(clamp(120px,36vw,176px),1fr))] gap-3 sm:gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(var(--tile),1fr))] gap-3 sm:gap-4">
             {favoriteChannels.map((channel) => (
               <ChannelCard
                 key={channel.id}

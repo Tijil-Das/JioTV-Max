@@ -130,9 +130,13 @@ export function Hero(): JSX.Element {
 
   const heroScale = useMemo(() => {
     // 1100px is the reference desktop hero width (scale 1.0)
-    // 320px is minimum hero width on mobile window (scale 0.50)
-    const clamped = Math.max(320, Math.min(1100, heroWidth))
-    return Number((0.50 + ((clamped - 320) / (1100 - 320)) * 0.50).toFixed(3))
+    // 440px is minimum hero width on desktop window (scale 0.58)
+    if (heroWidth >= 440) {
+      const clamped = Math.min(1100, heroWidth)
+      return Number((0.58 + ((clamped - 440) / (1100 - 440)) * 0.42).toFixed(3))
+    }
+    const clampedMobile = Math.max(300, heroWidth)
+    return Number((0.48 + ((clampedMobile - 300) / (440 - 300)) * 0.10).toFixed(3))
   }, [heroWidth])
 
   const channelById = useMemo(
@@ -400,7 +404,7 @@ export function Hero(): JSX.Element {
             expanded ? 'overflow-visible' : 'overflow-hidden'
           )}
         >
-          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px] px-0 sm:px-2 md:px-8 overflow-visible">
+          <div className="relative mx-auto flex items-center justify-center w-full max-w-[1540px] px-2 sm:px-6 md:px-8 overflow-visible">
             {/* Left Channel Skip Arrow (in free space to the left of the video container) */}
             {verifiedOrdered.length > 1 ? (
               <button
@@ -420,7 +424,7 @@ export function Hero(): JSX.Element {
                   transition: 'transform 250ms ease-out, opacity 250ms ease-out, background-color 200ms ease'
                 }}
                 className={cn(
-                  'mr-1.5 sm:mr-3 md:mr-5 shrink-0 z-30 hidden md:flex',
+                  'mr-1.5 sm:mr-3 md:mr-5 shrink-0 z-30 hidden sm:flex',
                   'items-center justify-center rounded-full',
                   'border border-white/15 bg-white/[0.08] hover:bg-white/[0.22] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
                   'active:scale-95 hover:scale-110 hover:border-white/30',
@@ -456,7 +460,7 @@ export function Hero(): JSX.Element {
                 aspectRatio: '16 / 9',
                 borderRadius: `${Math.max(10, Math.round(24 * heroScale))}px`
               }}
-              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08] w-full md:w-[min(calc(100%-clamp(88px,13vw,150px)),calc(72vh*16/9))]"
+              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08] w-full sm:w-[min(calc(100%-clamp(88px,13vw,150px)),calc(72vh*16/9))]"
             >
             {/* Cinema Stage — 16:9 aspect ratio strictly preserved */}
             <div className="relative h-full w-full overflow-hidden">
@@ -592,7 +596,7 @@ export function Hero(): JSX.Element {
                       animate="center"
                       exit="exit"
                       style={{
-                        maxWidth: `${Math.round(540 * heroScale)}px`,
+                        maxWidth: heroWidth < 500 ? 'calc(100% - 145px)' : `${Math.max(300, Math.round(540 * heroScale))}px`,
                         gap: `${Math.max(4, Math.round(10 * heroScale))}px`
                       }}
                       className="flex flex-col drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]"
@@ -740,9 +744,9 @@ export function Hero(): JSX.Element {
                     const channel = channelById.get(id)
                     if (!channel) return null
                     const selected = id === activeId
-                    const chipSize = Math.max(26, Math.round(52 * heroScale))
-                    const chipPad = Math.max(2, Math.round(7 * heroScale))
-                    const chipRad = Math.max(6, Math.round(12 * heroScale))
+                    const chipSize = heroWidth < 500 ? Math.max(26, Math.round(52 * heroScale)) : Math.max(32, Math.round(52 * heroScale))
+                    const chipPad = heroWidth < 500 ? Math.max(2, Math.round(7 * heroScale)) : Math.max(3, Math.round(7 * heroScale))
+                    const chipRad = heroWidth < 500 ? Math.max(6, Math.round(12 * heroScale)) : Math.max(7, Math.round(12 * heroScale))
                     return (
                       <div key={id} className="relative">
                         {tooltipId === id ? (
@@ -843,7 +847,7 @@ export function Hero(): JSX.Element {
                 transition: 'transform 250ms ease-out, opacity 250ms ease-out, background-color 200ms ease'
               }}
               className={cn(
-                'ml-1.5 sm:ml-3 md:ml-5 shrink-0 z-30 hidden md:flex',
+                'ml-1.5 sm:ml-3 md:ml-5 shrink-0 z-30 hidden sm:flex',
                 'items-center justify-center rounded-full',
                 'border border-white/15 bg-white/[0.08] hover:bg-white/[0.22] text-white backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.65)]',
                 'active:scale-95 hover:scale-110 hover:border-white/30',

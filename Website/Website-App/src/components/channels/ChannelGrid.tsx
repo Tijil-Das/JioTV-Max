@@ -120,7 +120,7 @@ export function ChannelGrid({
           description="Clear a filter or two and the wall will fill up again."
         />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(clamp(120px,36vw,160px),1fr))] gap-3 sm:gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(var(--tile),1fr))] gap-3 sm:gap-4">
           {visible.map((channel) => (
             <ChannelCard key={channel.id} channel={channel} programs={epg[channel.id]} fluid />
           ))}

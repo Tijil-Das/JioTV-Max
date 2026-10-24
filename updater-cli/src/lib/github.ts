@@ -279,17 +279,28 @@ export async function getAverageRunDuration(
   }
 }
 
-/** Get the SHA of a tag (to find the run). */
+/** Get the commit SHA of a tag (peeling annotated tags so it matches workflow head_sha). */
 export async function getTagSha(
   owner: string,
   repo: string,
   tag: string
 ): Promise<string | null> {
   try {
-    const res = await ghFetch<{ object: { sha: string } }>(
+    const res = await ghFetch<{ object: { sha: string; type?: string } }>(
       `${apiBase(owner, repo)}/git/refs/tags/${encodeURIComponent(tag)}`
     )
-    return res.object?.sha || null
+    if (!res.object?.sha) return null
+    if (res.object.type === 'tag') {
+      try {
+        const tagObj = await ghFetch<{ object: { sha: string } }>(
+          `${apiBase(owner, repo)}/git/tags/${res.object.sha}`
+        )
+        return tagObj.object?.sha || res.object.sha
+      } catch {
+        return res.object.sha
+      }
+    }
+    return res.object.sha
   } catch {
     return null
   }

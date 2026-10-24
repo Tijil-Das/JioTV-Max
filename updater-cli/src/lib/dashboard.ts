@@ -295,14 +295,16 @@ export async function startDashboard(opts: DashboardOptions): Promise<DashboardR
           runs = await listWorkflowRuns(owner, repo, workflowFile, tagSha).catch(() => [])
         }
         if (runs.length === 0) {
-          runs = await listWorkflowRuns(owner, repo, workflowFile, { branch: tag }).catch(() => [])
-        }
-        if (runs.length === 0) {
-          const allRuns = await listWorkflowRuns(owner, repo, workflowFile).catch(() => [])
-          runs = allRuns.filter((r) => r.head_branch === tag || (tagSha && r.head_sha === tagSha))
+          const branchRuns = await listWorkflowRuns(owner, repo, workflowFile, { branch: tag }).catch(() => [])
+          runs = branchRuns.filter((r) => {
+            if (tagSha && r.head_sha === tagSha) return true
+            // Avoid picking stale completed runs from previous attempts
+            return r.status !== 'completed' || (new Date(r.created_at).getTime() > startMs - 60_000)
+          })
         }
         if (runs.length > 0) {
-          run = runs[0]
+          const matched = tagSha ? runs.find((r) => r.head_sha === tagSha) : null
+          run = matched || runs[0]
           runId = run.id
           break
         }

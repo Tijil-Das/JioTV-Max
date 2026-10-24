@@ -40,7 +40,7 @@ function isActive(pathname: string, to: string): boolean {
  * Active state: 2px red left bar + text-1. No filled background behind active icon.
  * Icons: 20px, 1.5px stroke, text-3 default → text-1 on hover.
  */
-export function Sidebar(): JSX.Element {
+export function Sidebar({ className }: { className?: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
@@ -54,7 +54,10 @@ export function Sidebar(): JSX.Element {
   ]
 
   return (
-    <div className="relative z-40 w-[72px] shrink-0" onMouseLeave={() => setExpanded(false)}>
+    <div
+      className={cn('relative z-40 w-[72px] h-full shrink-0', className)}
+      onMouseLeave={() => setExpanded(false)}
+    >
       <motion.nav
         aria-label="Primary"
         onMouseEnter={() => setExpanded(true)}

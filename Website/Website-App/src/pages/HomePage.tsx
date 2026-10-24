@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import type { Channel, ChannelCategory } from '@shared/types'
 import { useChannelStore } from '@/store/useChannelStore'
@@ -87,8 +88,25 @@ export function HomePage(): JSX.Element {
   const favorites = useChannelStore((state) => state.favorites)
   const source = useChannelStore((state) => state.source)
   const fetchCatalogue = useChannelStore((state) => state.fetchCatalogue)
+  const location = useLocation()
   const mode = useSettingsStore((state) => state.mode)
   const showHero = useSettingsStore((state) => state.showHero)
+
+  useEffect(() => {
+    const root = document.getElementById('app-scroll')
+    if ((location.state as any)?.scrollToCatalogue) {
+      const scrollCatalogue = () => {
+        const el = document.getElementById('catalogue-section')
+        if (el && root) {
+          root.scrollTo({ top: el.offsetTop - 16, behavior: 'smooth' })
+        } else if (root) {
+          root.scrollTo({ top: 380, behavior: 'smooth' })
+        }
+      }
+      const t = setTimeout(scrollCatalogue, 80)
+      return () => clearTimeout(t)
+    }
+  }, [location.state])
 
   useEffect(() => {
     const root = document.getElementById('app-scroll')
@@ -107,8 +125,8 @@ export function HomePage(): JSX.Element {
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === 'JIOTV_SCROLL_TO_CATALOGUE') {
         const el = document.getElementById('catalogue-section')
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        if (el && root) {
+          root.scrollTo({ top: el.offsetTop - 16, behavior: 'smooth' })
         } else if (root) {
           root.scrollTo({ top: 380, behavior: 'smooth' })
         }

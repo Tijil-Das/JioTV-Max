@@ -265,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   let currentTabIndex = 0
+  let ignoreHostSyncUntil = 0
 
   function activateTab(index, updateRoute = true) {
     if (!showcaseTabs.length || index < 0 || index >= showcaseTabs.length) return
@@ -278,6 +279,10 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     tab.classList.add('active')
     tab.setAttribute('aria-selected', 'true')
+
+    if (updateRoute) {
+      ignoreHostSyncUntil = Date.now() + 800
+    }
 
     if (tabId === 'tab-miniplayer') {
       if (appView) appView.style.display = 'none'
@@ -301,30 +306,16 @@ document.addEventListener('DOMContentLoaded', () => {
           appView.classList.remove('is-player')
         }
       }
-      if (appFrame && updateRoute) {
-        try {
-          if (appFrame.contentWindow && appFrame.contentWindow.location.pathname.includes('index.html')) {
-            appFrame.contentWindow.location.hash = route
-          } else {
-            appFrame.src = 'app/index.html' + route
-          }
-        } catch {
-          appFrame.src = 'app/index.html' + route
-        }
-      }
 
-      if (tabId === 'tab-catalogue' && appFrame && appFrame.contentWindow) {
-        setTimeout(() => {
-          try {
-            appFrame.contentWindow.postMessage({ type: 'JIOTV_SCROLL_TO_CATALOGUE' }, '*')
-          } catch {}
-        }, 100)
-      } else if (tabId === 'tab-app' && appFrame && appFrame.contentWindow) {
-        setTimeout(() => {
-          try {
-            appFrame.contentWindow.postMessage({ type: 'JIOTV_SCROLL_TO_TOP' }, '*')
-          } catch {}
-        }, 100)
+      // Direct SPA message navigation — never re-assign appFrame.src on tab clicks to avoid iframe reload
+      if (appFrame && appFrame.contentWindow) {
+        try {
+          appFrame.contentWindow.postMessage({
+            type: 'JIOTV_NAVIGATE',
+            tabId,
+            route
+          }, '*')
+        } catch {}
       }
     }
 
@@ -346,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 1. Synchronize Tab Highlights from app navigation
     if (event.data.type === 'JIOTV_ACTIVE_ROUTE') {
+      if (Date.now() < ignoreHostSyncUntil) return
       const tabId = event.data.tab
       // Ignore background miniplayer notifications if miniView is hidden
       if (tabId === 'tab-miniplayer' && miniView && miniView.style.display === 'none') {

@@ -15,8 +15,11 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
   const isPlayer = location.pathname.startsWith('/watch')
 
   useEffect(() => {
-    if (!isPlayer && mainRef.current) mainRef.current.scrollTop = 0
-  }, [location.pathname, isPlayer])
+    if (!isPlayer && mainRef.current) {
+      if ((location.state as any)?.scrollToCatalogue) return
+      mainRef.current.scrollTop = 0
+    }
+  }, [location.pathname, location.state, isPlayer])
 
   // Scroll chaining: when app hits top/bottom or has no scroll, forward wheel delta to parent website
   useEffect(() => {
@@ -52,11 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
-      {!isPlayer ? (
-        <div className="hidden sm:block shrink-0">
-          <Sidebar />
-        </div>
-      ) : null}
+      {!isPlayer ? <Sidebar className="hidden sm:block" /> : null}
       <main
         ref={mainRef}
         id="app-scroll"

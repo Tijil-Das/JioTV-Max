@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useOnline } from '@/hooks/useOnline'
 import { authService } from '@/services/authService'
 import { getBridge } from '@/services/api'
@@ -46,6 +46,7 @@ const titles: Record<string, string> = {
  */
 export default function App(): JSX.Element {
   const location = useLocation()
+  const navigate = useNavigate()
   const online = useOnline()
   const prefersReducedMotion = useReducedMotion()
   const reduceMotion = useSettingsStore((state) => state.reduceMotion)
@@ -268,10 +269,55 @@ export default function App(): JSX.Element {
         targetTab = 'tab-player'
       } else if (path.startsWith('/category')) {
         targetTab = 'tab-catalogue'
+      } else if (path === '/') {
+        const root = document.getElementById('app-scroll')
+        const isPastHero = root && root.scrollTop >= 280
+        const isCatalogueState = Boolean((location.state as any)?.scrollToCatalogue)
+        if (isPastHero || isCatalogueState) {
+          targetTab = 'tab-catalogue'
+        }
       }
       window.parent.postMessage({ type: 'JIOTV_ACTIVE_ROUTE', tab: targetTab, path }, '*')
     }
-  }, [location.pathname, location.search])
+  }, [location.pathname, location.search, location.state])
+
+  // ── Direct navigation listener from host website tabs ────────────────
+  useEffect(() => {
+    const onNavMessage = (e: MessageEvent) => {
+      if (!e.data || e.data.type !== 'JIOTV_NAVIGATE') return
+      const { tabId } = e.data
+
+      if (tabId === 'tab-catalogue') {
+        if (location.pathname !== '/') {
+          navigate('/', { state: { scrollToCatalogue: true } })
+        } else {
+          const root = document.getElementById('app-scroll')
+          const el = document.getElementById('catalogue-section')
+          if (el && root) {
+            root.scrollTo({ top: el.offsetTop - 16, behavior: 'smooth' })
+          } else if (root) {
+            root.scrollTo({ top: 380, behavior: 'smooth' })
+          }
+        }
+      } else if (tabId === 'tab-app') {
+        if (location.pathname !== '/') {
+          navigate('/')
+        } else {
+          const root = document.getElementById('app-scroll')
+          if (root) {
+            root.scrollTo({ top: 0, behavior: 'smooth' })
+          }
+        }
+      } else if (tabId === 'tab-player') {
+        navigate('/watch/ch-specimen-1')
+      } else if (tabId === 'tab-miniplayer') {
+        navigate('/watch/ch-specimen-1?mini=true')
+      }
+    }
+
+    window.addEventListener('message', onNavMessage)
+    return () => window.removeEventListener('message', onNavMessage)
+  }, [location.pathname, navigate])
 
   return (
     <MotionConfig reducedMotion={reduceMotion || prefersReducedMotion ? 'always' : 'user'}>

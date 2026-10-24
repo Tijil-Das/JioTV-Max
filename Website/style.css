@@ -1403,7 +1403,6 @@ a {
   .showcase-tab.active {
     background: #E11D2E;
     color: #FFFFFF;
-    box-shadow: 0 2px 10px rgba(225, 29, 46, 0.45);
   }
   .windows-desktop-frame {
     aspect-ratio: auto;

@@ -107,14 +107,14 @@
             <button class="showcase-tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-app" id="tab-app" data-target="panel-app">
               <span>Home</span>
             </button>
+            <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-miniplayer" id="tab-miniplayer" data-target="panel-miniplayer">
+              <span>Miniplayer</span>
+            </button>
             <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-player" id="tab-player" data-target="panel-player">
               <span>Live Player</span>
             </button>
             <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-catalogue" id="tab-catalogue" data-target="panel-catalogue">
               <span>Channel Catalogue</span>
-            </button>
-            <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-miniplayer" id="tab-miniplayer" data-target="panel-miniplayer">
-              <span>Miniplayer</span>
             </button>
           </div>
         </div>
@@ -128,23 +128,7 @@
             <p class="showcase-caption"><strong>Home Section:</strong> Quick-resume recent streams, category carousels, and search with Ctrl+K.</p>
           </div>
 
-          <!-- 2. Live Player / Streamer -->
-          <div class="showcase-panel" id="panel-player" role="tabpanel" aria-labelledby="tab-player" hidden>
-            <div class="showcase-window">
-              <img src="assets/Player.png" alt="JioTv Max Live Player showing full HD stream and DVR timeshift timeline" class="showcase-img" loading="lazy" />
-            </div>
-            <p class="showcase-caption"><strong>Live Streamer:</strong> Hardware GPU-decoded 1080p playback with rolling DVR timeshift timeline and audio controls.</p>
-          </div>
-
-          <!-- 3. Channel Catalogue -->
-          <div class="showcase-panel" id="panel-catalogue" role="tabpanel" aria-labelledby="tab-catalogue" hidden>
-            <div class="showcase-window">
-              <img src="assets/Catalogue.png" alt="JioTv Max Channel Catalogue showing 1,000+ live channels" class="showcase-img" loading="lazy" />
-            </div>
-            <p class="showcase-caption"><strong>Huge Catalogue:</strong> 1,000+ national and regional live TV channels organized by category, language, and resolution.</p>
-          </div>
-
-          <!-- 4. Floating Miniplayer inside Simulated Windows Desktop -->
+          <!-- 2. Floating Miniplayer inside Simulated Windows Desktop -->
           <div class="showcase-panel" id="panel-miniplayer" role="tabpanel" aria-labelledby="tab-miniplayer" hidden>
             <div class="windows-desktop-frame">
               <!-- Maximized (Full Screen) VS Code Window -->
@@ -415,6 +399,22 @@
               </div>
             </div>
             <p class="showcase-caption"><strong>Floating Miniplayer:</strong> Distraction-free Picture-in-Picture window that stays on top of all desktop apps while you work.</p>
+          </div>
+
+          <!-- 3. Live Player / Streamer -->
+          <div class="showcase-panel" id="panel-player" role="tabpanel" aria-labelledby="tab-player" hidden>
+            <div class="showcase-window">
+              <img src="assets/Player.png" alt="JioTv Max Live Player showing full HD stream and DVR timeshift timeline" class="showcase-img" loading="lazy" />
+            </div>
+            <p class="showcase-caption"><strong>Live Streamer:</strong> Hardware GPU-decoded 1080p playback with rolling DVR timeshift timeline and audio controls.</p>
+          </div>
+
+          <!-- 4. Channel Catalogue -->
+          <div class="showcase-panel" id="panel-catalogue" role="tabpanel" aria-labelledby="tab-catalogue" hidden>
+            <div class="showcase-window">
+              <img src="assets/Catalogue.png" alt="JioTv Max Channel Catalogue showing 1,000+ live channels" class="showcase-img" loading="lazy" />
+            </div>
+            <p class="showcase-caption"><strong>Huge Catalogue:</strong> 1,000+ national and regional live TV channels organized by category, language, and resolution.</p>
           </div>
         </div>
       </div>

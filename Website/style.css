@@ -309,6 +309,12 @@ a {
   margin: 0 auto 36px;
 }
 
+.showcase-tabs-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .showcase-tabs {
   display: inline-flex;
   align-items: center;
@@ -1367,41 +1373,61 @@ a {
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
+    padding: 0 16px;
+    box-sizing: border-box;
+  }
+  .showcase-tabs-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
   }
   .showcase-tabs {
-    display: inline-flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    border-radius: 100px;
-    padding: 4px;
-    gap: 3px;
-    width: auto;
-    max-width: calc(100vw - 32px);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    background: rgba(14, 14, 16, 0.94);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    margin: 20px auto 0;
-  }
-  .showcase-tabs::-webkit-scrollbar {
-    display: none;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    width: 100%;
+    max-width: 360px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    box-sizing: border-box;
   }
   .showcase-tab {
-    padding: 7px 13px;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 8px;
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: -0.01em;
-    flex-shrink: 0;
     border-radius: 100px;
     text-align: center;
     white-space: nowrap;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background: rgba(22, 22, 26, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #A1A1A6;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .showcase-tab:hover {
+    background: rgba(30, 30, 36, 0.95);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #F4F4F5;
   }
   .showcase-tab.active {
     background: #E11D2E;
+    border-color: #E11D2E;
+    color: #FFFFFF;
+  }
+  .showcase-tab.active:hover {
+    background: #EF3340;
+    border-color: #EF3340;
     color: #FFFFFF;
   }
   .windows-desktop-frame {
@@ -1527,7 +1553,7 @@ a {
   }
   .showcase-tab {
     font-size: 11.5px;
-    padding: 6px 11px;
+    padding: 8px 4px;
   }
   .desktop-miniplayer-floating {
     width: 210px;

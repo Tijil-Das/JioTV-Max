@@ -1009,13 +1009,13 @@ export function PlayerPage(): JSX.Element {
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerUp={(e) => e.stopPropagation()}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="pointer-events-auto flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.65)] transition-all duration-200 hover:scale-110 active:scale-95 hover:border-white/40"
-                style={{ width: '52px', height: '52px' }}
+                className="pointer-events-auto flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-xl border border-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.5)] transition-all duration-200 hover:scale-110 active:scale-95 hover:border-white/40"
+                style={{ width: '34px', height: '34px' }}
               >
                 {isPlaying ? (
-                  <Pause className="h-6 w-6 fill-white text-white drop-shadow-md" />
+                  <Pause className="h-4 w-4 fill-white text-white drop-shadow-sm" />
                 ) : (
-                  <Play className="h-6 w-6 fill-white text-white ml-0.5 drop-shadow-md" />
+                  <Play className="h-4 w-4 fill-white text-white ml-0.5 drop-shadow-sm" />
                 )}
               </button>
             </div>

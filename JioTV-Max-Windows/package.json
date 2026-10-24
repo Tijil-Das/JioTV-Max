@@ -87,7 +87,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "build/Release/snap_overlay.node"
+      "build/Release/snap_overlay.node",
+      "src/native/snap-overlay/build/Release/snap_overlay.node"
     ],
     "win": {
       "target": [

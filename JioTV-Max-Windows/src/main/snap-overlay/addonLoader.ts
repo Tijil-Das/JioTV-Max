@@ -30,17 +30,20 @@ export function loadSnapAddon(): SnapOverlayAddon | null {
   }
 
   const candidatePaths: string[] = [
-    // 1. Packaged location (asarUnpacked inside app.asar.unpacked)
+    // 1. Packaged location (asarUnpacked inside app.asar.unpacked in resources folder)
     path.join(process.resourcesPath || '', 'app.asar.unpacked', 'build', 'Release', 'snap_overlay.node'),
+    path.join(path.dirname(app.getAppPath()), 'app.asar.unpacked', 'build', 'Release', 'snap_overlay.node'),
+    path.join(app.getAppPath(), '..', 'app.asar.unpacked', 'build', 'Release', 'snap_overlay.node'),
     path.join(process.resourcesPath || '', 'app.asar.unpacked', 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
-    // 2. Freshly built local binary directly from node-gyp output (dev mode priority)
-    path.join(__dirname, '..', '..', 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
-    path.join(app.getAppPath(), 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
-    path.resolve('src/native/snap-overlay/build/Release/snap_overlay.node'),
-    // 3. Fallback to distribution directory in build/Release
+    path.join(path.dirname(app.getAppPath()), 'app.asar.unpacked', 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
+    // 2. Local dev mode and distribution directory in build/Release
     path.join(__dirname, '..', '..', 'build', 'Release', 'snap_overlay.node'),
     path.join(app.getAppPath(), 'build', 'Release', 'snap_overlay.node'),
-    path.resolve('build/Release/snap_overlay.node')
+    path.resolve('build/Release/snap_overlay.node'),
+    // 3. Freshly built local binary directly from node-gyp output
+    path.join(__dirname, '..', '..', 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
+    path.join(app.getAppPath(), 'src', 'native', 'snap-overlay', 'build', 'Release', 'snap_overlay.node'),
+    path.resolve('src/native/snap-overlay/build/Release/snap_overlay.node')
   ]
 
   for (const candidate of candidatePaths) {

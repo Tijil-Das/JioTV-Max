@@ -1,7 +1,11 @@
 node_modules/
 out/
 dist/
-release/
+/release/
+JioTV-Max-Windows/release/
+JioTV-Max-Windows/src/native/snap-overlay/build/
+JioTV-Max-Windows/build/Release/*
+!JioTV-Max-Windows/build/Release/snap_overlay.node
 .vite/
 *.log
 .DS_Store

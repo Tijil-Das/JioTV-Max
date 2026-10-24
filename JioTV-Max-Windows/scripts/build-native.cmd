@@ -21,7 +21,7 @@ for %%P in (
 :found_vs
 
 cd /d "%~dp0..\src\native\snap-overlay"
-call pnpm dlx node-gyp rebuild --target=33.3.2 --arch=%ARCH% --dist-url=https://electronjs.org/headers
+call npx --yes node-gyp rebuild --target=33.3.2 --arch=%ARCH% --dist-url=https://electronjs.org/headers
 if errorlevel 1 exit /b %errorlevel%
 
 if not exist "%~dp0..\build\Release" mkdir "%~dp0..\build\Release"

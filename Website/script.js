@@ -222,34 +222,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3500)
   }
 
-  // ─── App Preview Showcase Tabs ──────────────────────────────────────────
+  // ─── App Preview Showcase Tabs (Auto-switches every 5s until user clicks) ──
   const showcaseTabs = document.querySelectorAll('.showcase-tab')
   const showcasePanels = document.querySelectorAll('.showcase-panel')
+  let currentTabIndex = 0
+  let autoSwitchTimer = null
+  let userInteracted = false
 
-  showcaseTabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const targetId = tab.getAttribute('data-target')
-      if (!targetId) return
+  function activateTab(index) {
+    if (!showcaseTabs.length || index < 0 || index >= showcaseTabs.length) return
+    const tab = showcaseTabs[index]
+    const targetId = tab.getAttribute('data-target')
+    if (!targetId) return
 
-      showcaseTabs.forEach((t) => {
-        t.classList.remove('active')
-        t.setAttribute('aria-selected', 'false')
-      })
-      showcasePanels.forEach((p) => {
-        p.classList.remove('active')
-        p.hidden = true
-      })
+    showcaseTabs.forEach((t) => {
+      t.classList.remove('active')
+      t.setAttribute('aria-selected', 'false')
+    })
+    showcasePanels.forEach((p) => {
+      p.classList.remove('active')
+      p.hidden = true
+    })
 
-      tab.classList.add('active')
-      tab.setAttribute('aria-selected', 'true')
+    tab.classList.add('active')
+    tab.setAttribute('aria-selected', 'true')
 
-      const targetPanel = document.getElementById(targetId)
-      if (targetPanel) {
-        targetPanel.classList.add('active')
-        targetPanel.hidden = false
+    const targetPanel = document.getElementById(targetId)
+    if (targetPanel) {
+      targetPanel.classList.add('active')
+      targetPanel.hidden = false
+    }
+  }
+
+  function startAutoSwitch() {
+    if (userInteracted || showcaseTabs.length <= 1) return
+    stopAutoSwitch()
+    autoSwitchTimer = setInterval(() => {
+      if (userInteracted) {
+        stopAutoSwitch()
+        return
       }
+      currentTabIndex = (currentTabIndex + 1) % showcaseTabs.length
+      activateTab(currentTabIndex)
+    }, 5000)
+  }
+
+  function stopAutoSwitch() {
+    if (autoSwitchTimer) {
+      clearInterval(autoSwitchTimer)
+      autoSwitchTimer = null
+    }
+  }
+
+  showcaseTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => {
+      // User manually clicked a tab - permanently stop auto-switching
+      userInteracted = true
+      stopAutoSwitch()
+      currentTabIndex = index
+      activateTab(index)
     })
   })
+
+  // Start 5-second rotation on initial load
+  startAutoSwitch()
 
   // ─── Simulated Windows Taskbar Live Clock & Date ────────────────────────
   const clockEl = document.getElementById('taskbar-live-clock')

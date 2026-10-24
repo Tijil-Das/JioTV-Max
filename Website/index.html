@@ -35,6 +35,7 @@
 
       <nav aria-label="Main Navigation">
         <ul class="nav-links">
+          <li><a href="#preview">Preview</a></li>
           <li><a href="#why">Why JioTv Max</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="https://github.com/Tijil-Das/JioTV-Max" target="_blank" rel="noopener noreferrer">GitHub</a></li>
@@ -90,6 +91,66 @@
 
         <div class="hero-badge-note">
           <span class="app-version-tag">v1.0.0</span> · <span class="app-os-tag">Windows 10 / 11 (64-bit)</span> · <span>Open Source (MIT)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- App Showcase Section -->
+    <section class="section-showcase" id="preview">
+      <div class="container">
+        <div class="showcase-header">
+          <span class="section-tag">APP PREVIEW</span>
+          <h2 class="section-title">See JioTv Max in action.</h2>
+          <p class="section-desc">A native Windows desktop client designed for fast zapping, rich channel discovery, and seamless live streaming.</p>
+
+          <div class="showcase-tabs" role="tablist" aria-label="App preview screens">
+            <button class="showcase-tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-app" id="tab-app" data-target="panel-app">
+              <span>Home</span>
+            </button>
+            <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-player" id="tab-player" data-target="panel-player">
+              <span>Live Player</span>
+            </button>
+            <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-catalogue" id="tab-catalogue" data-target="panel-catalogue">
+              <span>Channel Catalogue</span>
+            </button>
+            <button class="showcase-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-miniplayer" id="tab-miniplayer" data-target="panel-miniplayer">
+              <span>Miniplayer</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="showcase-viewport">
+          <!-- 1. Home Section -->
+          <div class="showcase-panel active" id="panel-app" role="tabpanel" aria-labelledby="tab-app">
+            <div class="showcase-window">
+              <img src="assets/App.png" alt="JioTv Max Home Section interface showing live stream and genre categories" class="showcase-img" loading="eager" />
+            </div>
+            <p class="showcase-caption"><strong>Home Section:</strong> Quick-resume recent streams, category carousels, and search with Ctrl+K.</p>
+          </div>
+
+          <!-- 2. Live Player / Streamer -->
+          <div class="showcase-panel" id="panel-player" role="tabpanel" aria-labelledby="tab-player" hidden>
+            <div class="showcase-window">
+              <img src="assets/Player.png" alt="JioTv Max Live Player showing full HD stream and DVR timeshift timeline" class="showcase-img" loading="lazy" />
+            </div>
+            <p class="showcase-caption"><strong>Live Streamer:</strong> Hardware GPU-decoded 1080p playback with rolling DVR timeshift timeline and audio controls.</p>
+          </div>
+
+          <!-- 3. Channel Catalogue -->
+          <div class="showcase-panel" id="panel-catalogue" role="tabpanel" aria-labelledby="tab-catalogue" hidden>
+            <div class="showcase-window">
+              <img src="assets/Catalogue.png" alt="JioTv Max Channel Catalogue showing 1,000+ live channels" class="showcase-img" loading="lazy" />
+            </div>
+            <p class="showcase-caption"><strong>Huge Catalogue:</strong> 1,000+ national and regional live TV channels organized by category, language, and resolution.</p>
+          </div>
+
+          <!-- 4. Floating Miniplayer -->
+          <div class="showcase-panel" id="panel-miniplayer" role="tabpanel" aria-labelledby="tab-miniplayer" hidden>
+            <div class="showcase-window showcase-window-mini">
+              <img src="assets/Miniplayer.png" alt="JioTv Max Picture-in-Picture floating miniplayer" class="showcase-img showcase-img-mini" loading="lazy" />
+            </div>
+            <p class="showcase-caption"><strong>Floating Miniplayer:</strong> Distraction-free Picture-in-Picture window that stays on top of all desktop apps while you work.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -164,10 +225,14 @@
           </div>
 
           <div class="card">
+            <h3 class="card-title">Picture-in-Picture Miniplayer</h3>
+            <p class="card-text">Keep matches or live broadcasts playing in a compact, floating, always-on-top window while you work, browse, or game on Windows.</p>
+          </div>
+
+          <div class="card">
             <h3 class="card-title">Live DVR Timeline</h3>
             <p class="card-text">Pause live television and rewind within the stream's rolling timeshift buffer. Jump back to the live edge with one click.</p>
           </div>
-
 
           <div class="card">
             <h3 class="card-title">No Cheap Emulator Streams</h3>

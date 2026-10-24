@@ -222,6 +222,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3500)
   }
 
+  // ─── App Preview Showcase Tabs ──────────────────────────────────────────
+  const showcaseTabs = document.querySelectorAll('.showcase-tab')
+  const showcasePanels = document.querySelectorAll('.showcase-panel')
+
+  showcaseTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const targetId = tab.getAttribute('data-target')
+      if (!targetId) return
+
+      showcaseTabs.forEach((t) => {
+        t.classList.remove('active')
+        t.setAttribute('aria-selected', 'false')
+      })
+      showcasePanels.forEach((p) => {
+        p.classList.remove('active')
+        p.hidden = true
+      })
+
+      tab.classList.add('active')
+      tab.setAttribute('aria-selected', 'true')
+
+      const targetPanel = document.getElementById(targetId)
+      if (targetPanel) {
+        targetPanel.classList.add('active')
+        targetPanel.hidden = false
+      }
+    })
+  })
+
   // ─── "Show Why?" Technical Deep Dive Modal ──────────────────────────────
   const whyModal = document.getElementById('why-modal')
   const whyCloseBtn = document.getElementById('why-modal-close')

@@ -111,7 +111,10 @@ export function Hero(): JSX.Element {
     const el = sectionRef.current
     if (!el) return
     const update = (w: number) => {
-      if (w > 0) setHeroWidth(w)
+      const rounded = Math.round(w)
+      if (rounded > 0) {
+        setHeroWidth((prev) => (Math.abs(prev - rounded) > 4 ? rounded : prev))
+      }
     }
     update(el.offsetWidth)
     const ro = new ResizeObserver((entries) => {
@@ -449,12 +452,11 @@ export function Hero(): JSX.Element {
               }}
               onClick={() => activeChannel && watch(activeChannel.id)}
               style={{
-                width: heroWidth < 768 ? '100%' : 'min(calc(100% - clamp(88px, 13vw, 150px)), calc(72vh * 16 / 9))',
                 maxWidth: '1340px',
                 aspectRatio: '16 / 9',
                 borderRadius: `${Math.max(10, Math.round(24 * heroScale))}px`
               }}
-              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08]"
+              className="group/hero relative cursor-pointer select-none overflow-hidden bg-[#0A0A0B] shadow-[0_24px_64px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.08] w-full md:w-[min(calc(100%-clamp(88px,13vw,150px)),calc(72vh*16/9))]"
             >
             {/* Cinema Stage — 16:9 aspect ratio strictly preserved */}
             <div className="relative h-full w-full overflow-hidden">
@@ -590,7 +592,7 @@ export function Hero(): JSX.Element {
                       animate="center"
                       exit="exit"
                       style={{
-                        maxWidth: heroWidth < 500 ? 'calc(100% - 150px)' : `${Math.max(220, Math.round(540 * heroScale))}px`,
+                        maxWidth: `${Math.round(540 * heroScale)}px`,
                         gap: `${Math.max(4, Math.round(10 * heroScale))}px`
                       }}
                       className="flex flex-col drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]"
@@ -738,9 +740,9 @@ export function Hero(): JSX.Element {
                     const channel = channelById.get(id)
                     if (!channel) return null
                     const selected = id === activeId
-                    const chipSize = heroWidth < 420 ? 26 : heroWidth < 500 ? 30 : Math.max(32, Math.round(52 * heroScale))
-                    const chipPad = heroWidth < 500 ? 2 : Math.max(3, Math.round(7 * heroScale))
-                    const chipRad = heroWidth < 500 ? 6 : Math.max(7, Math.round(12 * heroScale))
+                    const chipSize = Math.max(26, Math.round(52 * heroScale))
+                    const chipPad = Math.max(2, Math.round(7 * heroScale))
+                    const chipRad = Math.max(6, Math.round(12 * heroScale))
                     return (
                       <div key={id} className="relative">
                         {tooltipId === id ? (

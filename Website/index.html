@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
 
@@ -337,84 +337,49 @@
                 <div class="taskbar-center">
                   <!-- 1. Windows 11 Start Logo -->
                   <div class="taskbar-item" title="Start">
-                    <svg class="tb-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M0 0h11v11H0zM13 0h11v11H13zM0 13h11v11H0zM13 13h11v11H13z" fill="#00A4EF"/>
-                    </svg>
+                    <img src="assets/Windows-11.png" alt="Start" class="tb-icon-img" width="22" height="22" />
                   </div>
 
-                  <!-- 2. Search Bar Pill -->
+                  <!-- 2. Search Bar Pill (Windows 11 wide pill) -->
                   <div class="taskbar-search-pill" title="Type here to search">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
-                      <circle cx="10" cy="10" r="7"/>
-                      <line x1="15.5" y1="15.5" x2="21" y2="21"/>
+                    <svg class="tb-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10.5" cy="10.5" r="7.5"/>
+                      <line x1="16" y1="16" x2="21.5" y2="21.5"/>
                     </svg>
-                    <span>Search</span>
+                    <span class="tb-search-text">Search</span>
                   </div>
 
                   <!-- 3. File Explorer -->
                   <div class="taskbar-item" title="File Explorer">
-                    <svg class="tb-icon-svg" width="22" height="20" viewBox="0 0 24 20" fill="none">
-                      <path d="M1 3C1 1.89543 1.89543 1 3 1H8.5L11 3.5H21C22.1046 3.5 23 4.39543 23 5.5V17C23 18.1046 22.1046 19 21 19H3C1.89543 19 1 18.1046 1 17V3Z" fill="#FFA000"/>
-                      <path d="M1 6.5C1 5.39543 1.89543 4.5 3 4.5H21C22.1046 4.5 23 5.39543 23 6.5V17C23 18.1046 22.1046 19 21 19H3C1.89543 19 1 18.1046 1 17V6.5Z" fill="#FFCA28"/>
-                      <rect x="5" y="9" width="14" height="3.5" rx="1" fill="#0078D4"/>
-                    </svg>
+                    <img src="assets/Files-Explorer.png" alt="File Explorer" class="tb-icon-img" width="24" height="24" />
                   </div>
 
                   <!-- 4. Google Chrome -->
                   <div class="taskbar-item" title="Google Chrome">
-                    <svg class="tb-icon-svg" width="20" height="20" viewBox="0 0 24 24">
-                      <path d="M12 2C6.48 2 2 6.48 2 12c0 .34.02.68.05 1.02L7.5 12h9l2.7-4.68C17.38 4.34 14.86 2 12 2z" fill="#EA4335"/>
-                      <path d="M2.05 13.02C2.6 18.06 6.84 22 12 22c2.8 0 5.35-1.15 7.18-3.01L14.7 13.5l-4.5 7.79c-4.22-.44-7.55-3.8-8.15-8.27z" fill="#34A853"/>
-                      <path d="M19.18 18.99C20.91 17.22 22 14.74 22 12c0-2.35-.82-4.5-2.18-6.22L14.7 13.5l4.48 5.49z" fill="#FBBC05"/>
-                      <circle cx="12" cy="12" r="5" fill="#FFFFFF"/>
-                      <circle cx="12" cy="12" r="4" fill="#4285F4"/>
-                    </svg>
+                    <img src="assets/Google-Chrome.png" alt="Google Chrome" class="tb-icon-img" width="24" height="24" />
                     <span class="tb-indicator tb-dot"></span>
                   </div>
 
                   <!-- 5. Spotify -->
                   <div class="taskbar-item" title="Spotify">
-                    <svg class="tb-icon-svg" width="20" height="20" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="11" fill="#1ED760"/>
-                      <path d="M16.8 15.3c-.2.3-.5.4-.8.2-2.3-1.4-5.2-1.7-8.6-.9-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 3.7-.8 6.9-.5 9.5 1.1.3.2.4.5.3.8zm1.2-2.7c-.2.4-.7.5-1.1.3-2.6-1.6-6.6-2.1-9.7-1.1-.4.1-.9-.1-1-.5-.1-.4.1-.9.5-1 3.5-1.1 7.9-.5 10.9 1.3.4.2.5.7.4 1zm.1-2.8C15 8 9.5 7.8 6.3 8.8c-.5.2-1-.1-1.2-.6-.2-.5.1-1 .6-1.2 3.7-1.1 9.8-.9 13.4 1.2.5.3.6.9.3 1.4-.3.4-.9.6-1.3.2z" fill="#000000"/>
-                    </svg>
+                    <img src="assets/Spotify.webp" alt="Spotify" class="tb-icon-img" width="24" height="24" />
                   </div>
 
-                  <!-- 6. Antigravity IDE (active with blue line) -->
-                  <div class="taskbar-item taskbar-item-active" title="Antigravity">
-                    <div class="agy-tile">
-                      <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-                        <rect width="32" height="32" rx="6" fill="#111318"/>
-                        <path d="M0 8h32M0 16h32M0 24h32M8 0v32M16 0v32M24 0v32" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
-                        <defs>
-                          <linearGradient id="agyGrad" x1="0%" y1="100%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#00D2FF"/>
-                            <stop offset="50%" stop-color="#FF5E62"/>
-                            <stop offset="100%" stop-color="#9B51E0"/>
-                          </linearGradient>
-                        </defs>
-                        <path d="M5 24 C 9 24, 11 10, 16 10 C 21 10, 23 24, 27 24" stroke="url(#agyGrad)" stroke-width="3.2" stroke-linecap="round" fill="none"/>
-                      </svg>
-                    </div>
-                    <span class="tb-indicator tb-line-blue"></span>
+                  <!-- 6. Antigravity IDE -->
+                  <div class="taskbar-item" title="Antigravity IDE">
+                    <img src="assets/antigravity.png" alt="Antigravity IDE" class="tb-icon-img tb-icon-squircle" width="24" height="24" />
+                    <span class="tb-indicator tb-dot"></span>
                   </div>
 
                   <!-- 7. YouTube -->
                   <div class="taskbar-item" title="YouTube">
-                    <svg class="tb-icon-svg" width="21" height="16" viewBox="0 0 24 18">
-                      <path d="M23.5 2.6c-.3-1-1.1-1.8-2.1-2.1C19.5 0 12 0 12 0S4.5 0 2.6.5C1.6.8.8 1.6.5 2.6 0 4.5 0 9 0 9s0 4.5.5 6.4c.3 1 1.1 1.8 2.1 2.1C4.5 18 12 18 12 18s7.5 0 9.4-.5c1-.3 1.8-1.1 2.1-2.1.5-1.9.5-6.4.5-6.4s0-4.5-.5-6.4z" fill="#FF0000"/>
-                      <polygon points="9.6,12.8 15.8,9 9.6,5.2" fill="#FFFFFF"/>
-                    </svg>
+                    <img src="assets/YouTube.png" alt="YouTube" class="tb-icon-img" width="24" height="24" />
                     <span class="tb-indicator tb-dot"></span>
                   </div>
 
-                  <!-- 8. Live Streamer / JioTV Max Miniplayer (active with red line) -->
+                  <!-- 8. JioTV Max (Active with red line indicator) -->
                   <div class="taskbar-item taskbar-item-active" title="JioTv Max — Picture-in-Picture">
-                    <svg class="tb-icon-svg" width="22" height="18" viewBox="0 0 26 22">
-                      <rect x="1" y="1" width="24" height="16" rx="3.5" fill="#E11D2E"/>
-                      <polygon points="10.5,5.5 17,9 10.5,12.5" fill="#FFFFFF"/>
-                      <path d="M8 20.5h10 M13 17v3.5" stroke="#E11D2E" stroke-width="2.2" stroke-linecap="round"/>
-                    </svg>
+                    <img src="assets/app-icon-128.png" alt="JioTv Max" class="tb-icon-img" width="24" height="24" />
                     <span class="tb-indicator tb-line-red"></span>
                   </div>
                 </div>

@@ -23,5 +23,8 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts"
+  ],
+  "exclude": [
+    "src/main/recording/**/*"
   ]
 }

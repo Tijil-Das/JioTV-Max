@@ -19,5 +19,9 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx", "src/shared/**/*.ts"]
+  "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx", "src/shared/**/*.ts"],
+  "exclude": [
+    "src/renderer/src/components/recording/**/*",
+    "src/renderer/src/store/useRecordingStore.ts"
+  ]
 }

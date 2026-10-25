@@ -84,10 +84,6 @@ export class RecorderSession {
     return this.record
   }
 
-  getStatus(): RecordingStatus {
-    return this.status
-  }
-
   getElapsedSeconds(): number {
     return this.elapsedSeconds
   }
@@ -155,8 +151,11 @@ export class RecorderSession {
     this.startPart()
     this.startWatchdog()
     this.startDiskCheck()
+    this.startElapsedTimer()
+  }
 
-    // 1-second elapsed counter
+  private startElapsedTimer(): void {
+    if (this.elapsedTimer) return
     this.elapsedTimer = setInterval(() => {
       if (this.status === 'recording') {
         this.elapsedSeconds++
@@ -266,7 +265,7 @@ export class RecorderSession {
           .join(' | ')
         this.repo.addEvent({
           recordingId: this.id,
-          type: 'warning',
+          type: 'error',
           message: `FFmpeg produced 0 bytes: ${errorSummary.slice(0, 250)}`,
           timestamp: new Date().toISOString()
         })

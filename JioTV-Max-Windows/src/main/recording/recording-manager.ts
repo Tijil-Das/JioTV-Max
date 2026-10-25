@@ -197,7 +197,8 @@ export class RecordingManager {
     captureMode?: CaptureMode
     drmKey?: string
   }): Promise<{ ok: boolean; recordingId?: string; error?: string; validation?: ValidationResult }> {
-    const accountId = this.jioService?.getSession()?.phone || 'default_user'
+    const session = this.jioService?.getSession()
+    const accountId = (session as any)?.phone || session?.user?.subscriberId || 'default_user'
     const folder = input.folder || this.preferences.defaultFolder
     const padding = input.paddingMinutes ?? this.preferences.paddingMinutes
     const quality = input.quality || this.preferences.quality

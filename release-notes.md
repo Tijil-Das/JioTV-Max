@@ -1,41 +1,45 @@
-## What's Changed in v1.1.1 🚀
+## What's Changed in v1.1.2 🚀
 
-### 🌟 Native Windows 11 Snap Layouts Integration
-- **DWM Snap Assist Overlay**: Fixed custom titlebar behavior where the Windows 11 Snap Layout flyout menu failed to appear when hovering over the Maximize button.
-- **Native C++ Subclassing**: Integrated a native Windows overlay (`snap_overlay.node`) intercepting Win32 `WM_NCHITTEST` messages and returning `HTMAXBUTTON`, seamlessly bridging borderless Electron titlebar buttons with Windows 11's Desktop Window Manager (DWM).
-- **Packaging Pipeline**: Updated build packaging to bundle and align native binary dependencies across production portable and installer distributions.
-
----
-
-### ⚡ Streaming, Live DVR & Audio Engine Fixes
-- **DASH Live Clock Synchronization**: Configured Shaka Player with zero-drift live synchronization (`ignoreSuggestedPresentationDelay`, `defaultPresentationDelay = 3.5s`, `autoCorrectDrift`). Bypasses upstream 30–60s artificial presentation delays and synchronizes playback directly to the real broadcast live edge.
-- **Human-Centric 70-Second Live DVR Threshold**:
-  - **Short Pauses (< 70 seconds)**: Resumes right from the paused timeshift point without jumping ahead, preserving interrupted moments.
-  - **Extended Pauses (≥ 70 seconds)**: Intelligently snaps forward to the live broadcast clock with fresh signed CDN tokens to prevent buffer starvation and stale key errors.
-- **High-Fidelity Audio Preservation on Resume**:
-  - Fixed a critical bug where resuming after an extended pause caused audio to cut out or downgrade to 64 kbps low-quality HE-AAC.
-  - Permanently locks audio selection to the highest available bitrate (≥ 85% max audio bandwidth / 128 kbps AAC-LC / Dolby).
-  - Eliminated disruptive audio language re-selections on resumption that triggered MediaSource audio decoder stalls and codec mismatches.
-  - Expanded Widevine CDM profiles to probe both `mp4a.40.2` (AAC-LC) and `mp4a.40.5` (HE-AACv1).
-- **Stale Clock Protection in Media Relay**: Invalidates cached CDN publish times on stream transitions and enforces a 30-second staleness cutoff to prevent false clock extrapolation.
+### 📺 Live Currently Airing Program & Auto-Refresh
+- **Live Broadcast Titles on Channel Tiles**: Every channel card across Home rows, categories, and grids now displays the title of the show currently broadcasting directly beneath the channel name.
+- **Live Status Indicator**: Added a signature glowing red on-air dot next to the current program title, giving immediate visual feedback for live content.
+- **Automatic Show-End Transition**: Integrated an automated timer set to the exact end timestamp of the active program (`endEpoch`). When a show finishes, the card seamlessly transitions to the upcoming program and refreshes the EPG without requiring page reloads.
+- **Live Info in Search**: Search result list rows now present the currently airing program alongside the channel's language, quality badge, and set-top box number.
 
 ---
 
-### 🎨 Live DVR Seekbar & Player UI Refinements
-- **Unenclosed Negative Timecode**: Redesigned the behind-live time counter on the seek bar to render as clean, tabular text (`-00:33`) without box/border enclosures.
-- **Enlarged "Go Live" Button**: Upgraded button dimensions (35px height, 16px horizontal padding) with a sleek dark zinc finish, subtle borders, glowing status dot, and responsive hover transitions.
+### 🔍 Smart Channel Number Search
+- **Direct Number Dialing**: Users can now type numbers directly into the search bar (e.g., `101`, `2506`, `1304`, `144`) to instantly find channels.
+- **Prioritized Matching Engine**: Implemented smart search scoring that prioritizes exact official JioTV Set-Top Box (STB) channel numbers, followed by number prefixes, internal channel IDs, and show titles.
+- **Visual Number Highlighting**: Number chips in search results reflect the official channel number for rapid identification.
 
 ---
 
-### 🌐 Official Website — Full In-Browser App Preview & Showcase
-- **Complete App Preview Embedded**: Embedded a responsive web build of JioTV Max directly into the official website, allowing visitors to test drive the desktop experience directly inside the browser.
-- **Interactive Multi-Tab Showcase**:
-  - **Channel Catalogue**: Browse 1,000+ live TV channels with category filtering, language selection, and search.
-  - **Live Player**: Test drive live streaming controls, volume sliders, DVR seekbar, and quality selectors.
-  - **Miniplayer Experience**: Simulated Windows 11 desktop showing the floating, draggable Picture-in-Picture window overlaid on an authentic VS Code workspace.
-- **Auto-Switching Showcase Carousel**: Automated tab rotation every 5 seconds that smoothly pauses as soon as the user interacts.
-- **Windows 11 Desktop Fidelity**: Built a replica Windows 11 desktop environment featuring centered taskbar icons (Start, Search, Task View, Widgets, File Explorer, VS Code, Chrome, JioTV Max) and realistic titlebars.
-- **Iframe Sandbox Resilience**: Integrated safe local storage fallbacks to prevent security crashes within restricted iframe sandboxes.
+### 🎨 Authentic Logos & Consistent Channel Numbering
+- **Official Jio CDN Assets**: Removed static/retro logo overrides, ensuring channels like Eurosport HD (`Dsports_HD.png`) and Eurosport SD (`Eurosport1.png`) fetch authentic, modern broadcast artwork directly from Jio's CDN.
+- **Pixel-Pure Rendering**: Retained full color integrity, gradients, and original brand typography across dark and light channel artwork in accordance with the Pixel-Pure specification.
+- **Unified STB Channel Numbers**: Aligned channel number assignment across the desktop app and the web preview to prioritize official JioTV `stbChannelNumber` metadata (e.g., **2506** for Eurosport HD, **2500** for Eurosport SD, **1304** for Colors HD, **101** for DD National).
+
+---
+
+### 🌐 Web App Live EPG Parity
+- **Public CORS EPG Integration**: Connected the web app directly to Jio's public EPG endpoint (`https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get`), streaming authentic live broadcast schedules in the browser.
+- **Cross-Platform Consistency**: Eliminated mock startup schedules on the web app so that live program data, show descriptions, and broadcast timing match the desktop app with 100% parity.
+
+---
+
+### 📱 Official Website & Showcase Mobile Polish
+- **Mobile Segmented Tabs**: Upgraded the interactive showcase navigation on small screens to a sleek, compact segmented pill design and eliminated mobile glow artifacts.
+- **Audio & Playback Clean-up**: Fixed an issue where switching showcase tabs could trigger simultaneous audio streams; disabled adding to "My List" within demo previews.
+- **Layout & Modal Refinements**: Centered install prompt sheets on Settings and My List pages, refined miniplayer splash screen dimensions, and optimized 640px responsive breakpoints.
+
+---
+
+### ⚡ Stability & Performance
+- **Launch Screen & Frame Smoothing**: Fixed white screen flash at app launch by delaying window maximization until the initial renderer frame is ready-to-show, alongside critical dark styling in the base document.
+- **Hero Video Cinema Polish**: Removed stale EPG backdrop placeholder to prevent broken photo icon artifacts in the hero stage.
+- **Packaging & Binary Assurance**: Added automated checks for native dependencies (`ensure-ffmpeg.mjs`, `ensure-better-sqlite.mjs`) and configured `asarUnpack` for bundled binaries.
+- **Zero Regressions**: 100% pass rate across all 236 unit and integration test suites, including logo decoding, smart search ranking, and DASH stream playback.
 
 ---
 

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { SearchBox } from './SearchBox'
 import { WindowControls } from './WindowControls'
-import { NotificationBell } from '@/components/recording/NotificationBell'
+// import { NotificationBell } from '@/components/recording/NotificationBell'
 
 /**
  * 64px top bar. Transparent over the hero; glass at 80% + hairline when scrolled.
@@ -49,9 +49,9 @@ export function TopBar(): JSX.Element {
         <div className="min-w-0 flex-1" />
 
         {/* Right actions: notification bell */}
-        <div className="no-drag flex items-center mr-2">
+        {/* <div className="no-drag flex items-center mr-2">
           <NotificationBell />
-        </div>
+        </div> */}
 
         {/* Spacer to prevent SearchBox from overlapping the fixed buttons */}
         <div className="w-[140px] shrink-0 pointer-events-none" />

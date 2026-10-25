@@ -17,7 +17,7 @@ import { useUIStore } from '@/store/useUIStore'
 import { PageTransition } from '@/components/ui/StateView'
 import { Button } from '@/components/ui/Button'
 import { Toggle } from '@/components/ui/Controls'
-import { RecorderSettingsCard } from '@/components/recording/RecorderSettingsCard'
+// import { RecorderSettingsCard } from '@/components/recording/RecorderSettingsCard'
 import { getBridge } from '@/services/api'
 import { cn } from '@/lib/cn'
 
@@ -244,14 +244,14 @@ export function SettingsPage(): JSX.Element {
           </Section>
 
           {/* ── Channel Recorder ─────────────────────────────────────────── */}
-          <Section
+          {/* <Section
             icon={<Radio className="h-5 w-5" />}
             title="Channel Recorder"
             description="Manage background live broadcast recording settings, storage, and schedule."
             className="lg:col-span-2"
           >
             <RecorderSettingsCard />
-          </Section>
+          </Section> */}
 
           {/* ── App Updates ──────────────────────────────────────────────── */}
           <Section

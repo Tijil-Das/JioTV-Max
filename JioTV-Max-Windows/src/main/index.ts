@@ -19,8 +19,8 @@ import {
   setUpdateDeferredChecker
 } from './updater'
 import { SnapController } from './snap-overlay'
-import { RecordingManager } from './recording/recording-manager'
-import { registerRecordingIpc } from './recording/ipc-handlers'
+// import { RecordingManager } from './recording/recording-manager'
+// import { registerRecordingIpc } from './recording/ipc-handlers'
 // import { CastManager } from './casting/cast-manager'
 // import { ChromecastAdapter } from './casting/chromecast-adapter'
 // import { DlnaAdapter } from './casting/dlna-adapter'
@@ -153,7 +153,8 @@ const relay = new MediaRelay()
 const windowStateStore = new WindowStateStore(app.getPath('userData'))
 const rendererTokenStore = new SecureStore('renderer-token.bin')
 let jio: JioService
-let recordingManager: RecordingManager | null = null
+// let recordingManager: RecordingManager | null = null
+let recordingManager: any = null
 let tray: Tray | null = null
 
 // Diagnostic: print which electron binary is running so we know if castLabs is active.
@@ -757,12 +758,12 @@ app.whenReady().then(async () => {
   await jio.init()
   registerIpc()
 
-  recordingManager = new RecordingManager(() => mainWindow)
-  recordingManager.setJioService(jio)
-  recordingManager.setTrayUpdater(() => updateTrayRecordingState())
-  recordingManager.init()
-  registerRecordingIpc(recordingManager)
-  setUpdateDeferredChecker(() => recordingManager?.hasActiveOrImminentRecordings() ?? false)
+  // recordingManager = new RecordingManager(() => mainWindow)
+  // recordingManager.setJioService(jio)
+  // recordingManager.setTrayUpdater(() => updateTrayRecordingState())
+  // recordingManager.init()
+  // registerRecordingIpc(recordingManager)
+  // setUpdateDeferredChecker(() => recordingManager?.hasActiveOrImminentRecordings() ?? false)
 
   initUpdater(() => mainWindow)
   await createWindow()

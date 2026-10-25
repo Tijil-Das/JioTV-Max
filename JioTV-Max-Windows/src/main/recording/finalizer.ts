@@ -85,7 +85,11 @@ export class Finalizer {
 
     fs.writeFileSync(concatListFile, concatContent, 'utf8')
 
-    // 4. Probe audio codec to check MP4 compatibility
+    // 4. Determine if this is a surface capture (DRM) recording.
+    // Surface capture parts are .webm (VP9/Opus) and must be transcoded to H.264/AAC for MP4.
+    const isSurfaceCapture = rec.captureMode === 'surface-capture'
+
+    // 5. Probe audio codec to check MP4 compatibility
     let needsAudioTranscode = false
     try {
       const probeProc = spawnSync(ffmpegPaths.ffprobePath, [
@@ -101,6 +105,9 @@ export class Finalizer {
       }
     } catch {}
 
+    // 5b. For surface capture, always transcode video (VP9 → H.264) and audio (Opus → AAC)
+    const needsVideoTranscode = isSurfaceCapture
+
     // 5. Build FFmpeg command
     const args: string[] = [
       '-hide_banner',
@@ -110,13 +117,18 @@ export class Finalizer {
       '-i', concatListFile,
       '-map', '0:v?',
       '-map', '0:a?',
-      '-c:v', 'copy',
-      needsAudioTranscode ? '-c:a' : '-c:a',
-      needsAudioTranscode ? 'aac' : 'copy'
+      needsVideoTranscode ? '-c:v' : '-c:v',
+      needsVideoTranscode ? 'libx264' : 'copy',
+      needsAudioTranscode || isSurfaceCapture ? '-c:a' : '-c:a',
+      needsAudioTranscode || isSurfaceCapture ? 'aac' : 'copy'
     ]
 
-    if (needsAudioTranscode) {
+    if (needsAudioTranscode || isSurfaceCapture) {
       args.push('-b:a', '192k')
+    }
+
+    if (needsVideoTranscode) {
+      args.push('-preset', 'fast', '-crf', '23')
     }
 
     args.push(

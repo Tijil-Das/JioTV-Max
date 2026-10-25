@@ -116,10 +116,10 @@ export function DesktopCaptureProvider(): JSX.Element | null {
 
       mediaRecorderRef.current = recorder
 
-      recorder.ondataavailable = (event) => {
+      recorder.ondataavailable = async (event) => {
         if (event.data.size > 0 && recordingIdRef.current) {
-          const buf = Buffer.from(await event.data.arrayBuffer())
-          void sendDesktopChunk(recordingIdRef.current, buf)
+          const ab = await event.data.arrayBuffer()
+          void sendDesktopChunk(recordingIdRef.current, ab)
         }
       }
 

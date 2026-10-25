@@ -745,9 +745,9 @@ export function useMediaPlayer({
     const onWaiting = () => {
       // console.log('[useMediaPlayer] Video event: waiting')
       showBufferingSoon()
-      if (typeof window !== 'undefined' && window.api?.recording?.reportStall) {
-        void window.api.recording.reportStall()
-      }
+      // if (typeof window !== 'undefined' && window.api?.recording?.reportStall) {
+      //   void window.api.recording.reportStall()
+      // }
       if (desiredRef.current === 'auto' && shakaRef.current) {
         const now = performance.now()
         if (now - lastStallAt < 12_000) {

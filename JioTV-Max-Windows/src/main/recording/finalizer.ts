@@ -117,10 +117,8 @@ export class Finalizer {
       '-i', concatListFile,
       '-map', '0:v?',
       '-map', '0:a?',
-      needsVideoTranscode ? '-c:v' : '-c:v',
-      needsVideoTranscode ? 'libx264' : 'copy',
-      needsAudioTranscode || isSurfaceCapture ? '-c:a' : '-c:a',
-      needsAudioTranscode || isSurfaceCapture ? 'aac' : 'copy'
+      '-c:v', needsVideoTranscode ? 'libx264' : 'copy',
+      '-c:a', needsAudioTranscode || isSurfaceCapture ? 'aac' : 'copy'
     ]
 
     if (needsAudioTranscode || isSurfaceCapture) {

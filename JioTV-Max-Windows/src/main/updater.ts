@@ -112,6 +112,7 @@ function showInstallingPanel(): void {
     alwaysOnTop: true,
     show: true,
     skipTaskbar: false,
+    backgroundColor: '#0A0A0B',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

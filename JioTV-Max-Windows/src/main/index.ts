@@ -383,7 +383,6 @@ async function createWindow(): Promise<void> {
 
   SnapController.getOrCreate(mainWindow)
 
-  if (state.maximized) mainWindow.maximize()
   mainWindow.webContents.setBackgroundThrottling(false)
   Menu.setApplicationMenu(null)
 
@@ -412,9 +411,23 @@ async function createWindow(): Promise<void> {
     }
   )
 
+  let windowShown = false
+  const showMainWindow = (): void => {
+    if (windowShown || !mainWindow || mainWindow.isDestroyed()) return
+    windowShown = true
+    if (state.maximized) {
+      mainWindow.maximize()
+    }
+    mainWindow.show()
+  }
+
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+    showMainWindow()
   })
+
+  setTimeout(() => {
+    showMainWindow()
+  }, 2500)
 
   const persist = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return

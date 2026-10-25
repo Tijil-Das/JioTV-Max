@@ -559,17 +559,7 @@ export function Hero(): JSX.Element {
             >
             {/* Cinema Stage — 16:9 aspect ratio strictly preserved */}
             <div className="relative h-full w-full overflow-hidden">
-              {/* Static backdrop: real EPG artwork when present */}
-              <div className="absolute inset-0" aria-hidden>
-                {artwork ? (
-                  <img
-                    src={artwork}
-                    alt=""
-                    className="h-full w-full object-cover object-center opacity-30"
-                    draggable={false}
-                  />
-                ) : null}
-              </div>
+
 
               {/* A/B video slots: noticeably darkened when idle, full brightness on hover */}
               <div className="absolute inset-0" aria-hidden>

@@ -10,6 +10,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts', 'tests/**/*.test.ts', 'src/**/*.test.ts']
+    include: ['test/**/*.test.ts', 'tests/**/*.test.ts', 'src/**/*.test.ts'],
+    exclude: ['test/recording/**', 'node_modules/**', 'dist/**', '.idea/**', '.git/**', '.cache/**']
   }
 })

@@ -107,6 +107,43 @@ const api = {
       ipcRenderer.on(IPC.snapRequestBoundsUpdate, listener)
       return () => ipcRenderer.removeListener(IPC.snapRequestBoundsUpdate, listener)
     }
+  },
+  recording: {
+    schedule: (input: any) => ipcRenderer.invoke(IPC.recordingSchedule, input),
+    startNow: (input: any) => ipcRenderer.invoke(IPC.recordingStartNow, input),
+    pause: (id: string) => ipcRenderer.invoke(IPC.recordingPause, id),
+    resume: (id: string) => ipcRenderer.invoke(IPC.recordingResume, id),
+    stop: (id: string) => ipcRenderer.invoke(IPC.recordingStop, id),
+    cancel: (id: string) => ipcRenderer.invoke(IPC.recordingCancel, id),
+    delete: (id: string) => ipcRenderer.invoke(IPC.recordingDelete, id),
+    getAll: () => ipcRenderer.invoke(IPC.recordingGetAll),
+    getActive: () => ipcRenderer.invoke(IPC.recordingGetActive),
+    getDiagnostics: (id: string) => ipcRenderer.invoke(IPC.recordingGetDiagnostics, id),
+    retryFinalize: (id: string) => ipcRenderer.invoke(IPC.recordingRetryFinalize, id),
+    resolveConflict: (conflictId: string, decision: string) => ipcRenderer.invoke(IPC.recordingResolveConflict, conflictId, decision),
+    validate: (input: any) => ipcRenderer.invoke(IPC.recordingValidate, input),
+    probeCapabilities: (forceRecheck = false) => ipcRenderer.invoke(IPC.recordingProbeCapabilities, forceRecheck),
+    getPreferences: () => ipcRenderer.invoke(IPC.recordingGetPreferences),
+    savePreferences: (prefs: any) => ipcRenderer.invoke(IPC.recordingSavePreferences, prefs),
+    getNotifications: (limit?: number) => ipcRenderer.invoke(IPC.recordingNotificationsGet, limit),
+    markNotificationRead: (id?: string) => ipcRenderer.invoke(IPC.recordingNotificationsMarkRead, id),
+    markNotificationActed: (id: string) => ipcRenderer.invoke(IPC.recordingNotificationsMarkActed, id),
+    openFolder: (folderPath?: string) => ipcRenderer.invoke(IPC.recordingOpenFolder, folderPath),
+    reportStall: () => ipcRenderer.invoke(IPC.recordingReportStall),
+    pauseAll: () => ipcRenderer.invoke(IPC.recordingPauseAll),
+    updateEndTime: (id: string, newEndEpochMs: number) => ipcRenderer.invoke(IPC.recordingUpdateEndTime, id, newEndEpochMs),
+    rename: (id: string, newFilename: string) => ipcRenderer.invoke(IPC.recordingRename, id, newFilename),
+    playFile: (id: string) => ipcRenderer.invoke(IPC.recordingPlayFile, id),
+    onNotificationsChanged: (callback: (data: any) => void) => {
+      const listener = (_e: any, data: any) => callback(data)
+      ipcRenderer.on('recording:notifications-changed', listener)
+      return () => ipcRenderer.removeListener('recording:notifications-changed', listener)
+    },
+    onRecordingsChanged: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('recording:recordings-changed', listener)
+      return () => ipcRenderer.removeListener('recording:recordings-changed', listener)
+    }
   }
 }
 

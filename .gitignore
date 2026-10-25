@@ -6,6 +6,7 @@ JioTV-Max-Windows/release/
 JioTV-Max-Windows/src/native/snap-overlay/build/
 JioTV-Max-Windows/build/Release/*
 !JioTV-Max-Windows/build/Release/snap_overlay.node
+JioTV-Max-Windows/build/bin/
 .vite/
 *.log
 .DS_Store

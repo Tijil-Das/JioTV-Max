@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   LogOut,
   MonitorPlay,
+  Radio,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -16,6 +17,7 @@ import { useUIStore } from '@/store/useUIStore'
 import { PageTransition } from '@/components/ui/StateView'
 import { Button } from '@/components/ui/Button'
 import { Toggle } from '@/components/ui/Controls'
+import { RecorderSettingsCard } from '@/components/recording/RecorderSettingsCard'
 import { getBridge } from '@/services/api'
 import { cn } from '@/lib/cn'
 
@@ -239,6 +241,16 @@ export function SettingsPage(): JSX.Element {
               label="Show Hero section"
               description="Display the featured marquee sports and news carousel with live muted streaming at the top of Home."
             />
+          </Section>
+
+          {/* ── Channel Recorder ─────────────────────────────────────────── */}
+          <Section
+            icon={<Radio className="h-5 w-5" />}
+            title="Channel Recorder"
+            description="Manage background live broadcast recording settings, storage, and schedule."
+            className="lg:col-span-2"
+          >
+            <RecorderSettingsCard />
           </Section>
 
           {/* ── App Updates ──────────────────────────────────────────────── */}

@@ -194,6 +194,37 @@ export interface StreamDeckApi {
     clearToken(): Promise<void>
   }
   snapLayout: SnapBridge
+  recording?: RecordingBridge
+}
+
+export interface RecordingBridge {
+  schedule(input: any): Promise<{ ok: boolean; recordingId?: string; error?: string; validation?: any }>
+  startNow(input: any): Promise<{ ok: boolean; recordingId?: string; error?: string; validation?: any }>
+  pause(id: string): Promise<boolean>
+  resume(id: string): Promise<boolean>
+  stop(id: string): Promise<boolean>
+  cancel(id: string): Promise<boolean>
+  delete(id: string): Promise<boolean>
+  getAll(): Promise<any[]>
+  getActive(): Promise<any[]>
+  getDiagnostics(id: string): Promise<Record<string, unknown> | null>
+  retryFinalize(id: string): Promise<boolean>
+  resolveConflict(conflictId: string, decision: string): Promise<void>
+  validate(input: any): Promise<any>
+  probeCapabilities(forceRecheck?: boolean): Promise<any>
+  getPreferences(): Promise<any>
+  savePreferences(prefs: any): Promise<any>
+  getNotifications(limit?: number): Promise<any[]>
+  markNotificationRead(id?: string): Promise<void>
+  markNotificationActed(id: string): Promise<void>
+  openFolder(folderPath?: string): Promise<boolean>
+  reportStall(): Promise<void>
+  pauseAll(): Promise<void>
+  updateEndTime(id: string, newEndEpochMs: number): Promise<{ ok: boolean; error?: string }>
+  rename(id: string, newFilename: string): Promise<{ ok: boolean; error?: string }>
+  playFile(id: string): Promise<{ ok: boolean; error?: string }>
+  onNotificationsChanged(callback: (data: { notifications: any[]; unreadCount: number }) => void): () => void
+  onRecordingsChanged(callback: () => void): () => void
 }
 
 export interface SnapSupportStatus {

@@ -3,7 +3,6 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
-import { useDarkLogo } from '@/hooks/useDarkLogo'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -139,10 +138,6 @@ export const ChannelLogo = memo(function ChannelLogo({
   }, [logo])
 
   const directLogoSrc = channel?.logoUrl || null
-  const isDarkDetected = useDarkLogo(directLogoSrc || logo?.objectUrl)
-  const isPipelineLowContrast = Boolean(logo?.flags?.includes('low-contrast'))
-  const isDark = isPipelineLowContrast || isDarkDetected
-
   const showMonogram = !directLogoSrc && !loading && (!logo || logo.tier === 'monogram' || !logo.objectUrl)
 
   // Inner logo content
@@ -175,19 +170,7 @@ export const ChannelLogo = memo(function ChannelLogo({
           src={directLogoSrc}
           alt={channel?.name ?? ''}
           draggable={false}
-          className={cn(
-            'pointer-events-none block object-contain object-center',
-            isHero ? 'h-auto w-auto max-h-[40px] max-w-[180px]' : isBanner ? 'h-auto w-auto max-h-[40px]' : 'h-full w-full'
-          )}
-          style={{
-            filter: isDark
-              ? isHero
-                ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.85)) brightness(0) invert(1)'
-                : 'brightness(0) invert(1)'
-              : isHero
-                ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))'
-                : undefined
-          }}
+          className="pointer-events-none block h-full w-full object-contain object-center"
         />
       ) : !showMonogram && logo?.objectUrl ? (
         isHero ? (
@@ -199,9 +182,7 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-auto w-auto max-h-[40px] max-w-[180px] object-contain"
             style={{
               imageRendering: 'auto',
-              filter: isDark
-                ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.85)) brightness(0) invert(1)'
-                : 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))',
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))',
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}
@@ -215,7 +196,6 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-auto w-auto max-h-[40px] object-contain"
             style={{
               imageRendering: 'auto',
-              filter: isDark ? 'brightness(0) invert(1)' : undefined,
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}
@@ -229,7 +209,6 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-full w-full object-contain object-center"
             style={{
               imageRendering: 'auto',
-              filter: isDark ? 'brightness(0) invert(1)' : undefined,
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}

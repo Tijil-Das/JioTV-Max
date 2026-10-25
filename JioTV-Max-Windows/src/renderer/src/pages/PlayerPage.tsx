@@ -50,6 +50,7 @@ import { SeekOverlay } from '@/components/player/SeekOverlay'
 import { useDoubleTapSeek } from '@/hooks/useDoubleTapSeek'
 import { PinDialog } from '@/components/settings/PinDialog'
 import { WindowControls } from '@/components/layout/WindowControls'
+import { RecordButton } from '@/components/recording/RecordButton'
 // import { CastButton } from '@/components/casting/CastButton'
 // import { CastDialog } from '@/components/casting/CastDialog'
 // import { CastingOverlay } from '@/components/casting/CastingOverlay'
@@ -1553,6 +1554,7 @@ export function PlayerPage(): JSX.Element {
             </div>
 
             <div className="pointer-events-auto flex items-center" style={{ gap: `${Math.round(4 * ctrlScale)}px` }}>
+              <RecordButton channel={channel} stream={stream} scale={ctrlScale} />
               <button
                 type="button"
                 onClick={() => void toggleMiniPlayer()}

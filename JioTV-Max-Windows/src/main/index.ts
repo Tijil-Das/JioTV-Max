@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, net, powerSaveBlocker, protocol, shell, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, net, powerSaveBlocker, protocol, shell, screen, Tray, dialog } from 'electron'
 import { promises as fs, readdirSync, existsSync, readFileSync, cpSync } from 'node:fs'
 import { join as pathJoin } from 'node:path'
 import path from 'node:path'
@@ -15,9 +15,12 @@ import {
   initUpdater,
   applyPendingUpdateOnLaunch,
   closeInstallingPanel,
-  isInstallingUpdate
+  isInstallingUpdate,
+  setUpdateDeferredChecker
 } from './updater'
 import { SnapController } from './snap-overlay'
+import { RecordingManager } from './recording/recording-manager'
+import { registerRecordingIpc } from './recording/ipc-handlers'
 // import { CastManager } from './casting/cast-manager'
 // import { ChromecastAdapter } from './casting/chromecast-adapter'
 // import { DlnaAdapter } from './casting/dlna-adapter'
@@ -150,6 +153,8 @@ const relay = new MediaRelay()
 const windowStateStore = new WindowStateStore(app.getPath('userData'))
 const rendererTokenStore = new SecureStore('renderer-token.bin')
 let jio: JioService
+let recordingManager: RecordingManager | null = null
+let tray: Tray | null = null
 
 // Diagnostic: print which electron binary is running so we know if castLabs is active.
 // console.log(`[Electron] execPath: ${process.execPath}`)
@@ -496,9 +501,84 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadURL('app://bundle/index.html')
   }
 
+  mainWindow.on('close', (event) => {
+    if (quitting) return
+    const prefs = recordingManager?.getPreferences()
+    const activeStats = recordingManager?.getActiveStats() ?? []
+    if (activeStats.length > 0 || prefs?.minimizeToTray) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function setupTray(): void {
+  const iconPath = path.join(app.getAppPath(), 'build', 'icon.ico')
+  if (!existsSync(iconPath)) return
+  try {
+    tray = new Tray(iconPath)
+    tray.setToolTip('JioTv Max')
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Open JioTv Max',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore()
+            mainWindow.show()
+            mainWindow.focus()
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          handleAppQuit()
+        }
+      }
+    ])
+    tray.setContextMenu(contextMenu)
+    tray.on('double-click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    })
+    updateTrayRecordingState()
+  } catch {}
+}
+
+function updateTrayRecordingState(): void {
+  if (!tray || tray.isDestroyed()) return
+  const activeStats = recordingManager?.getActiveStats() ?? []
+  if (activeStats.length > 0) {
+    tray.setToolTip(`JioTv Max — 🔴 ${activeStats.length} recording${activeStats.length > 1 ? 's' : ''} in progress`)
+  } else {
+    tray.setToolTip('JioTv Max')
+  }
+}
+
+function handleAppQuit(): void {
+  const activeStats = recordingManager?.getActiveStats() ?? []
+  if (activeStats.length > 0) {
+    const response = dialog.showMessageBoxSync(mainWindow || (undefined as any), {
+      type: 'warning',
+      buttons: ['Cancel', 'Quit anyway'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Active Recordings',
+      message: `${activeStats.length} recording${activeStats.length > 1 ? 's are' : ' is'} active. They’ll stop if you quit. Quit anyway?`
+    })
+    if (response === 0) return
+  }
+  quitting = true
+  app.quit()
 }
 
 function registerIpc(): void {
@@ -677,21 +757,16 @@ app.whenReady().then(async () => {
   await jio.init()
   registerIpc()
 
-  // const castManager = CastManager.getInstance()
-  // castManager.registerAdapter(new ChromecastAdapter())
-  // castManager.registerAdapter(new KodiAdapter())
-  // castManager.registerAdapter(new DlnaAdapter())
-  // if (process.env.CAST_MOCK === '1') {
-  //   castManager.registerAdapter(new MockAdapter())
-  // }
-  // castManager.registerAdapter(new AirPlayAdapter())
-  // registerCastIpc(castManager)
+  recordingManager = new RecordingManager(() => mainWindow)
+  recordingManager.setJioService(jio)
+  recordingManager.setTrayUpdater(() => updateTrayRecordingState())
+  recordingManager.init()
+  registerRecordingIpc(recordingManager)
+  setUpdateDeferredChecker(() => recordingManager?.hasActiveOrImminentRecordings() ?? false)
 
   initUpdater(() => mainWindow)
   await createWindow()
-  // if (mainWindow) {
-  //   castManager.setWebContents(mainWindow.webContents)
-  // }
+  setupTray()
   closeInstallingPanel()
 
   app.on('activate', () => {
@@ -702,6 +777,14 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   if (isInstallingUpdate()) return
   quitting = true
+  if (recordingManager) {
+    recordingManager.destroy()
+    recordingManager = null
+  }
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
   if (appSuspensionBlockerId !== null && powerSaveBlocker.isStarted(appSuspensionBlockerId)) {
     powerSaveBlocker.stop(appSuspensionBlockerId)
     appSuspensionBlockerId = null

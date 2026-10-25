@@ -23,6 +23,11 @@ let pollTimer: NodeJS.Timeout | null = null
 let panel: BrowserWindow | null = null
 let getMainWindow: () => BrowserWindow | null = () => null
 let configured = false
+let isDeferredChecker: (() => boolean) | null = null
+
+export function setUpdateDeferredChecker(checker: () => boolean): void {
+  isDeferredChecker = checker
+}
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
@@ -215,7 +220,7 @@ async function applyPendingUpdateOnLaunch(): Promise<boolean> {
 
 // Case A (also reusable).
 async function installNow(): Promise<void> {
-  if (installing) return
+  if (installing || isDeferredChecker?.()) return
   installing = true
   showInstallingPanel()
   await sleep(PANEL_PAINT_DELAY_MS)
@@ -223,7 +228,7 @@ async function installNow(): Promise<void> {
 }
 
 async function checkNow(): Promise<void> {
-  if (busy || downloaded || installing) return
+  if (busy || downloaded || installing || isDeferredChecker?.()) return
   try {
     await autoUpdater.checkForUpdates()
   } catch (err) {

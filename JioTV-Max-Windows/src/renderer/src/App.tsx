@@ -21,6 +21,9 @@ import { HowToUseModal } from '@/components/ui/HowToUseModal'
 import { ToastViewport } from '@/components/ui/Toasts'
 import { UpdateBanner } from '@/components/ui/UpdateBanner'
 import { SplashScreen } from '@/components/ui/SplashScreen'
+import { initRecordingSubscriptions } from '@/store/useRecordingStore'
+import { RecordDialog } from '@/components/recording/RecordDialog'
+import { RecordingCentreModal } from '@/components/recording/RecordingCentreModal'
 import { HomePage } from '@/pages/HomePage'
 import { CategoryPage } from '@/pages/CategoryPage'
 import { FavoritesPage } from '@/pages/FavoritesPage'
@@ -180,6 +183,12 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Recording subscriptions ──────────────────────────────────────────
+  useEffect(() => {
+    const offRecording = initRecordingSubscriptions()
+    return () => offRecording()
+  }, [])
+
   // ── Session & token expiration listener ──────────────────────────────
   useEffect(() => {
     const bridge = getBridge()
@@ -300,6 +309,8 @@ export default function App(): JSX.Element {
         </AppShell>
         <HowToUseModal />
         <LoginModal />
+        <RecordDialog />
+        <RecordingCentreModal />
         <ToastViewport />
         <UpdateBanner />
       </ErrorBoundary>

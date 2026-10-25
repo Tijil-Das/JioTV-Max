@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { NotificationBannerArea } from '@/components/recording/NotificationBannerArea'
 
 /**
  * Persistent chrome around the routed pages. The player route takes over the
@@ -18,8 +19,10 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
   }, [location.pathname, isPlayer])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
-      {!isPlayer ? <Sidebar /> : null}
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <NotificationBannerArea />
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {!isPlayer ? <Sidebar /> : null}
       <main
         ref={mainRef}
         id="app-scroll"
@@ -37,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }): JSX.Eleme
           children
         )}
       </main>
+      </div>
     </div>
   )
 }

@@ -28,7 +28,7 @@ import { cn } from '@/lib/cn'
 import type { RecordingRecord } from '@shared/recording-types'
 
 function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 MB'
+  if (!bytes || isNaN(bytes) || bytes <= 0) return '0 MB'
   const mb = bytes / (1024 * 1024)
   if (mb >= 1000) {
     return `${(mb / 1024).toFixed(2)} GB`
@@ -753,7 +753,10 @@ export function RecordingCentreModal(): JSX.Element | null {
                   diagnosticsData.parts.map((p: any) => (
                     <div key={p.partIndex} className="flex justify-between text-white/80">
                       <span>Part #{p.partIndex} ({p.mode})</span>
-                      <span>{formatBytes(p.sizeBytes)} • {p.startTime}</span>
+                      <span>
+                        {formatBytes(p.bytes ?? p.sizeBytes ?? 0)}
+                        {p.startUtc ? ` • ${new Date(p.startUtc).toLocaleTimeString()}` : p.startTime ? ` • ${p.startTime}` : ''}
+                      </span>
                     </div>
                   ))
                 ) : (

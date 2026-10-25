@@ -134,4 +134,14 @@ export function registerRecordingIpc(manager: RecordingManager): void {
     manager.pauseAll()
     return true
   })
+
+  ipcMain.handle(IPC.desktopCaptureGetSources, async () => {
+    const { desktopCapturer } = await import('electron')
+    const sources = await desktopCapturer.getSources({ types: ['window'] })
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      thumbnail: s.thumbnail.toDataURL()
+    }))
+  })
 }

@@ -144,6 +144,31 @@ const api = {
       ipcRenderer.on('recording:recordings-changed', listener)
       return () => ipcRenderer.removeListener('recording:recordings-changed', listener)
     }
+  },
+  desktopCapture: {
+    getSources: () => ipcRenderer.invoke(IPC.desktopCaptureGetSources),
+    sendChunk: (recordingId: string, chunk: ArrayBuffer) =>
+      ipcRenderer.send(`desktop-capture:chunk:${recordingId}`, chunk),
+    onStart: (callback: (data: { recordingId: string; channelId: string; channelName: string }) => void) => {
+      const listener = (_e: any, data: any) => callback(data)
+      ipcRenderer.on('desktop-capture:start', listener)
+      return () => ipcRenderer.removeListener('desktop-capture:start', listener)
+    },
+    onStop: (callback: (data: { recordingId: string }) => void) => {
+      const listener = (_e: any, data: any) => callback(data)
+      ipcRenderer.on('desktop-capture:stop', listener)
+      return () => ipcRenderer.removeListener('desktop-capture:stop', listener)
+    },
+    onPause: (callback: (data: { recordingId: string }) => void) => {
+      const listener = (_e: any, data: any) => callback(data)
+      ipcRenderer.on('desktop-capture:pause', listener)
+      return () => ipcRenderer.removeListener('desktop-capture:pause', listener)
+    },
+    onResume: (callback: (data: { recordingId: string }) => void) => {
+      const listener = (_e: any, data: any) => callback(data)
+      ipcRenderer.on('desktop-capture:resume', listener)
+      return () => ipcRenderer.removeListener('desktop-capture:resume', listener)
+    }
   }
 }
 

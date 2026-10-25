@@ -5,7 +5,6 @@ import {
   Play,
   Square,
   Clock,
-  ShieldAlert,
   Disc
 } from 'lucide-react'
 import { useRecordingStore } from '@/store/useRecordingStore'
@@ -32,13 +31,6 @@ export function RecordButton({ channel, stream, scale = 1 }: RecordButtonProps):
   const pauseRecording = useRecordingStore((s) => s.pauseRecording)
   const resumeRecording = useRecordingStore((s) => s.resumeRecording)
   const stopRecording = useRecordingStore((s) => s.stopRecording)
-
-  const isDrm = Boolean(
-    (channel as any)?.isDrm ||
-    (channel as any)?.stream?.type === 'dash' ||
-    stream?.drm ||
-    stream?.url?.includes('.mpd')
-  )
 
   // Find if current channel has an active session
   const activeSession = useMemo(() => {
@@ -70,10 +62,7 @@ export function RecordButton({ channel, stream, scale = 1 }: RecordButtonProps):
   let state: 'recording' | 'scheduled' | 'disabled' | 'record' = 'record'
   let disabledReason = ''
 
-  if (isDrm) {
-    state = 'disabled'
-    disabledReason = 'DRM channels cannot be recorded'
-  } else if (activeSession) {
+  if (activeSession) {
     state = 'recording'
   } else if (scheduledRecording) {
     state = 'scheduled'
@@ -194,7 +183,7 @@ export function RecordButton({ channel, stream, scale = 1 }: RecordButtonProps):
     )
   }
 
-  // 3. Disabled State (DRM or Concurrency)
+  // 3. Disabled State (Concurrency limit)
   if (state === 'disabled') {
     return (
       <div className="pointer-events-auto flex items-center">
@@ -205,11 +194,7 @@ export function RecordButton({ channel, stream, scale = 1 }: RecordButtonProps):
           style={{ padding: `${Math.round(6 * scale)}px` }}
           title={disabledReason}
         >
-          {isDrm ? (
-            <ShieldAlert style={{ width: Math.round(19 * scale), height: Math.round(19 * scale) }} />
-          ) : (
-            <Disc style={{ width: Math.round(19 * scale), height: Math.round(19 * scale) }} />
-          )}
+          <Disc style={{ width: Math.round(19 * scale), height: Math.round(19 * scale) }} />
         </button>
       </div>
     )

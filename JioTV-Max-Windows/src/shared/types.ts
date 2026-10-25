@@ -195,6 +195,14 @@ export interface StreamDeckApi {
   }
   snapLayout: SnapBridge
   recording?: RecordingBridge
+  desktopCapture?: {
+    getSources(): Promise<Array<{ id: string; name: string; thumbnail: string }>>
+    sendChunk(recordingId: string, chunk: ArrayBuffer): void
+    onStart(callback: (data: { recordingId: string; channelId: string; channelName: string }) => void): () => void
+    onStop(callback: (data: { recordingId: string }) => void): () => void
+    onPause(callback: (data: { recordingId: string }) => void): () => void
+    onResume(callback: (data: { recordingId: string }) => void): () => void
+  }
 }
 
 export interface RecordingBridge {

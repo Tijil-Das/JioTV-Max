@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useId } from 'react'
+import { useState, useEffect, useMemo, useId, useCallback } from 'react'
 import {
   Clock,
   Folder,
@@ -8,7 +8,10 @@ import {
   Calendar,
   Sparkles,
   Info,
-  ShieldAlert
+  Monitor,
+  Play,
+  StopCircle,
+  HardDrive
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -17,7 +20,7 @@ import { useRecordingStore } from '@/store/useRecordingStore'
 import { useChannelStore } from '@/store/useChannelStore'
 import { useUIStore } from '@/store/useUIStore'
 import { cn } from '@/lib/cn'
-import type { OverlaySettings, ValidationResult } from '@shared/recording-types'
+import type { OverlaySettings, ValidationResult, CaptureMode } from '@shared/recording-types'
 
 export function RecordDialog(): JSX.Element | null {
   const isOpen = useRecordingStore((s) => s.isRecordDialogOpen)
@@ -62,6 +65,11 @@ export function RecordDialog(): JSX.Element | null {
   const [folder, setFolder] = useState('')
   const [quality, setQuality] = useState<'highest' | 'balanced'>('highest')
   const [paddingMinutes, setPaddingMinutes] = useState(0)
+
+  // Capture mode for DRM channels
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('stream-copy')
+  const [drmKey, setDrmKey] = useState('')
+  const [showDrmKeyInput, setShowDrmKeyInput] = useState(false)
 
   // Overlay settings
   const [overlayEnabled, setOverlayEnabled] = useState(false)
@@ -111,17 +119,24 @@ export function RecordDialog(): JSX.Element | null {
       setQuality(preferences.quality)
       setPaddingMinutes(preferences.paddingMinutes)
       setOverlayEnabled(preferences.timestampCardDefault && capability?.tier !== 'unavailable')
+      // Set capture mode for DRM channels: default to surface-capture
+      if (isDrm) {
+        setCaptureMode('surface-capture')
+        setShowDrmKeyInput(false)
+      } else {
+        setCaptureMode('stream-copy')
+      }
       if (channel) {
         const cleanName = channel.name.replace(/[^a-zA-Z0-9_-]/g, '_')
         const dateStr = new Date().toISOString().slice(0, 10)
         setFilename(`${cleanName}_${dateStr}.mp4`)
       }
     }
-  }, [isOpen, preferences, channel, capability])
+  }, [isOpen, preferences, channel, capability, isDrm])
 
   // Debounced live validator
   useEffect(() => {
-    if (!isOpen || !channel || isDrm) return
+    if (!isOpen || !channel) return
     const timer = setTimeout(async () => {
       setValidating(true)
       try {
@@ -130,9 +145,10 @@ export function RecordDialog(): JSX.Element | null {
             channel: {
               id: channel.id,
               name: channel.name,
-              isDrm: false,
-              streamType: 'hls',
-              isEntitled: true
+              isDrm: isDrm,
+              streamType: (channel as any)?.stream?.type || (isDrm ? 'dash' : 'hls'),
+              isEntitled: true,
+              captureMode: isDrm ? captureMode : 'stream-copy'
             },
             timeWindow: {
               fromEpochMs,
@@ -146,9 +162,11 @@ export function RecordDialog(): JSX.Element | null {
                 channelId: channel.id
               }
             },
-            filename: {
-              filename
-            },
+            fromEpochMs,
+            toEpochMs,
+            isRecordNow: mode === 'now',
+            paddingMinutes,
+            filename,
             diskSpace: {
               targetFolder: folder,
               durationMinutes: Math.round((toEpochMs - fromEpochMs) / 60000) + paddingMinutes * 2,
@@ -175,14 +193,6 @@ export function RecordDialog(): JSX.Element | null {
   }
 
   const handleSubmit = async () => {
-    if (isDrm) {
-      pushToast({
-        title: 'DRM Protected',
-        description: 'DRM channels cannot be recorded due to broadcast content protection.',
-        variant: 'error'
-      })
-      return
-    }
 
     if (validationResult && !validationResult.valid) {
       pushToast({
@@ -206,7 +216,10 @@ export function RecordDialog(): JSX.Element | null {
         filename,
         quality,
         overlaySettings: overlayEnabled ? overlaySettings : undefined,
-        isRecordNow: mode === 'now'
+        isRecordNow: mode === 'now',
+        isDrm,
+        captureMode: isDrm ? captureMode : 'stream-copy',
+        drmKey: isDrm && captureMode === 'decryption-key' ? drmKey.trim() || undefined : undefined
       }
 
       let res
@@ -251,7 +264,14 @@ export function RecordDialog(): JSX.Element | null {
               <Clock className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-base font-semibold text-white">Record Channel</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-white">Record Channel</h2>
+                {isDrm && (
+                  <span className="text-[10px] font-medium text-amber-300 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded">
+                    DRM
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-white/60">{channel.name}</p>
             </div>
           </div>
@@ -281,21 +301,8 @@ export function RecordDialog(): JSX.Element | null {
           </div>
         </div>
 
-        {/* DRM Warning if channel is DRM */}
-        {isDrm ? (
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
-            <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
-            <div className="text-xs leading-relaxed">
-              <p className="font-semibold text-amber-300">Channel Cannot Be Recorded</p>
-              <p className="mt-1 text-amber-200/80">
-                This channel is protected with Widevine DRM content encryption. Recording DRM-protected live broadcasts is restricted.
-              </p>
-            </div>
-          </div>
-        ) : null}
-
         {/* Duration / Schedule selector */}
-        {!isDrm && mode === 'now' ? (
+        {mode === 'now' ? (
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Duration</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -361,7 +368,7 @@ export function RecordDialog(): JSX.Element | null {
         ) : null}
 
         {/* Scheduled start & end time pickers */}
-        {!isDrm && mode === 'schedule' ? (
+        {mode === 'schedule' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-white/50">Start Time</label>
@@ -408,6 +415,76 @@ export function RecordDialog(): JSX.Element | null {
             </select>
           </div>
         </div>
+
+        {/* DRM Capture Mode (Sony / Widevine channels) */}
+        {isDrm && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Monitor className="h-4 w-4 text-amber-400" />
+                <div>
+                  <p className="text-xs font-medium text-white">DRM Capture Mode</p>
+                  <p className="text-[11px] text-white/50">
+                    Sony channels use Widevine DRM. Stream-copy records encrypted chunks. Surface capture records decrypted playback.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="pt-2 space-y-3">
+              <label className="text-xs font-semibold text-white/80 block mb-2">Capture Method</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCaptureMode('surface-capture')}
+                  className={cn(
+                    'flex flex-col items-center justify-center p-3 rounded-xl border transition-all',
+                    captureMode === 'surface-capture'
+                      ? 'border-amber-500/60 bg-amber-500/10 text-amber-200'
+                      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                  )}
+                >
+                  <span className="text-xs font-semibold">Surface Capture</span>
+                  <span className="text-[10px] text-white/50 mt-0.5">Recommended · Real-time</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCaptureMode('decryption-key')}
+                  className={cn(
+                    'flex flex-col items-center justify-center p-3 rounded-xl border transition-all',
+                    captureMode === 'decryption-key'
+                      ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-200'
+                      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                  )}
+                >
+                  <span className="text-xs font-semibold">Decryption Key</span>
+                  <span className="text-[10px] text-white/50 mt-0.5">Lossless · Needs KID:KEY</span>
+                </button>
+              </div>
+
+              {captureMode === 'decryption-key' && (
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <label className="text-xs font-semibold text-white/80 block mb-1">Widevine KID:KEY</label>
+                  <input
+                    type="text"
+                    value={drmKey}
+                    onChange={(e) => setDrmKey(e.target.value)}
+                    placeholder="32 hex chars : 32 hex chars"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                  />
+                  <p className="text-[11px] text-white/50">
+                    16-byte content key extracted from the Widevine license exchange. Format: <span className="text-white/70">KID:KEY</span>
+                  </p>
+                </div>
+              )}
+
+              {captureMode === 'surface-capture' && (
+                <p className="text-[11px] text-white/50">
+                  Captures decrypted video/audio directly from the player window. Uses GPU/CPU to encode in real-time.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Timestamp Card Option */}
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-3">
@@ -500,7 +577,7 @@ export function RecordDialog(): JSX.Element | null {
           <Button
             variant="primary"
             size="sm"
-            disabled={isDrm || submitting || (validationResult !== null && !validationResult.valid)}
+            disabled={submitting || (validationResult !== null && !validationResult.valid)}
             onClick={handleSubmit}
             className="bg-red-600 hover:bg-red-500 text-white min-w-[120px]"
           >

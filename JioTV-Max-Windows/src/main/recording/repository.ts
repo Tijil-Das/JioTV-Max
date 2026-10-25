@@ -8,7 +8,8 @@ import type {
   ConflictRecord,
   NotificationRecord,
   CapabilityProbeResult,
-  RecordingStatus
+  RecordingStatus,
+  CaptureMode
 } from '../../shared/recording-types'
 
 export class RecordingRepository {
@@ -50,6 +51,20 @@ export class RecordingRepository {
         .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
         .run(1, new Date().toISOString())
     }
+    if (currentVersion < 2) {
+      this.migrationV2()
+      this.db
+        .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+        .run(2, new Date().toISOString())
+    }
+  }
+
+  private migrationV2(): void {
+    this.db.exec(`
+      ALTER TABLE recordings ADD COLUMN is_drm INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recordings ADD COLUMN capture_mode TEXT DEFAULT 'stream-copy';
+      ALTER TABLE recordings ADD COLUMN drm_key TEXT;
+    `)
   }
 
   private migrationV1(): void {
@@ -178,14 +193,16 @@ export class RecordingRepository {
         padding_minutes, quality, resolution, bitrate, folder, is_default_folder,
         filename, final_path, temp_conflict_name, size_bytes, duration_seconds,
         overlay_settings, overlay_applied, is_partial, partial_reasons, notified,
-        missed_reason, failure_reason, created_at, updated_at
+        missed_reason, failure_reason, created_at, updated_at,
+        is_drm, capture_mode, drm_key
       ) VALUES (
         @id, @accountId, @channelId, @channelName, @channelLogo, @status,
         @plannedStartUtc, @plannedEndUtc, @actualStartUtc, @actualEndUtc,
         @paddingMinutes, @quality, @resolution, @bitrate, @folder, @isDefaultFolder,
         @filename, @finalPath, @tempConflictName, @sizeBytes, @durationSeconds,
         @overlaySettings, @overlayApplied, @isPartial, @partialReasons, @notified,
-        @missedReason, @failureReason, @createdAt, @updatedAt
+        @missedReason, @failureReason, @createdAt, @updatedAt,
+        @isDrm, @captureMode, @drmKey
       )
     `)
 
@@ -219,7 +236,10 @@ export class RecordingRepository {
       missedReason: rec.missedReason ?? null,
       failureReason: rec.failureReason ?? null,
       createdAt: rec.createdAt,
-      updatedAt: rec.updatedAt
+      updatedAt: rec.updatedAt,
+      isDrm: rec.isDrm ? 1 : 0,
+      captureMode: rec.captureMode ?? 'stream-copy',
+      drmKey: rec.drmKey ?? null
     })
   }
 
@@ -589,7 +609,10 @@ export class RecordingRepository {
       missedReason: r.missed_reason ? String(r.missed_reason) : undefined,
       failureReason: r.failure_reason ? String(r.failure_reason) : undefined,
       createdAt: String(r.created_at),
-      updatedAt: String(r.updated_at)
+      updatedAt: String(r.updated_at),
+      isDrm: Boolean(r.is_drm),
+      captureMode: (r.capture_mode as CaptureMode) ?? 'stream-copy',
+      drmKey: r.drm_key ? String(r.drm_key) : undefined
     }
   }
 

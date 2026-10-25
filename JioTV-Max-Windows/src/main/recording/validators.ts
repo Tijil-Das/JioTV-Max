@@ -39,14 +39,6 @@ export class Validators {
       return issues
     }
 
-    if (channel.isDrm || channel.type === 'dash') {
-      issues.push({
-        field: 'channel',
-        level: 'error',
-        message: 'DRM-protected channels cannot be recorded.'
-      })
-    }
-
     if (!isPlanEntitled) {
       issues.push({
         field: 'channel',
@@ -192,8 +184,14 @@ export class Validators {
   /**
    * Sanitize Windows filename
    */
-  static sanitizeFilename(raw: string): string {
-    let name = raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+  static sanitizeFilename(raw: unknown): string {
+    const rawStr =
+      typeof raw === 'string'
+        ? raw
+        : raw && typeof raw === 'object' && 'filename' in raw && typeof (raw as any).filename === 'string'
+          ? (raw as any).filename
+          : String(raw ?? '')
+    let name = rawStr.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
     name = name.trim().replace(/[. ]+$/, '')
 
     const ext = path.extname(name)
@@ -263,20 +261,39 @@ export class Validators {
   static validateAll(input: {
     channel: { id: string; name: string; isDrm?: boolean; type?: string } | null
     isPlanEntitled?: boolean
-    fromEpochMs: number
-    toEpochMs: number
+    fromEpochMs?: number
+    toEpochMs?: number
     paddingMinutes?: number
     isRecordNow?: boolean
     nowEpochMs?: number
+    timeWindow?: {
+      fromEpochMs?: number
+      toEpochMs?: number
+      isRecordNow?: boolean
+      nowEpochMs?: number
+    }
     existingIntervals: ExistingRecordingInterval[]
     targetId?: string
-    filename: string
+    filename: string | { filename?: string }
     freeSpaceBytes?: number
     totalScheduledEstimateBytes?: number
     bitrateBps?: number
   }): ValidationResult {
     const errors: ValidationIssue[] = []
     const warnings: ValidationIssue[] = []
+
+    const fromEpochMs = input.fromEpochMs ?? input.timeWindow?.fromEpochMs ?? 0
+    const toEpochMs = input.toEpochMs ?? input.timeWindow?.toEpochMs ?? 0
+    const isRecordNow = input.isRecordNow ?? input.timeWindow?.isRecordNow ?? false
+    const nowEpochMs = input.nowEpochMs ?? input.timeWindow?.nowEpochMs
+    const paddingMinutes = input.paddingMinutes ?? 0
+    const rawFilename = input.filename
+    const filenameStr =
+      typeof rawFilename === 'string'
+        ? rawFilename
+        : rawFilename && typeof rawFilename === 'object' && 'filename' in rawFilename && typeof rawFilename.filename === 'string'
+          ? rawFilename.filename
+          : ''
 
     // 1. Channel
     const channelIssues = this.validateChannel(input.channel, input.isPlanEntitled ?? true)
@@ -287,10 +304,10 @@ export class Validators {
 
     // 2. Time Window
     const { issues: timeIssues, endsTomorrowText } = this.validateTimeWindow({
-      fromEpochMs: input.fromEpochMs,
-      toEpochMs: input.toEpochMs,
-      isRecordNow: input.isRecordNow,
-      nowEpochMs: input.nowEpochMs
+      fromEpochMs,
+      toEpochMs,
+      isRecordNow,
+      nowEpochMs
     })
     for (const issue of timeIssues) {
       if (issue.level === 'error') errors.push(issue)
@@ -298,15 +315,15 @@ export class Validators {
     }
 
     // 3. Concurrency
-    if (input.channel && input.toEpochMs > input.fromEpochMs) {
-      const paddingMs = (input.paddingMinutes ?? 0) * 60 * 1000
+    if (input.channel && toEpochMs > fromEpochMs) {
+      const paddingMs = paddingMinutes * 60 * 1000
       const concIssues = this.validateConcurrency(
         {
           id: input.targetId,
           channelId: input.channel.id,
           channelName: input.channel.name,
-          startEpochMs: input.fromEpochMs - paddingMs,
-          endEpochMs: input.toEpochMs + paddingMs
+          startEpochMs: fromEpochMs - paddingMs,
+          endEpochMs: toEpochMs + paddingMs
         },
         input.existingIntervals
       )
@@ -317,8 +334,8 @@ export class Validators {
     }
 
     // 4. Filename
-    const sanitized = this.sanitizeFilename(input.filename)
-    if (sanitized !== input.filename) {
+    const sanitized = this.sanitizeFilename(filenameStr)
+    if (filenameStr && sanitized !== filenameStr) {
       warnings.push({
         field: 'name',
         level: 'warning',
@@ -328,7 +345,7 @@ export class Validators {
     }
 
     // 5. Disk Space
-    const durationSeconds = Math.max(0, Math.round((input.toEpochMs - input.fromEpochMs) / 1000))
+    const durationSeconds = Math.max(0, Math.round((toEpochMs - fromEpochMs) / 1000))
     const diskEstimateBytes = this.estimateDiskBytes(durationSeconds, input.bitrateBps)
     if (typeof input.freeSpaceBytes === 'number') {
       const diskIssues = this.validateDiskSpace(

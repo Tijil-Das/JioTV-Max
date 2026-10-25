@@ -19,6 +19,8 @@ interface RecordingStoreState {
   activeTab: 'recording' | 'scheduled' | 'completed' | 'preferences'
   isRecordDialogOpen: boolean
   dialogChannel: Channel | null
+  desktopCaptureSources: Array<{ id: string; name: string; thumbnail: string }>
+  isDesktopCapturing: boolean
 
   // Actions
   openRecordDialog: (channel: Channel) => void
@@ -33,6 +35,7 @@ interface RecordingStoreState {
   fetchPreferences: () => Promise<void>
   fetchCapability: (forceRecheck?: boolean) => Promise<void>
   savePreferences: (prefs: Partial<RecordingPreferences>) => Promise<void>
+  fetchDesktopCaptureSources: () => Promise<void>
 
   markNotificationRead: (id?: string) => Promise<void>
   markNotificationActed: (id: string) => Promise<void>
@@ -46,6 +49,13 @@ interface RecordingStoreState {
   resolveConflict: (conflictId: string, decision: 'cancel' | 'trim_first' | 'trim_second' | 'keep_both') => Promise<void>
   openFolder: (folder?: string) => Promise<boolean>
   pauseAll: () => Promise<void>
+
+  // Desktop capture (DRM surface capture)
+  sendDesktopChunk: (recordingId: string, chunk: ArrayBuffer) => void
+  startDesktopCapture: (callback: (data: { recordingId: string; channelId: string; channelName: string }) => void) => () => void
+  stopDesktopCapture: (callback: (data: { recordingId: string }) => void) => () => void
+  pauseDesktopCapture: (callback: (data: { recordingId: string }) => void) => () => void
+  resumeDesktopCapture: (callback: (data: { recordingId: string }) => void) => () => void
 }
 
 let isInitialized = false
@@ -62,6 +72,8 @@ export const useRecordingStore = create<RecordingStoreState>((set, get) => ({
   activeTab: 'recording',
   isRecordDialogOpen: false,
   dialogChannel: null,
+  desktopCaptureSources: [],
+  isDesktopCapturing: false,
 
   openRecordDialog: (channel) => set({ isRecordDialogOpen: true, dialogChannel: channel }),
   closeRecordDialog: () => set({ isRecordDialogOpen: false, dialogChannel: null }),
@@ -115,6 +127,14 @@ export const useRecordingStore = create<RecordingStoreState>((set, get) => ({
     try {
       const updated = await window.api.recording.savePreferences(prefs)
       set({ preferences: updated })
+    } catch {}
+  },
+
+  fetchDesktopCaptureSources: async () => {
+    if (!window.api?.desktopCapture?.getSources) return
+    try {
+      const sources = await window.api.desktopCapture.getSources()
+      set({ desktopCaptureSources: sources })
     } catch {}
   },
 
@@ -193,6 +213,43 @@ export const useRecordingStore = create<RecordingStoreState>((set, get) => ({
     await window.api.recording.pauseAll()
     void get().fetchRecordings()
     void get().fetchActiveStats()
+  },
+
+  sendDesktopChunk: (recordingId, chunk) => {
+    if (!window.api?.desktopCapture?.sendChunk) return
+    window.api.desktopCapture.sendChunk(recordingId, chunk)
+  },
+
+  startDesktopCapture: (callback) => {
+    if (!window.api?.desktopCapture?.onStart) return () => {}
+    set({ isDesktopCapturing: true })
+    const off = window.api.desktopCapture.onStart((data) => {
+      set({ isDesktopCapturing: true })
+      callback(data)
+    })
+    return off
+  },
+
+  stopDesktopCapture: (callback) => {
+    if (!window.api?.desktopCapture?.onStop) return () => {}
+    set({ isDesktopCapturing: false })
+    const off = window.api.desktopCapture.onStop((data) => {
+      set({ isDesktopCapturing: false })
+      callback(data)
+    })
+    return off
+  },
+
+  pauseDesktopCapture: (callback) => {
+    if (!window.api?.desktopCapture?.onPause) return () => {}
+    const off = window.api.desktopCapture.onPause(callback)
+    return off
+  },
+
+  resumeDesktopCapture: (callback) => {
+    if (!window.api?.desktopCapture?.onResume) return () => {}
+    const off = window.api.desktopCapture.onResume(callback)
+    return off
   }
 }))
 
@@ -208,6 +265,7 @@ export function initRecordingSubscriptions(): () => void {
   void store.fetchNotifications()
   void store.fetchPreferences()
   void store.fetchCapability()
+  void store.fetchDesktopCaptureSources()
 
   const offRecordings = window.api.recording.onRecordingsChanged(() => {
     void store.fetchRecordings()

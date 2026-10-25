@@ -15,8 +15,10 @@ import type {
   RecordingPreferences,
   ValidationResult,
   ActiveRecordingStats,
-  ConflictRecord
+  ConflictRecord,
+  CaptureMode
 } from '../../shared/recording-types'
+import type { StreamInfo } from '../../shared/types'
 
 export class RecordingManager {
   private static instance: RecordingManager | null = null
@@ -94,6 +96,19 @@ export class RecordingManager {
 
   setJioService(jio: JioService): void {
     this.jioService = jio
+  }
+
+  /**
+   * Determine the capture mode for a channel based on stream info and available keys.
+   *
+   * - Clear HLS channels: 'stream-copy' (ffmpeg -c copy, lossless)
+   * - DRM channels with a known KID:KEY: 'decryption-key' (ffmpeg -cenc_decryption_key)
+   * - DRM channels without a key: 'surface-capture' (desktop player surface capture)
+   */
+  determineCaptureMode(streamInfo: StreamInfo, drmKey?: string): CaptureMode {
+    if (!streamInfo.isDrm) return 'stream-copy'
+    if (drmKey) return 'decryption-key'
+    return 'surface-capture'
   }
 
   init(): void {
@@ -178,6 +193,9 @@ export class RecordingManager {
     quality?: 'highest' | 'balanced'
     overlaySettings?: Record<string, unknown>
     isRecordNow?: boolean
+    isDrm?: boolean
+    captureMode?: CaptureMode
+    drmKey?: string
   }): Promise<{ ok: boolean; recordingId?: string; error?: string; validation?: ValidationResult }> {
     const accountId = this.jioService?.getSession()?.phone || 'default_user'
     const folder = input.folder || this.preferences.defaultFolder
@@ -227,7 +245,10 @@ export class RecordingManager {
       isPartial: false,
       notified: false,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      isDrm: input.isDrm ? true : undefined,
+      captureMode: input.captureMode ?? 'stream-copy',
+      drmKey: input.drmKey ?? undefined
     }
 
     this.repo.insertRecording(rec)
@@ -253,6 +274,7 @@ export class RecordingManager {
 
     // Re-verify stream & plan before start
     let streamUrl = ''
+    let streamInfo: StreamInfo | null = null
     if (this.jioService) {
       const streamRes = await this.jioService.getStream(rec.channelId, rec.quality === 'balanced' ? 'medium' : 'high')
       if (!streamRes.ok) {
@@ -274,10 +296,22 @@ export class RecordingManager {
         return
       }
       streamUrl = streamRes.data.url
+      streamInfo = streamRes.data
+    }
+
+    // Determine capture mode for this recording
+    let captureMode: CaptureMode = 'stream-copy'
+    let drmKey: string | undefined = undefined
+    if (streamInfo?.isDrm) {
+      captureMode = this.determineCaptureMode(streamInfo, rec.drmKey)
+      drmKey = rec.drmKey
     }
 
     const session = new RecorderSession(rec, this.repo, {
       streamUrl,
+      captureMode,
+      drmKey,
+      getMainWindow: this.getMainWindow,
       overlaySettings: rec.overlaySettings ? JSON.parse(rec.overlaySettings) : undefined,
       requestFreshStreamUrl: async () => {
         if (!this.jioService) return null

@@ -824,7 +824,7 @@ export class MediaRelay {
 
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${this._port}`)
     const raw = url.pathname === '/raw'
-    const streamMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/(manifest|license)$/i)
+    const streamMatch = url.pathname.match(/^\/stream\/([a-f0-9-]{36})\/(manifest(?:\.(?:mpd|m3u8))?|license)$/i)
     const segmentMatch = url.pathname.match(
       /^\/(?:stream\/([a-f0-9-]{36})\/seg|proxy-segment\/([a-f0-9-]{36})|proxy-segment)\/(.*)$/i
     )
@@ -1228,7 +1228,7 @@ export class MediaRelay {
       return this.handleLicense(req, res, session)
     }
 
-    if (action === 'manifest') {
+    if (action.startsWith('manifest')) {
       // console.log(`[MediaRelay] /manifest fetching upstream: ${session.manifestUrl.slice(0, 110)}...`)
       this.lastActiveSessionId = id
       let upstream: Response

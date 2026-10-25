@@ -11,6 +11,8 @@ export type RecordingStatus =
   | 'cancelled'
   | 'needs_attention'
 
+export type CaptureMode = 'stream-copy' | 'surface-capture' | 'decryption-key'
+
 export interface OverlaySettings {
   enabled: boolean
   format: '12h' | '24h'
@@ -52,6 +54,12 @@ export interface RecordingRecord {
   failureReason?: string
   createdAt: string
   updatedAt: string
+  /** DRM/Widevine channel flag. When true, stream-copy (-c copy) records encrypted chunks. */
+  isDrm?: boolean
+  /** Capture mode: 'stream-copy' (clear HLS), 'surface-capture' (desktop player capture), 'decryption-key' (ffmpeg -cenc_decryption_key). */
+  captureMode?: CaptureMode
+  /** Widevine KID:KEY hex string (e.g. "16-byte-hex-kid:16-byte-hex-key") for decryption-key mode. */
+  drmKey?: string
 }
 
 export interface RecordingPart {
@@ -62,7 +70,7 @@ export interface RecordingPart {
   startUtc: string
   endUtc?: string
   bytes: number
-  mode: 'copy' | 'encode'
+  mode: 'copy' | 'encode' | 'surface' | 'key'
 }
 
 export interface RecordingEvent {

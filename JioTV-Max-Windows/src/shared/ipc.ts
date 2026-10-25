@@ -81,5 +81,7 @@ export const IPC = {
   recordingPauseAll: 'recording:pause-all',
   recordingUpdateEndTime: 'recording:update-end-time',
   recordingRename: 'recording:rename',
-  recordingPlayFile: 'recording:play-file'
+  recordingPlayFile: 'recording:play-file',
+  // Desktop capture (DRM surface capture) IPC
+  desktopCaptureGetSources: 'desktop-capture:get-sources'
 } as const

@@ -3,9 +3,10 @@ import path from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { app } from 'electron'
 import type { RecordingRepository } from './repository'
-import type { RecordingRecord, RecordingStatus, OverlaySettings } from '../../shared/recording-types'
+import type { RecordingRecord, RecordingStatus, OverlaySettings, CaptureMode } from '../../shared/recording-types'
 import { FFmpegResolver } from './ffmpeg-resolver'
 import { SharedStreamFetcher } from './shared-stream-fetcher'
+import { DesktopCaptureSession } from './desktop-capture-session'
 
 export interface RecorderSessionOptions {
   streamUrl: string
@@ -15,6 +16,12 @@ export interface RecorderSessionOptions {
   onFinalizeReady?: (session: RecorderSession) => void
   onStallWarning?: (channelName: string) => void
   requestFreshStreamUrl?: () => Promise<string | null>
+  /** Capture mode: 'stream-copy' (clear HLS), 'surface-capture' (DRM desktop capture), 'decryption-key' (ffmpeg -cenc_decryption_key). */
+  captureMode?: CaptureMode
+  /** Widevine KID:KEY hex string for decryption-key mode. */
+  drmKey?: string
+  /** Callback to get the main window for surface capture IPC. */
+  getMainWindow?: () => import('electron').BrowserWindow | null
 }
 
 export class RecorderSession {
@@ -35,6 +42,7 @@ export class RecorderSession {
   private elapsedTimer: NodeJS.Timeout | null = null
   private isDestroyed = false
   private streamUrl: string
+  private desktopCaptureSession: DesktopCaptureSession | null = null
 
   constructor(
     private readonly record: RecordingRecord,
@@ -104,6 +112,39 @@ export class RecorderSession {
       actualStartUtc: new Date().toISOString()
     })
 
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+
+    if (captureMode === 'surface-capture') {
+      // DRM surface capture: delegate to DesktopCaptureSession (no ffmpeg -c copy)
+      this.desktopCaptureSession = new DesktopCaptureSession(
+        this.record,
+        this.repo,
+        {
+          streamUrl: this.streamUrl,
+          onStateChange: (sess, from, to) => {
+            this.options.onStateChange?.(this, from as RecordingStatus, to as RecordingStatus)
+          },
+          onProgress: (stats) => {
+            this.elapsedSeconds = stats.elapsedSeconds
+            this.options.onProgress?.({
+              bytesWritten: stats.bytesWritten,
+              elapsedSeconds: stats.elapsedSeconds,
+              bitrateKbps: 0
+            })
+          },
+          onFinalizeReady: (sess) => {
+            this.options.onFinalizeReady?.(this)
+          }
+        },
+        this.options.getMainWindow ?? (() => null)
+      )
+      await this.desktopCaptureSession.start()
+      this.startDiskCheck()
+      this.startElapsedTimer()
+      return
+    }
+
+    // stream-copy or decryption-key: use ffmpeg
     // Register with SharedStreamFetcher
     SharedStreamFetcher.getInstance().acquire(
       this.channelId,
@@ -142,30 +183,45 @@ export class RecorderSession {
     this.currentPartPath = path.join(this.workingDir, `part${this.currentPartIndex}.ts`)
     this.currentPartStartTime = new Date().toISOString()
 
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+    const partMode = captureMode === 'decryption-key' ? 'key' : 'copy'
+
     const partId = this.repo.addPart({
       recordingId: this.id,
       partIndex: this.currentPartIndex,
       path: this.currentPartPath,
       startUtc: this.currentPartStartTime,
       bytes: 0,
-      mode: 'copy'
+      mode: partMode
     })
 
     // Command line flags:
-    // -i streamUrl -c copy -f mpegts -y partPath
+    // -i streamUrl -map 0:v:0? -map 0:a:0? -c copy -f mpegts -y partPath
     const args = [
       '-hide_banner',
       '-loglevel', 'warning',
       '-reconnect', '1',
       '-reconnect_at_eof', '1',
       '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '5',
+      '-reconnect_delay_max', '5'
+    ]
+
+    // For decryption-key mode: prepend the Widevine content decryption key
+    // so FFmpeg decrypts CENC-encrypted DASH segments natively (-c copy).
+    // Format: -cenc_decryption_key <HEX_KEY>  (key comes from KID:KEY license exchange)
+    if (captureMode === 'decryption-key' && this.options.drmKey) {
+      args.push('-cenc_decryption_key', this.options.drmKey)
+    }
+
+    args.push(
       '-i', this.streamUrl,
+      '-map', '0:v:0?',
+      '-map', '0:a:0?',
       '-c', 'copy',
       '-f', 'mpegts',
       '-y',
       this.currentPartPath
-    ]
+    )
 
     try {
       this.ffmpegProcess = spawn(ffmpegInfo.ffmpegPath, args, {
@@ -180,8 +236,10 @@ export class RecorderSession {
     const pid = this.ffmpegProcess.pid
     this.lastGrowthTime = Date.now()
 
+    let stderrTail = ''
     this.ffmpegProcess.stderr?.on('data', (chunk) => {
       const msg = chunk.toString()
+      stderrTail = (stderrTail + msg).slice(-2000)
       if (msg.includes('401') || msg.includes('403') || msg.includes('Forbidden')) {
         void this.handleTokenExpired()
       }
@@ -199,6 +257,21 @@ export class RecorderSession {
       this.repo.updatePart(partId, new Date().toISOString(), size)
       this.ffmpegProcess = null
 
+      if (size === 0 && stderrTail.trim()) {
+        const errorSummary = stderrTail
+          .trim()
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .slice(-3)
+          .join(' | ')
+        this.repo.addEvent({
+          recordingId: this.id,
+          type: 'warning',
+          message: `FFmpeg produced 0 bytes: ${errorSummary.slice(0, 250)}`,
+          timestamp: new Date().toISOString()
+        })
+      }
+
       if (this.status === 'recording') {
         // Unexpected exit while actively recording: start new part to recover
         this.currentPartIndex++
@@ -214,12 +287,27 @@ export class RecorderSession {
   }
 
   async pause(): Promise<void> {
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+    if (captureMode === 'surface-capture') {
+      if (this.status !== 'recording') return
+      this.transition('paused', 'Recording paused by user')
+      await this.desktopCaptureSession?.pause()
+      return
+    }
     if (this.status !== 'recording') return
     this.transition('paused', 'Recording paused by user')
     this.stopCurrentProcess()
   }
 
   async resume(): Promise<void> {
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+    if (captureMode === 'surface-capture') {
+      if (this.status !== 'paused') return
+      this.transition('recording', 'Recording resumed by user')
+      this.currentPartIndex++
+      await this.desktopCaptureSession?.resume()
+      return
+    }
     if (this.status !== 'paused') return
     this.transition('recording', 'Recording resumed by user')
     this.currentPartIndex++
@@ -229,7 +317,17 @@ export class RecorderSession {
   async stop(endedEarly = false): Promise<void> {
     if (['finalizing', 'completed', 'failed', 'cancelled'].includes(this.status)) return
 
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+
     this.transition('finalizing', endedEarly ? 'Recording ended early by user' : 'Recording completed planned duration')
+
+    if (captureMode === 'surface-capture') {
+      this.cleanupTimers()
+      await this.desktopCaptureSession?.stop(endedEarly)
+      // Surface capture session calls onFinalizeReady internally via its options
+      return
+    }
+
     this.stopCurrentProcess()
     this.cleanupTimers()
 
@@ -244,7 +342,17 @@ export class RecorderSession {
   }
 
   async cancel(): Promise<void> {
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+
     this.transition('cancelled', 'Recording cancelled')
+
+    if (captureMode === 'surface-capture') {
+      this.cleanupTimers()
+      await this.desktopCaptureSession?.cancel()
+      this.cleanupWorkingFiles()
+      return
+    }
+
     this.stopCurrentProcess()
     this.cleanupTimers()
     this.cleanupWorkingFiles()
@@ -256,15 +364,22 @@ export class RecorderSession {
   }
 
   fail(reason: string, details?: string): void {
+    const captureMode = this.options.captureMode ?? 'stream-copy'
     this.transition('failed', reason, { details })
     this.repo.updateRecordingFields(this.id, { failureReason: `${reason}: ${details ?? ''}` })
-    this.stopCurrentProcess()
-    this.cleanupTimers()
-    SharedStreamFetcher.getInstance().release(
-      this.channelId,
-      this.record.quality,
-      `recorder_${this.id}`
-    )
+
+    if (captureMode === 'surface-capture') {
+      this.cleanupTimers()
+      this.desktopCaptureSession?.destroy()
+    } else {
+      this.stopCurrentProcess()
+      this.cleanupTimers()
+      SharedStreamFetcher.getInstance().release(
+        this.channelId,
+        this.record.quality,
+        `recorder_${this.id}`
+      )
+    }
   }
 
   private stopCurrentProcess(): void {
@@ -412,7 +527,12 @@ export class RecorderSession {
 
   destroy(): void {
     this.isDestroyed = true
-    this.stopCurrentProcess()
+    const captureMode = this.options.captureMode ?? 'stream-copy'
+    if (captureMode === 'surface-capture') {
+      this.desktopCaptureSession?.destroy()
+    } else {
+      this.stopCurrentProcess()
+    }
     this.cleanupTimers()
   }
 }

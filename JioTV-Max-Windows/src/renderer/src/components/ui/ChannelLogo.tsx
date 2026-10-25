@@ -3,6 +3,7 @@ import type { Channel } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/color'
 import { useProcessedLogo } from '@/hooks/useProcessedLogo'
+import { useDarkLogo } from '@/hooks/useDarkLogo'
 import { useChannelStore } from '@/store/useChannelStore'
 
 export type ChannelLogoContext =
@@ -108,6 +109,10 @@ export const ChannelLogo = memo(function ChannelLogo({
   )
   const [faded, setFaded] = useState(false)
 
+  const isPipelineLowContrast = Boolean(logo?.flags?.includes('low-contrast'))
+  const isDarkDetected = useDarkLogo(logo?.objectUrl || channel?.logoUrl)
+  const isDark = isPipelineLowContrast || isDarkDetected
+
   useEffect(() => {
     if (priority === 'visible' || !hostRef.current) return
     const element = hostRef.current
@@ -174,7 +179,9 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-auto w-auto max-h-[40px] max-w-[180px] object-contain"
             style={{
               imageRendering: 'auto',
-              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))',
+              filter: isDark
+                ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.85)) brightness(0) invert(1)'
+                : 'drop-shadow(0 2px 8px rgba(0,0,0,0.85))',
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}
@@ -188,6 +195,7 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-auto w-auto max-h-[40px] object-contain"
             style={{
               imageRendering: 'auto',
+              filter: isDark ? 'brightness(0) invert(1)' : undefined,
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}
@@ -201,6 +209,7 @@ export const ChannelLogo = memo(function ChannelLogo({
             className="pointer-events-none block h-full w-full object-contain object-center"
             style={{
               imageRendering: 'auto',
+              filter: isDark ? 'brightness(0) invert(1)' : undefined,
               opacity: faded ? 1 : 0,
               transition: 'opacity 300ms ease'
             }}

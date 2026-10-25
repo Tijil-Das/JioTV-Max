@@ -64,7 +64,7 @@ export const useChannelStore = create<ChannelState>()(
         set({ loading: true, error: null })
         try {
           const payload = await channelService.loadCatalogue(mode)
-          const epg = buildMockEpg(payload.channels)
+          const epg = payload.source === 'demo' ? buildMockEpg(payload.channels) : {}
           for (const [channelId, programs] of Object.entries(epg)) {
             epgService.setCached(channelId, programs)
           }
@@ -76,6 +76,9 @@ export const useChannelStore = create<ChannelState>()(
             loading: false,
             error: null
           })
+          if (payload.source === 'jio') {
+            void get().hydrateEpg(mode)
+          }
         } catch (error) {
           // Keep the app usable: if the live Jio catalogue cannot be reached,
           // fall back to the demo catalogue and surface a non-blocking error.
@@ -92,7 +95,7 @@ export const useChannelStore = create<ChannelState>()(
       },
 
       hydrateEpg: async (mode) => {
-        const channels = get().channels
+        const channels = get().channels.slice(0, 40)
         for (const channel of channels) {
           if (!get().epg[channel.id]) {
             const programs = await epgService.hydrate(channel, mode)

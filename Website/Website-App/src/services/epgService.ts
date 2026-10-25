@@ -51,7 +51,7 @@ export const epgService = {
     const promise = (async () => {
       try {
         const programs =
-          mode === 'demo' ? getMockPrograms(channel) : await channelService.getEpg(channel, mode)
+          channel.source === 'demo' ? getMockPrograms(channel) : await channelService.getEpg(channel, mode)
         if (programs.length > 0) {
           epgService.setCached(channel.id, programs)
         }

@@ -102,7 +102,8 @@ export const channelService = {
               const language = LANGUAGE_BY_ID[langId] || 'Other'
               const rawStb = Number(raw.stbChannelNumber)
               const stbNumber = Number.isFinite(rawStb) && rawStb > 0 ? rawStb : undefined
-              const num = stbNumber || Number(raw.channel_id) || idx + 101
+              const numericId = Number(id)
+              const num = stbNumber ?? (Number.isFinite(numericId) && numericId > 0 ? numericId : idx + 101)
               const isHD = Boolean(raw.isHD || /hd|4k/i.test(name))
               const rawLogo = String(raw.logoUrl || raw.channel_logo || '')
               const logoUrl = rawLogo
@@ -141,7 +142,10 @@ export const channelService = {
     }
 
     return {
-      channels: cachedChannels as Channel[],
+      channels: (cachedChannels as any[]).map((c) => ({
+        ...c,
+        stbNumber: c.stbNumber ?? (Number.isFinite(c.number) ? c.number : undefined)
+      })) as Channel[],
       source: 'jio',
       fetchedAt: new Date().toISOString()
     }

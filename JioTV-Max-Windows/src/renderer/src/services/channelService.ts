@@ -107,16 +107,20 @@ export const channelService = {
 export function mapJioEpg(entries: EpgEntry[], channelId: string): Program[] {
   return entries
     .filter((entry) => entry.title.trim().length > 0 && entry.endEpoch > entry.startEpoch)
-    .map((entry, index) => ({
-      id: `${channelId}-jio-${entry.startEpoch}-${index}`,
-      channelId,
-      // Real data only: an absent description simply omits the element.
-      title: entry.title.trim(),
-      description: entry.description.trim(),
-      start: new Date(entry.startEpoch * 1000).toISOString(),
-      end: new Date(entry.endEpoch * 1000).toISOString(),
-      genre: entry.category.trim(),
-      artworkUrl: entry.thumbnail
-    }))
+    .map((entry, index) => {
+      const startMs = entry.startEpoch > 1e11 ? entry.startEpoch : entry.startEpoch * 1000
+      const endMs = entry.endEpoch > 1e11 ? entry.endEpoch : entry.endEpoch * 1000
+      return {
+        id: `${channelId}-jio-${entry.startEpoch}-${index}`,
+        channelId,
+        // Real data only: an absent description simply omits the element.
+        title: entry.title.trim(),
+        description: entry.description.trim(),
+        start: new Date(startMs).toISOString(),
+        end: new Date(endMs).toISOString(),
+        genre: entry.category.trim(),
+        artworkUrl: entry.thumbnail
+      }
+    })
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
 }

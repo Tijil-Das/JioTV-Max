@@ -80,7 +80,7 @@ interface WorkerReply {
   blob?: Blob
 }
 
-const PIPELINE_VERSION = 5
+const PIPELINE_VERSION = 6
 const DB_NAME = 'jiotv-logo-pipeline'
 const DB_VERSION = 3
 const STORE = 'logos'
@@ -169,7 +169,7 @@ function normaliseSource(raw: string): string {
   if (!value) return ''
   if (/^(https?:|data:|file:|\/)/i.test(value)) return value
   if (value.startsWith('//')) return `https:${value}`
-  return `https://jiotv.catchup.cdn.jio.com/dare_images/images/${encodeURIComponent(value)}`
+  return `https://jiotvimages.cdn.jio.com/dare_images/images/${encodeURIComponent(value)}`
 }
 
 export function getLogoOverride(channelId: string): LogoOverride | undefined {
@@ -289,10 +289,31 @@ class LogoWorkerQueue {
 const queue = new LogoWorkerQueue()
 
 async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
-  if (/^(data:|\/)/i.test(url)) {
+  if (url.startsWith('data:')) {
+    try {
+      const comma = url.indexOf(',')
+      if (comma === -1) return null
+      const meta = url.slice(5, comma)
+      const data = url.slice(comma + 1)
+      const isBase64 = /;base64/i.test(meta)
+      const mimeType = meta.split(';')[0] || 'image/png'
+      if (isBase64) {
+        const bin = atob(data)
+        const bytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        return { bytes: bytes.buffer, mimeType }
+      }
+      const decoded = decodeURIComponent(data)
+      const bytes = new TextEncoder().encode(decoded)
+      return { bytes: bytes.buffer, mimeType }
+    } catch {
+      return null
+    }
+  }
+  if (/^\//i.test(url)) {
     try {
       const response = await fetch(url)
-      if (!response.ok && !url.startsWith('data:')) return null
+      if (!response.ok) return null
       return { bytes: await response.arrayBuffer(), mimeType: response.headers.get('content-type') ?? 'image/png' }
     } catch {
       return null

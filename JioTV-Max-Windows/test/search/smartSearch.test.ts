@@ -278,4 +278,43 @@ describe('smartSearch', () => {
     expect(results.length).toBeGreaterThan(0)
     expect(results[0].name).toBe('Star Sports 1')
   })
+
+  it('smart searches channel numbers by prefix, ordering by channel number', () => {
+    const results = smartSearchChannels('16', sampleChannels)
+    expect(results.length).toBeGreaterThanOrEqual(3)
+    expect(results[0].number).toBe(162)
+    expect(results[1].number).toBe(164)
+    expect(results[2].number).toBe(166)
+  })
+
+  it('matches channel by internal channel id or stbNumber', () => {
+    const channelsWithStb: Channel[] = [
+      ...sampleChannels,
+      makeChannel({
+        id: '875',
+        name: 'Eurosport HD',
+        number: 875,
+        stbNumber: 2506,
+        category: 'sports',
+        language: 'English'
+      })
+    ]
+
+    // Searching STB number "2506"
+    const stbResults = smartSearchChannels('2506', channelsWithStb)
+    expect(stbResults.length).toBeGreaterThan(0)
+    expect(stbResults[0].name).toBe('Eurosport HD')
+
+    // Searching channel ID "875"
+    const idResults = smartSearchChannels('875', channelsWithStb)
+    expect(idResults.length).toBeGreaterThan(0)
+    expect(idResults[0].name).toBe('Eurosport HD')
+  })
+
+  it('prioritizes channel number when query has words and number (e.g. "star 101")', () => {
+    const results = smartSearchChannels('star 101', sampleChannels)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].id).toBe('star-plus')
+    expect(results[0].number).toBe(101)
+  })
 })

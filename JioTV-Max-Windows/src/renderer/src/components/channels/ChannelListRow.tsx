@@ -1,9 +1,7 @@
-import { memo, useMemo } from 'react'
+import { memo } from 'react'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
-import { highestQuality } from '@/lib/constants'
-import { getNowNext } from '@/lib/time'
-import { useNow } from '@/hooks/useNow'
+import { useCurrentProgram } from '@/hooks/useCurrentProgram'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 
 interface ChannelListRowProps {
@@ -28,10 +26,7 @@ export const ChannelListRow = memo(function ChannelListRow({
   className,
   trailing
 }: ChannelListRowProps): JSX.Element {
-  const now = useNow()
-  const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
-  const quality = highestQuality(channel)
-  const secondary = [channel.language, quality].filter(Boolean).join(' · ')
+  const { current, secondaryText } = useCurrentProgram(channel, programs)
 
   return (
     <button
@@ -65,7 +60,7 @@ export const ChannelListRow = memo(function ChannelListRow({
               <span className="truncate">{current.title}</span>
             </>
           ) : (
-            <span className="truncate">{secondary}</span>
+            <span className="truncate">{secondaryText}</span>
           )}
         </span>
       </span>

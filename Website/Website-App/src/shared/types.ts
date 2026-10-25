@@ -35,6 +35,8 @@ export interface Channel {
   rank?: number
   viewers?: number
   popularity?: number
+  /** Set-top box channel number if distinct from ID/number (e.g. 2506 for Eurosport HD). */
+  stbNumber?: number
 }
 
 export interface Program {

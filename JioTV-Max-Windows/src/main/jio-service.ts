@@ -617,12 +617,15 @@ export class JioService {
     const language = LANGUAGE_BY_ID[languageId] ?? 'Other'
     const category = categorize(categoryId, languageId, name)
     const numericId = Number(id)
+    const rawStb = Number(raw.stbChannelNumber)
+    const stbNumber = Number.isFinite(rawStb) && rawStb > 0 ? rawStb : undefined
     const isHD = Boolean(raw.isHD ?? raw.isHd ?? /hd|4k/i.test(name))
     const is4k = /4k|uhd/i.test(name)
     const businessType = String(raw.business_type ?? raw.businessType ?? '').toLowerCase()
     return {
       id,
-      number: Number.isFinite(numericId) && numericId > 0 ? numericId : index + 101,
+      number: stbNumber ?? (Number.isFinite(numericId) && numericId > 0 ? numericId : index + 101),
+      stbNumber,
       name,
       logoUrl: String(raw.logoUrl ?? raw.channel_logo ?? raw.logo ?? ''),
       brandColor: brandFor(name, category),

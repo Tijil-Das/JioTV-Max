@@ -4,9 +4,8 @@ import { motion, useReducedMotion } from 'framer-motion'
 import type { Channel, Program } from '@shared/types'
 import { cn } from '@/lib/cn'
 import { highestQuality } from '@/lib/constants'
-import { getNowNext, getProgress } from '@/lib/time'
+import { useCurrentProgram } from '@/hooks/useCurrentProgram'
 import { initials } from '@/lib/color'
-import { useNow } from '@/hooks/useNow'
 import { ChannelLogo } from '@/components/ui/ChannelLogo'
 
 interface ChannelCardProps {
@@ -36,13 +35,10 @@ export const ChannelCard = memo(function ChannelCard({
   onNavigate
 }: ChannelCardProps): JSX.Element {
   const navigate = useNavigate()
-  const now = useNow()
   const reduceMotion = useReducedMotion()
 
-  const current = useMemo(() => getNowNext(programs ?? [], now).current, [programs, now])
-  const progress = current ? getProgress(current, now) : 0
+  const { current, progress, secondaryText } = useCurrentProgram(channel, programs)
   const quality = highestQuality(channel)
-  const secondary = current ? null : [channel.language, quality].filter(Boolean).join(' · ')
 
   const open = (): void => {
     onNavigate?.()
@@ -122,7 +118,7 @@ export const ChannelCard = memo(function ChannelCard({
               <span className="truncate">{current.title}</span>
             </>
           ) : (
-            <span className="truncate">{secondary}</span>
+            <span className="truncate">{secondaryText}</span>
           )}
         </p>
       </div>

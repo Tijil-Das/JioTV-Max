@@ -832,6 +832,7 @@ export interface PreparedQuery {
   wantsHD: boolean
   wantsSD: boolean
   targetNum?: string
+  isPureNumberQuery: boolean
   targetBroadcasters: Set<string>
   targetLanguages: Set<string>
   targetCategories: Set<string>
@@ -856,7 +857,9 @@ export function prepareQuery(rawQuery: string): PreparedQuery {
     cleanQuery.includes('high definition')
   const wantsSD =
     filters.quality === 'SD' || queryTokens.includes('sd') || cleanQuery.includes('standard definition')
-  const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : undefined)
+  const numToken = queryTokens.find((t) => /^\d+$/.test(t))
+  const targetNum = filters.targetChannelNumber || (/^\d+$/.test(cleanQuery) ? cleanQuery : numToken)
+  const isPureNumberQuery = /^\d+$/.test(cleanQuery)
 
   // Pre-resolve matched broadcaster networks once per query
   const targetBroadcasters = new Set<string>()
@@ -905,6 +908,7 @@ export function prepareQuery(rawQuery: string): PreparedQuery {
     wantsHD,
     wantsSD,
     targetNum,
+    isPureNumberQuery,
     targetBroadcasters,
     targetLanguages,
     targetCategories
@@ -913,6 +917,8 @@ export function prepareQuery(rawQuery: string): PreparedQuery {
 
 export interface CachedChannelIndex {
   channelNumberStr: string
+  channelIdStr: string
+  channelStbStr: string
   rawCleanName: string
   nameTokens: string[]
   namePhoneticKeys: string[]
@@ -933,6 +939,8 @@ export function getCachedChannelIndex(channel: Channel): CachedChannelIndex {
   let cached = channelIndexCache.get(channel)
   if (!cached) {
     const channelNumberStr = channel.number.toString()
+    const channelIdStr = channel.id
+    const channelStbStr = channel.stbNumber ? channel.stbNumber.toString() : ''
     const rawCleanName = channel.name.toLowerCase().trim()
     const nameTokens = tokenize(channel.name)
     const namePhoneticKeys = nameTokens.map((t) => (t.length >= 3 ? phoneticKey(t) : ''))
@@ -978,9 +986,13 @@ export function getCachedChannelIndex(channel: Channel): CachedChannelIndex {
     for (const t of descTokens) quickTokenSet.add(t)
     if (broadcasterKey) quickTokenSet.add(broadcasterKey)
     quickTokenSet.add(channelNumberStr)
+    quickTokenSet.add(channelIdStr)
+    if (channelStbStr) quickTokenSet.add(channelStbStr)
 
     cached = {
       channelNumberStr,
+      channelIdStr,
+      channelStbStr,
       rawCleanName,
       nameTokens,
       namePhoneticKeys,
@@ -1128,12 +1140,40 @@ export function scoreChannel(
   // 1. Channel Number Matching
   // -------------------------------------------------------------------------
   if (targetNum) {
-    if (channelNumberStr === targetNum) {
-      score += 2000
+    const isExactMatch =
+      idx.channelNumberStr === targetNum ||
+      idx.channelIdStr === targetNum ||
+      Boolean(idx.channelStbStr && idx.channelStbStr === targetNum)
+
+    const isPrefixMatch =
+      !isExactMatch &&
+      (idx.channelNumberStr.startsWith(targetNum) ||
+        idx.channelIdStr.startsWith(targetNum) ||
+        Boolean(idx.channelStbStr && idx.channelStbStr.startsWith(targetNum)))
+
+    const isContainsMatch =
+      !isExactMatch &&
+      !isPrefixMatch &&
+      (idx.channelNumberStr.includes(targetNum) ||
+        idx.channelIdStr.includes(targetNum) ||
+        Boolean(idx.channelStbStr && idx.channelStbStr.includes(targetNum)))
+
+    if (isExactMatch) {
+      score += prep.isPureNumberQuery ? 4000 : 2500
       matchedReason = `Channel ${channel.number}`
       matchedDimensions.add('number')
-    } else if (channelNumberStr.startsWith(targetNum)) {
-      score += 1200 - (channelNumberStr.length - targetNum.length) * 50
+    } else if (isPrefixMatch) {
+      const matchedStr = idx.channelNumberStr.startsWith(targetNum)
+        ? idx.channelNumberStr
+        : idx.channelIdStr.startsWith(targetNum)
+          ? idx.channelIdStr
+          : idx.channelStbStr
+      const lenDiff = Math.max(0, matchedStr.length - targetNum.length)
+      score += (prep.isPureNumberQuery ? 2500 : 1500) - lenDiff * 40
+      matchedReason = `Channel ${channel.number}`
+      matchedDimensions.add('number')
+    } else if (isContainsMatch) {
+      score += prep.isPureNumberQuery ? 1200 : 600
       matchedDimensions.add('number')
     }
   }
@@ -1457,7 +1497,17 @@ export function smartSearchWithDetails(
     const hasAnyEpg = Boolean(programs && programs.length > 0)
 
     // Sub-microsecond candidate filter: check if the channel has any match on number, name, tokens, or network
-    const hasNumMatch = Boolean(prep.targetNum && idx.channelNumberStr.startsWith(prep.targetNum))
+    const hasNumMatch = Boolean(
+      prep.targetNum &&
+        (idx.channelNumberStr.startsWith(prep.targetNum) ||
+          idx.channelNumberStr === prep.targetNum ||
+          idx.channelIdStr === prep.targetNum ||
+          idx.channelIdStr.startsWith(prep.targetNum) ||
+          (idx.channelStbStr &&
+            (idx.channelStbStr === prep.targetNum || idx.channelStbStr.startsWith(prep.targetNum))) ||
+          idx.channelNumberStr.includes(prep.targetNum) ||
+          idx.channelIdStr.includes(prep.targetNum))
+    )
     const hasNamePrefix = idx.rawCleanName.startsWith(prep.cleanQuery) || idx.rawCleanName === prep.cleanQuery
     const hasBroadcasterMatch = Boolean(idx.broadcasterKey && prep.targetBroadcasters.has(idx.broadcasterKey))
     const hasCategoryMatch = prep.targetCategories.size > 0 && (

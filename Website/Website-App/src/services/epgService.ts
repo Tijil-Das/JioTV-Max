@@ -16,6 +16,7 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>()
+const inFlight = new Map<string, Promise<Program[]>>()
 
 export const epgService = {
   getCached(channelId: string, date = new Date()): Program[] | undefined {
@@ -43,8 +44,24 @@ export const epgService = {
   async hydrate(channel: Channel, mode: AuthMode): Promise<Program[]> {
     const cached = epgService.getCached(channel.id)
     if (cached) return cached
-    const programs = mode === 'demo' ? getMockPrograms(channel) : await channelService.getEpg(channel, mode)
-    epgService.setCached(channel.id, programs)
-    return programs
+    const key = `${channel.id}-${mode}`
+    const existing = inFlight.get(key)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        const programs =
+          mode === 'demo' ? getMockPrograms(channel) : await channelService.getEpg(channel, mode)
+        if (programs.length > 0) {
+          epgService.setCached(channel.id, programs)
+        }
+        return programs
+      } finally {
+        inFlight.delete(key)
+      }
+    })()
+
+    inFlight.set(key, promise)
+    return promise
   }
 }

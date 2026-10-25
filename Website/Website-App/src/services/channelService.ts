@@ -100,7 +100,9 @@ export const channelService = {
               const catId = Number(raw.channelCategoryId || 0)
               const category = categorize(catId, langId, name)
               const language = LANGUAGE_BY_ID[langId] || 'Other'
-              const num = Number(raw.stbChannelNumber || raw.channel_id) || idx + 101
+              const rawStb = Number(raw.stbChannelNumber)
+              const stbNumber = Number.isFinite(rawStb) && rawStb > 0 ? rawStb : undefined
+              const num = stbNumber || Number(raw.channel_id) || idx + 101
               const isHD = Boolean(raw.isHD || /hd|4k/i.test(name))
               const rawLogo = String(raw.logoUrl || raw.channel_logo || '')
               const logoUrl = rawLogo
@@ -109,6 +111,7 @@ export const channelService = {
               return {
                 id,
                 number: num,
+                stbNumber,
                 name,
                 logoUrl,
                 brandColor: brandFor(name, category),
@@ -163,6 +166,44 @@ export const channelService = {
   async getEpg(channel: Channel, _mode?: AuthMode): Promise<Program[]> {
     if (channel.id.startsWith('ch-specimen-')) {
       return [getSpecimenProgram(channel.id)]
+    }
+    try {
+      const res = await fetch(
+        `https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get?offset=0&channel_id=${encodeURIComponent(channel.id)}`,
+        { signal: AbortSignal.timeout(6000) }
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.epg) && data.epg.length > 0) {
+          const mapped: Program[] = data.epg
+            .filter(
+              (entry: any) =>
+                Boolean(entry.showname || entry.title) &&
+                Number(entry.endEpoch) > Number(entry.startEpoch)
+            )
+            .map((entry: any, index: number) => {
+              const startEpoch = Number(entry.startEpoch)
+              const endEpoch = Number(entry.endEpoch)
+              const startMs = startEpoch > 1e11 ? startEpoch : startEpoch * 1000
+              const endMs = endEpoch > 1e11 ? endEpoch : endEpoch * 1000
+              return {
+                id: `${channel.id}-jio-${entry.startEpoch}-${index}`,
+                channelId: channel.id,
+                title: String(entry.showname || entry.title || '').trim(),
+                description: String(entry.description || '').trim(),
+                start: new Date(startMs).toISOString(),
+                end: new Date(endMs).toISOString(),
+                genre: String(entry.showCategory || '').trim(),
+                artworkUrl:
+                  typeof entry.episodeThumbnail === 'string' ? entry.episodeThumbnail : undefined
+              }
+            })
+            .sort((a: Program, b: Program) => Date.parse(a.start) - Date.parse(b.start))
+          if (mapped.length > 0) return mapped
+        }
+      }
+    } catch {
+      // Fallback to deterministic mock schedule
     }
     return getMockPrograms(channel)
   }

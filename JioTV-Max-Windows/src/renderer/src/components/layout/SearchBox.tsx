@@ -27,6 +27,8 @@ export function SearchBox(): JSX.Element {
   const debouncedQuery = useDebounce(query, 75)
   const channels = useChannelStore((state) => state.channels)
   const epg = useChannelStore((state) => state.epg)
+  const loadEpgForChannel = useChannelStore((state) => state.loadEpgForChannel)
+  const mode = useSettingsStore((state) => state.mode)
   const recentSearches = useSettingsStore((state) => state.recentSearches)
   const addRecentSearch = useSettingsStore((state) => state.addRecentSearch)
   const now = useNow()
@@ -38,6 +40,16 @@ export function SearchBox(): JSX.Element {
   const results = useMemo(() => {
     return smartSearchChannels(debouncedQuery, channels, epg, now, 10)
   }, [channels, debouncedQuery, epg, nowMinute])
+
+  // Preload live EPG for visible search results so show names render immediately
+  useEffect(() => {
+    if (!focused || results.length === 0) return
+    for (const channel of results.slice(0, 10)) {
+      if (!epg[channel.id] || epg[channel.id].length === 0) {
+        void loadEpgForChannel(channel, mode)
+      }
+    }
+  }, [results, focused, epg, mode, loadEpgForChannel])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

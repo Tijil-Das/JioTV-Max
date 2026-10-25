@@ -94,16 +94,22 @@ export const useChannelStore = create<ChannelState>()(
       hydrateEpg: async (mode) => {
         const channels = get().channels
         for (const channel of channels) {
-          if (mode === 'demo' && !get().epg[channel.id]) {
+          if (!get().epg[channel.id]) {
             const programs = await epgService.hydrate(channel, mode)
-            set((state) => ({ epg: { ...state.epg, [channel.id]: programs } }))
+            if (programs && programs.length > 0) {
+              set((state) => ({ epg: { ...state.epg, [channel.id]: programs } }))
+            }
           }
         }
       },
 
       loadEpgForChannel: async (channel, mode) => {
+        const currentEpg = get().epg[channel.id]
+        if (currentEpg && currentEpg.length > 0) return
         const programs = await epgService.hydrate(channel, mode)
-        set((state) => ({ epg: { ...state.epg, [channel.id]: programs } }))
+        if (programs && programs.length > 0) {
+          set((state) => ({ epg: { ...state.epg, [channel.id]: programs } }))
+        }
       },
 
       toggleFavorite: () => {},

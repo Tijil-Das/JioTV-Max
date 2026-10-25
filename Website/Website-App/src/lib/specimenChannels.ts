@@ -18,6 +18,8 @@ export const SPECIMEN_CHANNELS: Channel[] = [
     language: 'English',
     isLive: true,
     quality: ['HD'],
+    isPremium: false,
+    source: 'demo',
     streamUrl: '../assets/stream/playlist.m3u8',
     description: SPECIMEN_SHOW_TITLE
   },
@@ -31,6 +33,8 @@ export const SPECIMEN_CHANNELS: Channel[] = [
     language: 'Hindi',
     isLive: true,
     quality: ['HD'],
+    isPremium: false,
+    source: 'demo',
     streamUrl: '../assets/stream/playlist.m3u8',
     description: SPECIMEN_SHOW_TITLE
   },
@@ -44,6 +48,8 @@ export const SPECIMEN_CHANNELS: Channel[] = [
     language: 'English',
     isLive: true,
     quality: ['HD'],
+    isPremium: false,
+    source: 'demo',
     streamUrl: '../assets/stream/playlist.m3u8',
     description: SPECIMEN_SHOW_TITLE
   },
@@ -57,6 +63,8 @@ export const SPECIMEN_CHANNELS: Channel[] = [
     language: 'Hindi',
     isLive: true,
     quality: ['HD'],
+    isPremium: false,
+    source: 'demo',
     streamUrl: '../assets/stream/playlist.m3u8',
     description: SPECIMEN_SHOW_TITLE
   },
@@ -70,6 +78,8 @@ export const SPECIMEN_CHANNELS: Channel[] = [
     language: 'English',
     isLive: true,
     quality: ['HD'],
+    isPremium: false,
+    source: 'demo',
     streamUrl: '../assets/stream/playlist.m3u8',
     description: SPECIMEN_SHOW_TITLE
   }
@@ -94,12 +104,14 @@ export function getSpecimenChannel(idOrAny?: string | null): Channel {
 
 export function getSpecimenProgram(channelId?: string): Program {
   const now = Date.now()
+  const cid = channelId || 'ch-specimen-1'
   return {
-    id: `prog-${channelId || 'specimen'}-live`,
+    id: `prog-${cid}-live`,
+    channelId: cid,
     title: SPECIMEN_SHOW_TITLE,
+    description: SPECIMEN_SHOW_TITLE,
     start: new Date(now - 20 * 60 * 1000).toISOString(),
     end: new Date(now + 70 * 60 * 1000).toISOString(),
-    durationMinutes: 90,
     genre: 'Sports',
     rating: 'U'
   }

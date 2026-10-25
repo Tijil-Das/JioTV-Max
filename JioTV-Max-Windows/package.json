@@ -96,9 +96,6 @@
       "build/Release/snap_overlay.node",
       "src/native/snap-overlay/build/Release/snap_overlay.node"
     ],
-    "//asarUnpack_recorder": [
-      "build/bin/**/*"
-    ],
     "win": {
       "target": [
         {
